@@ -1,0 +1,349 @@
+import { create } from "zustand"
+import type { Sample as APISample, FCSResult, NTAResult, ProcessingJob } from "./api-client"
+
+export type TabType = "dashboard" | "flow-cytometry" | "nta" | "cross-compare" | "research-chat"
+
+export interface PinnedChart {
+  id: string
+  title: string
+  source: string
+  timestamp: Date
+  type: "histogram" | "scatter" | "line" | "bar"
+  data: unknown
+}
+
+// Local sample type (for UI state before API integration)
+export interface LocalSample {
+  id: string
+  name: string
+  type: "fcs" | "nta"
+  uploadedAt: Date
+  treatment?: string
+  concentration?: number
+  operator?: string
+  notes?: string
+  analyzed?: boolean
+}
+
+export interface ChatMessage {
+  id: string
+  role: "user" | "assistant"
+  content: string
+  timestamp: Date
+  parts?: Array<{ type: string; text?: string }>
+}
+
+// Current FCS analysis state
+export interface FCSAnalysisState {
+  file: File | null
+  sampleId: string | null
+  results: FCSResult | null
+  isAnalyzing: boolean
+  error: string | null
+}
+
+// NTA Analysis State
+export interface NTAAnalysisState {
+  file: File | null
+  sampleId: string | null
+  results: NTAResult | null
+  isAnalyzing: boolean
+  error: string | null
+}
+
+// FCS Analysis Settings (matches Streamlit app.py)
+export interface FCSAnalysisSettings {
+  laserWavelength: number
+  particleRI: number
+  mediumRI: number
+  fscRange: [number, number]
+  sscRange: [number, number]
+  diameterRange: [number, number]
+  diameterPoints: number
+  sizeRanges: Array<{ name: string; min: number; max: number }>
+  // Data Cleaning Options
+  ignoreNegativeH: boolean
+  dropNaRows: boolean
+  // Anomaly Detection Settings
+  anomalyDetectionEnabled: boolean
+  anomalyMethod: "Z-Score" | "IQR" | "Both"
+  zscoreThreshold: number
+  iqrFactor: number
+  highlightAnomalies: boolean
+  // Visualization Settings
+  useInteractivePlots: boolean
+}
+
+// Cross-Comparison Settings
+export interface CrossComparisonSettings {
+  discrepancyThreshold: number
+  normalizeHistograms: boolean
+  binSize: number
+  showKde: boolean
+  showStatistics: boolean
+  minSizeFilter: number
+  maxSizeFilter: number
+}
+
+// NTA Analysis Settings (matches Streamlit app.py)
+export interface NTAAnalysisSettings {
+  applyTemperatureCorrection: boolean
+  measurementTemp: number
+  referenceTemp: number
+  mediaType: string
+  correctionFactor: number
+}
+
+export interface AnalysisState {
+  // UI State
+  activeTab: TabType
+  setActiveTab: (tab: TabType) => void
+  sidebarCollapsed: boolean
+  toggleSidebar: () => void
+  isDarkMode: boolean
+  toggleDarkMode: () => void
+
+  // API Connection
+  apiConnected: boolean
+  setApiConnected: (connected: boolean) => void
+  apiChecking: boolean
+  setApiChecking: (checking: boolean) => void
+  lastHealthCheck: Date | null
+  setLastHealthCheck: (date: Date | null) => void
+
+  // Samples from Backend
+  apiSamples: APISample[]
+  setApiSamples: (samples: APISample[]) => void
+  addApiSample: (sample: APISample) => void
+  removeApiSample: (sampleId: string) => void
+  samplesLoading: boolean
+  setSamplesLoading: (loading: boolean) => void
+  samplesError: string | null
+  setSamplesError: (error: string | null) => void
+
+  // Local samples (for offline/fallback)
+  samples: LocalSample[]
+  addSample: (sample: LocalSample) => void
+  removeSample: (id: string) => void
+  clearSamples: () => void
+
+  // FCS Analysis State
+  fcsAnalysis: FCSAnalysisState
+  setFCSFile: (file: File | null) => void
+  setFCSSampleId: (sampleId: string | null) => void
+  setFCSResults: (results: FCSResult | null) => void
+  setFCSAnalyzing: (analyzing: boolean) => void
+  setFCSError: (error: string | null) => void
+  resetFCSAnalysis: () => void
+
+  // NTA Analysis State
+  ntaAnalysis: NTAAnalysisState
+  setNTAFile: (file: File | null) => void
+  setNTASampleId: (sampleId: string | null) => void
+  setNTAResults: (results: NTAResult | null) => void
+  setNTAAnalyzing: (analyzing: boolean) => void
+  setNTAError: (error: string | null) => void
+  resetNTAAnalysis: () => void
+
+  // Processing Jobs
+  processingJobs: ProcessingJob[]
+  setProcessingJobs: (jobs: ProcessingJob[]) => void
+  addProcessingJob: (job: ProcessingJob) => void
+  updateProcessingJob: (jobId: string, updates: Partial<ProcessingJob>) => void
+  removeProcessingJob: (jobId: string) => void
+
+  // Pinned Charts
+  pinnedCharts: PinnedChart[]
+  pinChart: (chart: PinnedChart) => void
+  unpinChart: (id: string) => void
+  clearPinnedCharts: () => void
+
+  // Chat
+  chatMessages: ChatMessage[]
+  addChatMessage: (message: ChatMessage) => void
+  clearChatMessages: () => void
+
+  // Cross-Compare Selection
+  selectedFCSSample: APISample | null
+  setSelectedFCSSample: (sample: APISample | null) => void
+  selectedNTASample: APISample | null
+  setSelectedNTASample: (sample: APISample | null) => void
+
+  // Analysis Settings
+  fcsAnalysisSettings: FCSAnalysisSettings | null
+  setFcsAnalysisSettings: (settings: FCSAnalysisSettings) => void
+  ntaAnalysisSettings: NTAAnalysisSettings | null
+  setNtaAnalysisSettings: (settings: NTAAnalysisSettings) => void
+  crossComparisonSettings: CrossComparisonSettings
+  setCrossComparisonSettings: (settings: CrossComparisonSettings) => void
+}
+
+const initialFCSAnalysis: FCSAnalysisState = {
+  file: null,
+  sampleId: null,
+  results: null,
+  isAnalyzing: false,
+  error: null,
+}
+
+const initialNTAAnalysis: NTAAnalysisState = {
+  file: null,
+  sampleId: null,
+  results: null,
+  isAnalyzing: false,
+  error: null,
+}
+
+export const useAnalysisStore = create<AnalysisState>((set) => ({
+  // UI State
+  activeTab: "dashboard",
+  setActiveTab: (tab) => set({ activeTab: tab }),
+  sidebarCollapsed: false,
+  toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+  isDarkMode: true,
+  toggleDarkMode: () => set((state) => ({ isDarkMode: !state.isDarkMode })),
+
+  // API Connection
+  apiConnected: false,
+  setApiConnected: (connected) => set({ apiConnected: connected }),
+  apiChecking: false,
+  setApiChecking: (checking) => set({ apiChecking: checking }),
+  lastHealthCheck: null,
+  setLastHealthCheck: (date) => set({ lastHealthCheck: date }),
+
+  // Samples from Backend
+  apiSamples: [],
+  setApiSamples: (samples) => set({ apiSamples: samples }),
+  addApiSample: (sample) =>
+    set((state) => ({
+      apiSamples: [...state.apiSamples, sample],
+    })),
+  removeApiSample: (sampleId) =>
+    set((state) => ({
+      apiSamples: state.apiSamples.filter((s) => s.sample_id !== sampleId),
+    })),
+  samplesLoading: false,
+  setSamplesLoading: (loading) => set({ samplesLoading: loading }),
+  samplesError: null,
+  setSamplesError: (error) => set({ samplesError: error }),
+
+  // Local samples
+  samples: [],
+  addSample: (sample) =>
+    set((state) => ({
+      samples: [...state.samples, sample],
+    })),
+  removeSample: (id) =>
+    set((state) => ({
+      samples: state.samples.filter((s) => s.id !== id),
+    })),
+  clearSamples: () => set({ samples: [] }),
+
+  // FCS Analysis
+  fcsAnalysis: initialFCSAnalysis,
+  setFCSFile: (file) =>
+    set((state) => ({
+      fcsAnalysis: { ...state.fcsAnalysis, file },
+    })),
+  setFCSSampleId: (sampleId) =>
+    set((state) => ({
+      fcsAnalysis: { ...state.fcsAnalysis, sampleId },
+    })),
+  setFCSResults: (results) =>
+    set((state) => ({
+      fcsAnalysis: { ...state.fcsAnalysis, results },
+    })),
+  setFCSAnalyzing: (analyzing) =>
+    set((state) => ({
+      fcsAnalysis: { ...state.fcsAnalysis, isAnalyzing: analyzing },
+    })),
+  setFCSError: (error) =>
+    set((state) => ({
+      fcsAnalysis: { ...state.fcsAnalysis, error },
+    })),
+  resetFCSAnalysis: () => set({ fcsAnalysis: initialFCSAnalysis }),
+
+  // NTA Analysis
+  ntaAnalysis: initialNTAAnalysis,
+  setNTAFile: (file) =>
+    set((state) => ({
+      ntaAnalysis: { ...state.ntaAnalysis, file },
+    })),
+  setNTASampleId: (sampleId) =>
+    set((state) => ({
+      ntaAnalysis: { ...state.ntaAnalysis, sampleId },
+    })),
+  setNTAResults: (results) =>
+    set((state) => ({
+      ntaAnalysis: { ...state.ntaAnalysis, results },
+    })),
+  setNTAAnalyzing: (analyzing) =>
+    set((state) => ({
+      ntaAnalysis: { ...state.ntaAnalysis, isAnalyzing: analyzing },
+    })),
+  setNTAError: (error) =>
+    set((state) => ({
+      ntaAnalysis: { ...state.ntaAnalysis, error },
+    })),
+  resetNTAAnalysis: () => set({ ntaAnalysis: initialNTAAnalysis }),
+
+  // Processing Jobs
+  processingJobs: [],
+  setProcessingJobs: (jobs) => set({ processingJobs: jobs }),
+  addProcessingJob: (job) =>
+    set((state) => ({
+      processingJobs: [...state.processingJobs, job],
+    })),
+  updateProcessingJob: (jobId, updates) =>
+    set((state) => ({
+      processingJobs: state.processingJobs.map((job) =>
+        job.id === jobId ? { ...job, ...updates } : job
+      ),
+    })),
+  removeProcessingJob: (jobId) =>
+    set((state) => ({
+      processingJobs: state.processingJobs.filter((job) => job.id !== jobId),
+    })),
+
+  // Pinned Charts
+  pinnedCharts: [],
+  pinChart: (chart) =>
+    set((state) => ({
+      pinnedCharts: [...state.pinnedCharts, chart],
+    })),
+  unpinChart: (id) =>
+    set((state) => ({
+      pinnedCharts: state.pinnedCharts.filter((c) => c.id !== id),
+    })),
+  clearPinnedCharts: () => set({ pinnedCharts: [] }),
+
+  // Chat
+  chatMessages: [],
+  addChatMessage: (message) =>
+    set((state) => ({
+      chatMessages: [...state.chatMessages, message],
+    })),
+  clearChatMessages: () => set({ chatMessages: [] }),
+
+  // Cross-Compare
+  selectedFCSSample: null,
+  setSelectedFCSSample: (sample) => set({ selectedFCSSample: sample }),
+  selectedNTASample: null,
+  setSelectedNTASample: (sample) => set({ selectedNTASample: sample }),
+
+  // Analysis Settings
+  fcsAnalysisSettings: null,
+  setFcsAnalysisSettings: (settings) => set({ fcsAnalysisSettings: settings }),
+  ntaAnalysisSettings: null,
+  setNtaAnalysisSettings: (settings) => set({ ntaAnalysisSettings: settings }),
+  crossComparisonSettings: {
+    discrepancyThreshold: 15,
+    normalizeHistograms: true,
+    binSize: 5,
+    showKde: true,
+    showStatistics: true,
+    minSizeFilter: 0,
+    maxSizeFilter: 500,
+  },
+  setCrossComparisonSettings: (settings) => set({ crossComparisonSettings: settings }),
+}))

@@ -1,0 +1,309 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Added light mode theme and enhanced 3D card styles */
+:root {
+  --background: oklch(0.98 0.005 255);
+  --foreground: oklch(0.145 0.014 255);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0.014 255);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0.014 255);
+  --primary: oklch(0.55 0.214 255);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.94 0.01 255);
+  --secondary-foreground: oklch(0.2 0.014 255);
+  --muted: oklch(0.94 0.01 255);
+  --muted-foreground: oklch(0.45 0.014 255);
+  --accent: oklch(0.55 0.265 303.9);
+  --accent-foreground: oklch(1 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.88 0.01 255);
+  --input: oklch(0.88 0.01 255);
+  --ring: oklch(0.55 0.214 255);
+  --chart-1: oklch(0.55 0.214 255);
+  --chart-2: oklch(0.55 0.265 303.9);
+  --chart-3: oklch(0.6 0.15 195);
+  --chart-4: oklch(0.65 0.18 85);
+  --chart-5: oklch(0.55 0.2 145);
+  --radius: 0.75rem;
+  --sidebar: oklch(0.96 0.005 255);
+  --sidebar-foreground: oklch(0.145 0.014 255);
+  --sidebar-primary: oklch(0.55 0.214 255);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.92 0.01 255);
+  --sidebar-accent-foreground: oklch(0.2 0.014 255);
+  --sidebar-border: oklch(0.88 0.01 255);
+  --sidebar-ring: oklch(0.55 0.214 255);
+
+  /* Custom colors for data visualization */
+  --cyan: oklch(0.6 0.15 195);
+  --purple: oklch(0.55 0.265 303.9);
+  --amber: oklch(0.65 0.18 85);
+  --emerald: oklch(0.6 0.17 162.48);
+}
+
+.dark {
+  --background: oklch(0.12 0.014 255);
+  --foreground: oklch(0.97 0 0);
+  --card: oklch(0.16 0.014 255);
+  --card-foreground: oklch(0.97 0 0);
+  --popover: oklch(0.16 0.014 255);
+  --popover-foreground: oklch(0.97 0 0);
+  --primary: oklch(0.623 0.214 255);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.22 0.014 255);
+  --secondary-foreground: oklch(0.97 0 0);
+  --muted: oklch(0.22 0.014 255);
+  --muted-foreground: oklch(0.65 0.014 255);
+  --accent: oklch(0.627 0.265 303.9);
+  --accent-foreground: oklch(1 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.28 0.014 255);
+  --input: oklch(0.28 0.014 255);
+  --ring: oklch(0.623 0.214 255);
+  --chart-1: oklch(0.623 0.214 255);
+  --chart-2: oklch(0.627 0.265 303.9);
+  --chart-3: oklch(0.7 0.15 195);
+  --chart-4: oklch(0.75 0.18 85);
+  --chart-5: oklch(0.65 0.2 145);
+  --sidebar: oklch(0.14 0.014 255);
+  --sidebar-foreground: oklch(0.97 0 0);
+  --sidebar-primary: oklch(0.623 0.214 255);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.22 0.014 255);
+  --sidebar-accent-foreground: oklch(0.97 0 0);
+  --sidebar-border: oklch(0.28 0.014 255);
+  --sidebar-ring: oklch(0.623 0.214 255);
+
+  /* Custom colors for data visualization */
+  --cyan: oklch(0.7 0.15 195);
+  --purple: oklch(0.627 0.265 303.9);
+  --amber: oklch(0.75 0.18 85);
+  --emerald: oklch(0.696 0.17 162.48);
+}
+
+@theme inline {
+  --font-sans: "Inter", "Geist", "Geist Fallback", system-ui;
+  --font-mono: "Geist Mono", "Geist Mono Fallback", monospace;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-cyan: var(--cyan);
+  --color-purple: var(--purple);
+  --color-amber: var(--amber);
+  --color-emerald: var(--emerald);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Enhanced scrollbar styling for better visibility */
+main::-webkit-scrollbar {
+  @apply w-2;
+}
+
+main::-webkit-scrollbar-track {
+  @apply bg-background;
+}
+
+main::-webkit-scrollbar-thumb {
+  @apply bg-border/70 rounded-full hover:bg-border transition-colors;
+}
+
+/* Enhanced 3D card styles with elevation and modern effects */
+.glass-card {
+  @apply bg-card/90 backdrop-blur-md border border-border/40 shadow-lg;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(255, 255, 255, 0.05)
+    inset;
+}
+
+.dark .glass-card {
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.3),
+    0 2px 4px -2px rgba(0, 0, 0, 0.2),
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+    0 -1px 0 0 rgba(255, 255, 255, 0.05) inset;
+}
+
+/* Enhanced ultra modern 3D elevated card with improved hover and depth effects */
+.card-3d {
+  @apply relative bg-card border border-border/50 rounded-xl overflow-hidden;
+  transform: perspective(1200px) translateZ(0);
+  transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+  box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.1), 0 8px 16px -8px rgba(0, 0, 0, 0.08), 0 0 0 1px
+    rgba(255, 255, 255, 0.1) inset;
+}
+
+.card-3d:hover {
+  transform: perspective(1200px) translateZ(20px) translateY(-6px) rotateX(2deg);
+  box-shadow: 0 32px 64px -16px rgba(0, 0, 0, 0.2), 0 12px 24px -12px rgba(0, 0, 0, 0.15), 0 0 0 1px
+    rgba(255, 255, 255, 0.15) inset;
+}
+
+.dark .card-3d {
+  box-shadow:
+    0 20px 40px -12px rgba(0, 0, 0, 0.4),
+    0 8px 16px -8px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(255, 255, 255, 0.05) inset,
+    0 -1px 0 0 rgba(255, 255, 255, 0.08) inset;
+}
+
+.dark .card-3d:hover {
+  box-shadow:
+    0 32px 64px -16px rgba(0, 0, 0, 0.6),
+    0 12px 24px -12px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+    0 -1px 0 0 rgba(255, 255, 255, 0.12) inset;
+}
+
+/* Enhanced gradient glow effect for stat cards with smooth animations */
+.stat-card {
+  @apply relative overflow-hidden;
+}
+
+.stat-card::before {
+  content: "";
+  @apply absolute inset-0 opacity-0 transition-opacity duration-500;
+  background: radial-gradient(
+    800px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+    rgba(59, 130, 246, 0.08),
+    transparent 40%
+  );
+}
+
+.stat-card:hover::before {
+  @apply opacity-100;
+}
+
+/* Modern scrollbar styling */
+.custom-scrollbar::-webkit-scrollbar {
+  @apply w-2;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  @apply bg-border/50 rounded-full;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  @apply bg-border;
+}
+
+/* Enhanced floating animation for decorative elements with smooth easing */
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-12px) rotate(3deg);
+  }
+}
+
+.float-animation {
+  animation: float 8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Enhanced pulse glow animation for status indicators */
+@keyframes pulse-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 currentColor;
+    opacity: 1;
+  }
+  50% {
+    box-shadow: 0 0 12px 4px currentColor;
+    opacity: 0.8;
+  }
+}
+
+.pulse-glow {
+  animation: pulse-glow 2.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Enhanced gradient border effect with improved visibility */
+.gradient-border {
+  @apply relative;
+}
+
+.gradient-border::before {
+  content: "";
+  @apply absolute -inset-px rounded-xl;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.4), rgba(147, 51, 234, 0.4), rgba(6, 182, 212, 0.4));
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.gradient-border:hover::before {
+  opacity: 1;
+}
+
+/* Added shine effect animation for premium feel */
+@keyframes shine {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+.shine-effect {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.1) 20%,
+    rgba(255, 255, 255, 0.1) 60%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 1000px 100%;
+  animation: shine 3s infinite;
+}
