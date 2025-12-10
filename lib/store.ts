@@ -33,6 +33,18 @@ export interface ChatMessage {
   parts?: Array<{ type: string; text?: string }>
 }
 
+// Experimental Conditions (captured during analysis)
+export interface ExperimentalConditions {
+  temperature_celsius?: number
+  substrate_buffer?: string
+  sample_volume_ul?: number
+  ph?: number
+  incubation_time_min?: number
+  antibody_details?: string
+  operator: string
+  notes?: string
+}
+
 // Current FCS analysis state
 export interface FCSAnalysisState {
   file: File | null
@@ -40,6 +52,7 @@ export interface FCSAnalysisState {
   results: FCSResult | null
   isAnalyzing: boolean
   error: string | null
+  experimentalConditions: ExperimentalConditions | null
 }
 
 // NTA Analysis State
@@ -48,6 +61,9 @@ export interface NTAAnalysisState {
   sampleId: string | null
   results: NTAResult | null
   isAnalyzing: boolean
+  error: string | null
+  experimentalConditions: ExperimentalConditions | null
+}
   error: string | null
 }
 
@@ -134,6 +150,7 @@ export interface AnalysisState {
   setFCSResults: (results: FCSResult | null) => void
   setFCSAnalyzing: (analyzing: boolean) => void
   setFCSError: (error: string | null) => void
+  setFCSExperimentalConditions: (conditions: ExperimentalConditions | null) => void
   resetFCSAnalysis: () => void
 
   // NTA Analysis State
@@ -143,6 +160,7 @@ export interface AnalysisState {
   setNTAResults: (results: NTAResult | null) => void
   setNTAAnalyzing: (analyzing: boolean) => void
   setNTAError: (error: string | null) => void
+  setNTAExperimentalConditions: (conditions: ExperimentalConditions | null) => void
   resetNTAAnalysis: () => void
 
   // Processing Jobs
@@ -184,6 +202,7 @@ const initialFCSAnalysis: FCSAnalysisState = {
   results: null,
   isAnalyzing: false,
   error: null,
+  experimentalConditions: null,
 }
 
 const initialNTAAnalysis: NTAAnalysisState = {
@@ -192,6 +211,7 @@ const initialNTAAnalysis: NTAAnalysisState = {
   results: null,
   isAnalyzing: false,
   error: null,
+  experimentalConditions: null,
 }
 
 export const useAnalysisStore = create<AnalysisState>((set) => ({
@@ -261,6 +281,10 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
     set((state) => ({
       fcsAnalysis: { ...state.fcsAnalysis, error },
     })),
+  setFCSExperimentalConditions: (conditions) =>
+    set((state) => ({
+      fcsAnalysis: { ...state.fcsAnalysis, experimentalConditions: conditions },
+    })),
   resetFCSAnalysis: () => set({ fcsAnalysis: initialFCSAnalysis }),
 
   // NTA Analysis
@@ -284,6 +308,10 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
   setNTAError: (error) =>
     set((state) => ({
       ntaAnalysis: { ...state.ntaAnalysis, error },
+    })),
+  setNTAExperimentalConditions: (conditions) =>
+    set((state) => ({
+      ntaAnalysis: { ...state.ntaAnalysis, experimentalConditions: conditions },
     })),
   resetNTAAnalysis: () => set({ ntaAnalysis: initialNTAAnalysis }),
 

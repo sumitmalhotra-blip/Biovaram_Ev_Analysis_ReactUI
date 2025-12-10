@@ -23,10 +23,11 @@ import { NTATemperatureSettings } from "./temperature-settings"
 import { NTABestPracticesGuide } from "./best-practices-guide"
 import { NTAStatisticsCards } from "./statistics-cards"
 import { NTASizeDistributionBreakdown } from "./size-distribution-breakdown"
+import { ExperimentalConditionsDialog, type ExperimentalConditions } from "@/components/experimental-conditions-dialog"
 import { cn } from "@/lib/utils"
 
 export function NTATab() {
-  const { ntaAnalysis, apiConnected, apiSamples, resetNTAAnalysis } = useAnalysisStore()
+  const { ntaAnalysis, apiConnected, apiSamples, resetNTAAnalysis, setNTAExperimentalConditions } = useAnalysisStore()
   const { uploadNTA, checkHealth } = useApi()
   const { pinChart } = useAnalysisStore()
   const { toast } = useToast()
@@ -37,11 +38,28 @@ export function NTATab() {
   const [treatment, setTreatment] = useState("")
   const [temperature, setTemperature] = useState("")
   const [operator, setOperator] = useState("")
+  
+  // Experimental conditions dialog state
+  const [showConditionsDialog, setShowConditionsDialog] = useState(false)
+  const [justUploadedSampleId, setJustUploadedSampleId] = useState<string | null>(null)
 
   // Check API on mount
   useEffect(() => {
     checkHealth()
   }, [checkHealth])
+
+  // Show experimental conditions dialog after successful upload
+  useEffect(() => {
+    if (ntaAnalysis.results && ntaAnalysis.sampleId && !ntaAnalysis.experimentalConditions) {
+      setJustUploadedSampleId(ntaAnalysis.sampleId)
+      setShowConditionsDialog(true)
+    }
+  }, [ntaAnalysis.results, ntaAnalysis.sampleId, ntaAnalysis.experimentalConditions])
+
+  const handleSaveConditions = (conditions: ExperimentalConditions) => {
+    setNTAExperimentalConditions(conditions)
+    setShowConditionsDialog(false)
+  }
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -547,6 +565,15 @@ export function NTATab() {
           </Tabs>
         </CardContent>
       </Card>
+
+      {/* Experimental Conditions Dialog */}
+      <ExperimentalConditionsDialog
+        open={showConditionsDialog}
+        onOpenChange={setShowConditionsDialog}
+        onSave={handleSaveConditions}
+        sampleType="NTA"
+        sampleId={justUploadedSampleId || undefined}
+      />
     </div>
   )
 }

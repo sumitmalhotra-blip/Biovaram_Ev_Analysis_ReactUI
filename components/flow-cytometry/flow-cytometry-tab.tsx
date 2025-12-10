@@ -1,11 +1,12 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { FileUploadZone } from "./file-upload-zone"
 import { AnalysisResults } from "./analysis-results"
 import { ColumnMapping } from "./column-mapping"
 import { AnalysisSettings } from "./analysis-settings"
 import { FCSBestPracticesGuide } from "./best-practices-guide"
+import { ExperimentalConditionsDialog, type ExperimentalConditions } from "@/components/experimental-conditions-dialog"
 import { useAnalysisStore } from "@/lib/store"
 import { useApi } from "@/hooks/use-api"
 import { Card, CardContent } from "@/components/ui/card"
@@ -13,13 +14,28 @@ import { AlertCircle, Loader2 } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 export function FlowCytometryTab() {
-  const { fcsAnalysis, apiConnected } = useAnalysisStore()
+  const { fcsAnalysis, apiConnected, setFCSExperimentalConditions } = useAnalysisStore()
   const { checkHealth } = useApi()
+  const [showConditionsDialog, setShowConditionsDialog] = useState(false)
+  const [justUploadedSampleId, setJustUploadedSampleId] = useState<string | null>(null)
 
   // Check API connection on mount
   useEffect(() => {
     checkHealth()
   }, [checkHealth])
+
+  // Show experimental conditions dialog after successful upload
+  useEffect(() => {
+    if (fcsAnalysis.results && fcsAnalysis.sampleId && !fcsAnalysis.experimentalConditions) {
+      setJustUploadedSampleId(fcsAnalysis.sampleId)
+      setShowConditionsDialog(true)
+    }
+  }, [fcsAnalysis.results, fcsAnalysis.sampleId, fcsAnalysis.experimentalConditions])
+
+  const handleSaveConditions = (conditions: ExperimentalConditions) => {
+    setFCSExperimentalConditions(conditions)
+    setShowConditionsDialog(false)
+  }
 
   const hasFile = fcsAnalysis.file !== null
   const isAnalyzing = fcsAnalysis.isAnalyzing
@@ -69,6 +85,15 @@ export function FlowCytometryTab() {
       {hasFile && !isAnalyzing && !hasResults && <ColumnMapping />}
 
       {hasResults && <AnalysisResults />}
+
+      {/* Experimental Conditions Dialog */}
+      <ExperimentalConditionsDialog
+        open={showConditionsDialog}
+        onOpenChange={setShowConditionsDialog}
+        onSave={handleSaveConditions}
+        sampleType="FCS"
+        sampleId={justUploadedSampleId || undefined}
+      />
     </div>
   )
 }
