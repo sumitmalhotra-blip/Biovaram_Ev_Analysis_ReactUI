@@ -139,11 +139,11 @@ export function AnomalyEventsTable({
         </div>
 
         {/* Table */}
-        <div className="rounded-lg border" style={{ maxHeight, overflowY: "auto" }}>
+        <div className="rounded-lg border overflow-x-auto" style={{ maxHeight, overflowY: "auto" }}>
           <Table>
             <TableHeader className="sticky top-0 bg-background z-10">
               <TableRow>
-                <TableHead className="w-24">
+                <TableHead className="w-24 min-w-20">
                   <Button
                     variant="ghost"
                     size="sm"
@@ -154,7 +154,7 @@ export function AnomalyEventsTable({
                     <SortIcon field="index" />
                   </Button>
                 </TableHead>
-                <TableHead className="text-right">
+                <TableHead className="text-right min-w-24">
                   <Button
                     variant="ghost"
                     size="sm"
@@ -165,7 +165,7 @@ export function AnomalyEventsTable({
                     <SortIcon field="fsc" />
                   </Button>
                 </TableHead>
-                <TableHead className="text-right">
+                <TableHead className="text-right min-w-24">
                   <Button
                     variant="ghost"
                     size="sm"
@@ -176,7 +176,7 @@ export function AnomalyEventsTable({
                     <SortIcon field="ssc" />
                   </Button>
                 </TableHead>
-                <TableHead className="text-right">
+                <TableHead className="text-right min-w-32">
                   <Button
                     variant="ghost"
                     size="sm"
@@ -187,7 +187,7 @@ export function AnomalyEventsTable({
                     <SortIcon field="zscore_fsc" />
                   </Button>
                 </TableHead>
-                <TableHead className="text-right">
+                <TableHead className="text-right min-w-32">
                   <Button
                     variant="ghost"
                     size="sm"
@@ -198,7 +198,7 @@ export function AnomalyEventsTable({
                     <SortIcon field="zscore_ssc" />
                   </Button>
                 </TableHead>
-                <TableHead className="text-center w-32">Method</TableHead>
+                <TableHead className="text-center w-32 min-w-28">Method</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

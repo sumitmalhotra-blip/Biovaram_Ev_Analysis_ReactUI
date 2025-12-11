@@ -139,25 +139,25 @@ export function StatisticalComparisonTable({ fcsResults, ntaResults, className }
         </p>
       </CardHeader>
       <CardContent>
-        <div className="rounded-lg border overflow-hidden">
+        <div className="rounded-lg border overflow-hidden overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow className="bg-secondary/30">
-                <TableHead className="font-semibold">Parameter</TableHead>
-                <TableHead className="font-semibold text-center">
+                <TableHead className="font-semibold min-w-32">Parameter</TableHead>
+                <TableHead className="font-semibold text-center min-w-24">
                   <div className="flex items-center justify-center gap-1">
                     <div className="w-2 h-2 rounded-full bg-blue-500" />
                     FCS (nm)
                   </div>
                 </TableHead>
-                <TableHead className="font-semibold text-center">
+                <TableHead className="font-semibold text-center min-w-24">
                   <div className="flex items-center justify-center gap-1">
                     <div className="w-2 h-2 rounded-full bg-purple-500" />
                     NTA (nm)
                   </div>
                 </TableHead>
-                <TableHead className="font-semibold text-center">Difference</TableHead>
-                <TableHead className="font-semibold text-center">Discrepancy</TableHead>
+                <TableHead className="font-semibold text-center min-w-24">Difference</TableHead>
+                <TableHead className="font-semibold text-center min-w-28">Discrepancy</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

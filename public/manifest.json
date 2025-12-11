@@ -1,0 +1,42 @@
+{
+  "name": "BioVaram EV Analysis Platform",
+  "short_name": "BioVaram EV",
+  "description": "Advanced Extracellular Vesicle Analysis for Flow Cytometry and NTA",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["science", "education", "productivity"],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Upload FCS",
+      "short_name": "FCS",
+      "description": "Upload flow cytometry data",
+      "url": "/?tab=flow-cytometry",
+      "icons": []
+    },
+    {
+      "name": "Upload NTA",
+      "short_name": "NTA",
+      "description": "Upload nanoparticle tracking data",
+      "url": "/?tab=nta",
+      "icons": []
+    }
+  ]
+}

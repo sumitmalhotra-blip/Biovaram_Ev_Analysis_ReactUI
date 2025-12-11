@@ -96,20 +96,20 @@ export function FileUploadZone() {
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
               className={cn(
-                "border-2 border-dashed rounded-xl p-6 md:p-8 text-center transition-all duration-300 cursor-pointer",
+                "border-2 border-dashed rounded-xl p-8 md:p-10 lg:p-12 text-center transition-all duration-300 cursor-pointer min-h-[180px] md:min-h-[200px] flex items-center justify-center",
                 isDragging
                   ? "border-primary bg-primary/10 scale-[1.02] shadow-lg shadow-primary/20"
-                  : "border-border hover:border-primary/50 hover:bg-secondary/30 hover:shadow-md",
+                  : "border-border hover:border-primary/50 hover:bg-secondary/30 hover:shadow-md active:scale-[0.98]",
               )}
             >
               <input type="file" id="fcs-upload" className="hidden" accept=".fcs" onChange={handleFileSelect} />
-              <label htmlFor="fcs-upload" className="cursor-pointer">
-                <div className="flex flex-col items-center gap-2">
-                  <div className="p-3 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 shadow-lg">
-                    <FileText className="h-6 w-6 text-primary" />
+              <label htmlFor="fcs-upload" className="cursor-pointer w-full">
+                <div className="flex flex-col items-center gap-3 md:gap-4">
+                  <div className="p-4 md:p-5 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 shadow-lg touch-manipulation">
+                    <FileText className="h-8 w-8 md:h-10 md:w-10 text-primary" />
                   </div>
-                  <p className="text-sm font-medium">Drop FCS file here or click to browse</p>
-                  <p className="text-xs text-muted-foreground">Supports .fcs format (nanoFACS, ZE5, etc.)</p>
+                  <p className="text-base md:text-lg font-medium">Drop FCS file here or tap to browse</p>
+                  <p className="text-xs md:text-sm text-muted-foreground px-4">Supports .fcs format (nanoFACS, ZE5, etc.)</p>
                 </div>
               </label>
             </div>
