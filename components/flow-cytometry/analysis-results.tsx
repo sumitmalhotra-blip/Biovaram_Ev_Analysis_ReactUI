@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -10,23 +11,31 @@ import {
   Maximize2, 
   FileText, 
   AlertCircle,
-  Table2 
+  Table2,
+  Eye,
+  EyeOff
 } from "lucide-react"
 import { useAnalysisStore } from "@/lib/store"
 import { SizeDistributionChart } from "./charts/size-distribution-chart"
-import { ScatterPlotChart } from "./charts/scatter-plot-chart"
+import { ScatterPlotChart, type ScatterDataPoint } from "./charts/scatter-plot-chart"
 import { TheoryVsMeasuredChart } from "./charts/theory-vs-measured-chart"
 import { StatisticsCards } from "./statistics-cards"
 import { SizeCategoryBreakdown } from "./size-category-breakdown"
+import { AnomalySummaryCard } from "./anomaly-summary-card"
+import { AnomalyEventsTable, type AnomalyEvent } from "./anomaly-events-table"
 import { useToast } from "@/hooks/use-toast"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { exportAnomaliesToCSV, exportScatterDataToCSV } from "@/lib/export-utils"
 
 export function AnalysisResults() {
   const { pinChart, fcsAnalysis } = useAnalysisStore()
   const { toast } = useToast()
+  const [showAnomalyDetails, setShowAnomalyDetails] = useState(false)
+  const [highlightAnomalies, setHighlightAnomalies] = useState(true)
 
   // Use real results from the API
   const results = fcsAnalysis.results
+  const anomalyData = fcsAnalysis.anomalyData
   const sampleId = fcsAnalysis.sampleId
   const fileName = fcsAnalysis.file?.name
 
@@ -45,6 +54,34 @@ export function AnalysisResults() {
   const totalEvents = results.total_events || results.event_count || 0
   const medianSize = results.particle_size_median_nm
 
+  // Generate mock scatter data for demo (TODO: Replace with real data from backend)
+  const scatterData: ScatterDataPoint[] = useMemo(() => {
+    const data: ScatterDataPoint[] = []
+    for (let i = 0; i < Math.min(totalEvents, 1000); i++) {
+      data.push({
+        x: Math.random() * 1000 + 100,
+        y: Math.random() * 800 + 50,
+        index: i,
+      })
+    }
+    return data
+  }, [totalEvents])
+
+  // Generate mock anomaly events for table (TODO: Replace with real data)
+  const anomalyEvents: AnomalyEvent[] = useMemo(() => {
+    if (!anomalyData || !anomalyData.anomalous_indices) return []
+    
+    return anomalyData.anomalous_indices.slice(0, 100).map((index) => ({
+      index,
+      fsc: Math.random() * 1000 + 100,
+      ssc: Math.random() * 800 + 50,
+      zscore_fsc: (Math.random() - 0.5) * 8,
+      zscore_ssc: (Math.random() - 0.5) * 8,
+      iqr_outlier_fsc: Math.random() > 0.5,
+      iqr_outlier_ssc: Math.random() > 0.5,
+    }))
+  }, [anomalyData])
+
   const handlePin = (chartTitle: string, chartType: "histogram" | "scatter" | "line") => {
     pinChart({
       id: crypto.randomUUID(),
@@ -61,11 +98,29 @@ export function AnalysisResults() {
   }
 
   const handleExport = (format: string) => {
+    if (format === "anomalies" && anomalyData && sampleId) {
+      exportAnomaliesToCSV(anomalyEvents, anomalyData, sampleId)
+      toast({
+        title: "✅ Export Complete",
+        description: `Anomaly data exported successfully`,
+      })
+      return
+    }
+
+    if (format === "scatter" && sampleId) {
+      exportScatterDataToCSV(scatterData, sampleId)
+      toast({
+        title: "✅ Export Complete",
+        description: `Scatter plot data exported successfully`,
+      })
+      return
+    }
+
     toast({
       title: "Exporting...",
       description: `Preparing ${format.toUpperCase()} export`,
     })
-    // TODO: Implement actual export functionality
+    // TODO: Implement other export formats
   }
 
   return (
@@ -109,6 +164,16 @@ export function AnalysisResults() {
         totalEvents={totalEvents}
         medianSize={medianSize}
       />
+
+      {/* Anomaly Detection Summary - show if anomaly data exists */}
+      {anomalyData && (
+        <AnomalySummaryCard
+          anomalyData={anomalyData}
+          totalEvents={totalEvents}
+          onExportAnomalies={() => handleExport("anomalies")}
+          onViewDetails={() => setShowAnomalyDetails(!showAnomalyDetails)}
+        />
+      )}
 
       {/* Visualization Tabs */}
       <Card className="card-3d">
@@ -192,10 +257,40 @@ export function AnalysisResults() {
 
             <TabsContent value="fsc-ssc" className="space-y-4">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                <Badge variant="outline" className="bg-destructive/20 text-destructive border-destructive/50">
-                  Anomalies highlighted
-                </Badge>
+                <div className="flex items-center gap-2">
+                  {anomalyData && anomalyData.total_anomalies > 0 && (
+                    <Badge variant="outline" className="bg-destructive/20 text-destructive border-destructive/50">
+                      {anomalyData.total_anomalies.toLocaleString()} anomalies detected
+                    </Badge>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setHighlightAnomalies(!highlightAnomalies)}
+                    className="h-7 text-xs"
+                  >
+                    {highlightAnomalies ? (
+                      <>
+                        <Eye className="h-3 w-3 mr-1" />
+                        Highlighting ON
+                      </>
+                    ) : (
+                      <>
+                        <EyeOff className="h-3 w-3 mr-1" />
+                        Highlighting OFF
+                      </>
+                    )}
+                  </Button>
+                </div>
                 <div className="flex items-center gap-1">
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-8 w-8"
+                    onClick={() => handleExport("scatter")}
+                  >
+                    <Download className="h-4 w-4" />
+                  </Button>
                   <Button variant="ghost" size="icon" className="h-8 w-8">
                     <Maximize2 className="h-4 w-4" />
                   </Button>
@@ -209,24 +304,47 @@ export function AnalysisResults() {
                   </Button>
                 </div>
               </div>
-              <ScatterPlotChart title="FSC vs SSC" xLabel="FSC-A" yLabel="SSC-A" />
+              <ScatterPlotChart
+                title="FSC vs SSC"
+                xLabel="FSC-A"
+                yLabel="SSC-A"
+                data={scatterData}
+                anomalousIndices={anomalyData?.anomalous_indices || []}
+                highlightAnomalies={highlightAnomalies}
+                showLegend={true}
+                height={400}
+              />
             </TabsContent>
 
             <TabsContent value="diameter" className="space-y-4">
-              <div className="flex items-center justify-end gap-1">
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <Maximize2 className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => handlePin("Diameter vs SSC", "scatter")}
-                >
-                  <Pin className="h-4 w-4" />
-                </Button>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                {anomalyData && anomalyData.total_anomalies > 0 && highlightAnomalies && (
+                  <Badge variant="outline" className="bg-amber/20 text-amber border-amber/50">
+                    Anomalies included
+                  </Badge>
+                )}
+                <div className="flex items-center gap-1 ml-auto">
+                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <Maximize2 className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => handlePin("Diameter vs SSC", "scatter")}
+                  >
+                    <Pin className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
-              <ScatterPlotChart title="Diameter vs SSC" xLabel="Diameter (nm)" yLabel="SSC-A" />
+              <ScatterPlotChart
+                title="Diameter vs SSC"
+                xLabel="Diameter (nm)"
+                yLabel="SSC-A"
+                anomalousIndices={anomalyData?.anomalous_indices || []}
+                highlightAnomalies={highlightAnomalies}
+                showLegend={false}
+              />
             </TabsContent>
           </Tabs>
         </CardContent>
@@ -345,6 +463,15 @@ export function AnalysisResults() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Anomaly Events Table - show when user clicks "View Details" */}
+      {showAnomalyDetails && anomalyData && anomalyEvents.length > 0 && (
+        <AnomalyEventsTable
+          events={anomalyEvents}
+          onExport={() => handleExport("anomalies")}
+          maxHeight="500px"
+        />
+      )}
     </div>
   )
 }

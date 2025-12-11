@@ -45,11 +45,27 @@ export interface ExperimentalConditions {
   notes?: string
 }
 
+// Anomaly Detection Result (from backend)
+export interface AnomalyDetectionResult {
+  method: "Z-Score" | "IQR" | "Both"
+  total_anomalies: number
+  anomaly_percentage: number
+  zscore_anomalies?: number
+  iqr_anomalies?: number
+  combined_anomalies?: number
+  zscore_threshold?: number
+  iqr_factor?: number
+  anomalous_indices: number[]
+  fsc_outliers?: number[]
+  ssc_outliers?: number[]
+}
+
 // Current FCS analysis state
 export interface FCSAnalysisState {
   file: File | null
   sampleId: string | null
   results: FCSResult | null
+  anomalyData: AnomalyDetectionResult | null
   isAnalyzing: boolean
   error: string | null
   experimentalConditions: ExperimentalConditions | null
@@ -148,6 +164,7 @@ export interface AnalysisState {
   setFCSFile: (file: File | null) => void
   setFCSSampleId: (sampleId: string | null) => void
   setFCSResults: (results: FCSResult | null) => void
+  setFCSAnomalyData: (anomalyData: AnomalyDetectionResult | null) => void
   setFCSAnalyzing: (analyzing: boolean) => void
   setFCSError: (error: string | null) => void
   setFCSExperimentalConditions: (conditions: ExperimentalConditions | null) => void
@@ -200,6 +217,7 @@ const initialFCSAnalysis: FCSAnalysisState = {
   file: null,
   sampleId: null,
   results: null,
+  anomalyData: null,
   isAnalyzing: false,
   error: null,
   experimentalConditions: null,
@@ -272,6 +290,10 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
   setFCSResults: (results) =>
     set((state) => ({
       fcsAnalysis: { ...state.fcsAnalysis, results },
+    })),
+  setFCSAnomalyData: (anomalyData) =>
+    set((state) => ({
+      fcsAnalysis: { ...state.fcsAnalysis, anomalyData },
     })),
   setFCSAnalyzing: (analyzing) =>
     set((state) => ({
