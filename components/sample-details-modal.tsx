@@ -18,7 +18,7 @@ import {
   FileText,
   Calendar,
   User,
-  Flask,
+  Beaker,
   ClipboardList,
   AlertCircle,
   Download,
@@ -229,7 +229,7 @@ export function SampleDetailsModal({
                   </div>
                   {sample.experiment_date && (
                     <div className="flex items-center gap-2">
-                      <Flask className="h-4 w-4 text-muted-foreground" />
+                      <Beaker className="h-4 w-4 text-muted-foreground" />
                       <div>
                         <span className="text-muted-foreground">Experiment Date:</span>
                         <p className="font-medium text-xs">{formatDate(sample.experiment_date)}</p>

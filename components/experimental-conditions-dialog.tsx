@@ -220,13 +220,11 @@ export function ExperimentalConditionsDialog({
             <FileText className="h-5 w-5 text-blue-500" />
             Experimental Conditions
           </DialogTitle>
-          <DialogDescription className="space-y-2">
-            <p>
-              Capture important experimental metadata for your {sampleType} analysis.
-              This information helps ensure reproducibility and proper interpretation of results.
-            </p>
+          <DialogDescription>
+            Capture important experimental metadata for your {sampleType} analysis.
+            This information helps ensure reproducibility and proper interpretation of results.
             {sampleId && (
-              <Badge variant="outline" className="mt-2">
+              <Badge variant="outline" className="mt-2 inline-block">
                 Sample: {sampleId}
               </Badge>
             )}

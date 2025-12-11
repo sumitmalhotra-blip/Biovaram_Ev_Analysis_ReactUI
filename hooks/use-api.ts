@@ -239,6 +239,9 @@ export function useApi() {
         if (response.success) {
           setFCSSampleId(response.sample_id)
 
+          console.log("[uploadFCS] Upload response:", response)
+          console.log("[uploadFCS] FCS results:", response.fcs_results)
+
           if (response.fcs_results) {
             setFCSResults(response.fcs_results)
           }

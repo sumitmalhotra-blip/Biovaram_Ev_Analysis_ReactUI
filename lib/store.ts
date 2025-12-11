@@ -80,8 +80,6 @@ export interface NTAAnalysisState {
   error: string | null
   experimentalConditions: ExperimentalConditions | null
 }
-  error: string | null
-}
 
 // FCS Analysis Settings (matches Streamlit app.py)
 export interface FCSAnalysisSettings {
