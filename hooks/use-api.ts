@@ -4,15 +4,15 @@ import { useCallback, useEffect, useRef } from "react"
 import { apiClient, NetworkError, type Sample, type FCSResult, type NTAResult } from "@/lib/api-client"
 import { useAnalysisStore } from "@/lib/store"
 import { useToast } from "@/hooks/use-toast"
+import { 
+  retryWithBackoff, 
+  getUserFriendlyErrorMessage,
+  isNetworkError,
+  isTimeoutError,
+  categorizeError,
+} from "@/lib/error-utils"
 
 const HEALTH_CHECK_INTERVAL = 30000 // 30 seconds
-
-// Helper to check if error is a network error (backend offline)
-function isNetworkError(error: unknown): boolean {
-  return error instanceof NetworkError || 
-    (error instanceof TypeError && error.message.includes("fetch")) ||
-    (error instanceof Error && error.message.includes("Network"))
-}
 
 export function useApi() {
   const { toast } = useToast()
@@ -49,7 +49,11 @@ export function useApi() {
   const checkHealth = useCallback(async () => {
     setApiChecking(true)
     try {
-      await apiClient.checkHealth()
+      await retryWithBackoff(() => apiClient.checkHealth(), {
+        maxAttempts: 2,
+        initialDelay: 500,
+        shouldRetry: () => false, // Don't retry health checks
+      })
       setApiConnected(true)
       setLastHealthCheck(new Date())
       return true
@@ -94,19 +98,31 @@ export function useApi() {
       setSamplesError(null)
 
       try {
-        const response = await apiClient.listSamples(params)
+        const response = await retryWithBackoff(
+          () => apiClient.listSamples(params),
+          {
+            maxAttempts: 3,
+            onRetry: (error, attempt) => {
+              console.log(`Retrying sample fetch (attempt ${attempt}):`, error)
+            },
+          }
+        )
         setApiSamples(response.samples)
         return response.samples
       } catch (error) {
+        const category = categorizeError(error)
+        const message = getUserFriendlyErrorMessage(error)
+        
         // Only show toast for non-network errors (don't spam when backend is offline)
-        if (!isNetworkError(error)) {
-          const message = error instanceof Error ? error.message : "Failed to fetch samples"
+        if (category !== "network") {
           setSamplesError(message)
           toast({
             variant: "destructive",
             title: "Failed to fetch samples",
             description: message,
           })
+        } else {
+          setSamplesError("Backend offline")
         }
         return []
       } finally {
@@ -121,10 +137,13 @@ export function useApi() {
       if (apiClient.offline) return null
       
       try {
-        return await apiClient.getSample(sampleId)
+        return await retryWithBackoff(() => apiClient.getSample(sampleId), {
+          maxAttempts: 2,
+        })
       } catch (error) {
-        if (!isNetworkError(error)) {
-          const message = error instanceof Error ? error.message : "Failed to fetch sample"
+        const category = categorizeError(error)
+        if (category !== "network") {
+          const message = getUserFriendlyErrorMessage(error)
           toast({
             variant: "destructive",
             title: "Failed to fetch sample",
@@ -140,7 +159,13 @@ export function useApi() {
   const deleteSample = useCallback(
     async (sampleId: string) => {
       try {
-        const result = await apiClient.deleteSample(sampleId)
+        const result = await retryWithBackoff(() => apiClient.deleteSample(sampleId), {
+          maxAttempts: 2,
+          shouldRetry: (error) => {
+            // Only retry on server errors, not client errors (404, 400, etc.)
+            return categorizeError(error) === "server"
+          },
+        })
         if (result.success) {
           removeApiSample(sampleId)
           toast({
@@ -150,7 +175,7 @@ export function useApi() {
         }
         return result
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to delete sample"
+        const message = getUserFriendlyErrorMessage(error)
         toast({
           variant: "destructive",
           title: "Failed to delete sample",
@@ -192,7 +217,24 @@ export function useApi() {
       setFCSError(null)
 
       try {
-        const response = await apiClient.uploadFCS(file, metadata)
+        const response = await retryWithBackoff(
+          () => apiClient.uploadFCS(file, metadata),
+          {
+            maxAttempts: 2,
+            initialDelay: 2000,
+            shouldRetry: (error) => {
+              // Don't retry on client errors (validation, file format issues)
+              const category = categorizeError(error)
+              return category === "server" || category === "timeout"
+            },
+            onRetry: (error, attempt) => {
+              toast({
+                title: "Upload failed, retrying...",
+                description: `Attempt ${attempt} of 2`,
+              })
+            },
+          }
+        )
 
         if (response.success) {
           setFCSSampleId(response.sample_id)
@@ -213,16 +255,15 @@ export function useApi() {
           fetchSamples()
 
           toast({
-            title: "FCS file uploaded",
+            title: "✅ FCS file uploaded",
             description: `${file.name} uploaded successfully. Sample ID: ${response.sample_id}`,
           })
 
           return response
         }
       } catch (error) {
-        const message = isNetworkError(error) 
-          ? "Backend server is not running" 
-          : (error instanceof Error ? error.message : "Failed to upload FCS file")
+        const category = categorizeError(error)
+        const message = getUserFriendlyErrorMessage(error)
         setFCSError(message)
         toast({
           variant: "destructive",
@@ -297,7 +338,23 @@ export function useApi() {
       setNTAError(null)
 
       try {
-        const response = await apiClient.uploadNTA(file, metadata)
+        const response = await retryWithBackoff(
+          () => apiClient.uploadNTA(file, metadata),
+          {
+            maxAttempts: 2,
+            initialDelay: 2000,
+            shouldRetry: (error) => {
+              const category = categorizeError(error)
+              return category === "server" || category === "timeout"
+            },
+            onRetry: (error, attempt) => {
+              toast({
+                title: "Upload failed, retrying...",
+                description: `Attempt ${attempt} of 2`,
+              })
+            },
+          }
+        )
 
         if (response.success) {
           setNTASampleId(response.sample_id)
@@ -318,16 +375,14 @@ export function useApi() {
           fetchSamples()
 
           toast({
-            title: "NTA file uploaded",
+            title: "✅ NTA file uploaded",
             description: `${file.name} uploaded successfully. Sample ID: ${response.sample_id}`,
           })
 
           return response
         }
       } catch (error) {
-        const message = isNetworkError(error)
-          ? "Backend server is not running"
-          : (error instanceof Error ? error.message : "Failed to upload NTA file")
+        const message = getUserFriendlyErrorMessage(error)
         setNTAError(message)
         toast({
           variant: "destructive",
