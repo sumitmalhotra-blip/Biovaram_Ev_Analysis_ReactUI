@@ -1,10 +1,12 @@
 "use client"
 
-import { useMemo } from "react"
+import { useState, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { useAnalysisStore } from "@/lib/store"
-import { Clock, FileUp, BarChart3, AlertTriangle, FlaskConical, Microscope, CheckCircle } from "lucide-react"
+import { Clock, FileUp, BarChart3, AlertTriangle, FlaskConical, Microscope, CheckCircle, Eye, Trash2 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
+import type { Sample } from "@/lib/api-client"
 
 interface Activity {
   id: string
@@ -12,9 +14,16 @@ interface Activity {
   message: string
   time: string
   icon: typeof FileUp
+  sampleId?: string
+  sample?: Sample
 }
 
-export function RecentActivity() {
+interface RecentActivityProps {
+  onViewSample?: (sampleId: string) => void
+  onDeleteSample?: (sampleId: string) => void
+}
+
+export function RecentActivity({ onViewSample, onDeleteSample }: RecentActivityProps) {
   const { apiSamples, processingJobs, fcsAnalysis, ntaAnalysis } = useAnalysisStore()
 
   const activities = useMemo(() => {
@@ -27,10 +36,12 @@ export function RecentActivity() {
           id: `fcs-${sample.id}`,
           type: "upload",
           message: `${sample.sample_id} (FCS) uploaded`,
-          time: sample.created_at 
-            ? formatDistanceToNow(new Date(sample.created_at), { addSuffix: true })
+          time: sample.upload_timestamp 
+            ? formatDistanceToNow(new Date(sample.upload_timestamp), { addSuffix: true })
             : `${(index + 1) * 5} minutes ago`,
           icon: FlaskConical,
+          sampleId: sample.sample_id,
+          sample,
         })
       }
       if (sample.files?.nta) {
@@ -38,10 +49,12 @@ export function RecentActivity() {
           id: `nta-${sample.id}`,
           type: "upload",
           message: `${sample.sample_id} (NTA) uploaded`,
-          time: sample.created_at 
-            ? formatDistanceToNow(new Date(sample.created_at), { addSuffix: true })
+          time: sample.upload_timestamp 
+            ? formatDistanceToNow(new Date(sample.upload_timestamp), { addSuffix: true })
             : `${(index + 1) * 5} minutes ago`,
           icon: Microscope,
+          sampleId: sample.sample_id,
+          sample,
         })
       }
     })
@@ -111,10 +124,12 @@ export function RecentActivity() {
         <div className="space-y-3 md:space-y-4">
           {activities.map((activity) => {
             const Icon = activity.icon
+            const hasActions = activity.sampleId && (onViewSample || onDeleteSample)
+
             return (
               <div
                 key={activity.id}
-                className="flex items-start gap-3 p-2 rounded-lg hover:bg-secondary/30 transition-colors"
+                className="flex items-start gap-3 p-2 rounded-lg hover:bg-secondary/30 transition-colors group"
               >
                 <div
                   className={`p-1.5 rounded-lg shadow-sm ${
@@ -133,6 +148,32 @@ export function RecentActivity() {
                   <p className="text-sm truncate">{activity.message}</p>
                   <p className="text-xs text-muted-foreground">{activity.time}</p>
                 </div>
+                {hasActions && (
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {onViewSample && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => onViewSample(activity.sampleId!)}
+                        title="View details"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                    {onDeleteSample && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => onDeleteSample(activity.sampleId!)}
+                        title="Delete sample"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                )}
               </div>
             )
           })}
