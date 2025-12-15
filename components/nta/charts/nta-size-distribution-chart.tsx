@@ -1,13 +1,24 @@
 "use client"
 
+import { useMemo } from "react"
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts"
+import type { NTAResult } from "@/lib/api-client"
 
-// Generate NTA size distribution data
-const generateData = () => {
+interface NTASizeDistributionChartProps {
+  data?: NTAResult
+}
+
+// Generate NTA size distribution data from results
+const generateData = (results?: NTAResult) => {
   const data = []
+  const centerSize = results?.median_size_nm || 145
+  const spread = (results?.d90_nm && results?.d10_nm) 
+    ? (results.d90_nm - results.d10_nm) / 2 
+    : 60
+  
   for (let size = 0; size <= 500; size += 5) {
-    // Single peak distribution typical of NTA
-    const count = Math.max(0, 3000 * Math.exp(-Math.pow((size - 145) / 60, 2)))
+    // Single peak distribution centered on median
+    const count = Math.max(0, 3000 * Math.exp(-Math.pow((size - centerSize) / spread, 2)))
     data.push({
       size,
       count: Math.round(count * (0.9 + Math.random() * 0.2)),
@@ -16,9 +27,12 @@ const generateData = () => {
   return data
 }
 
-const data = generateData()
-
-export function NTASizeDistributionChart() {
+export function NTASizeDistributionChart({ data: results }: NTASizeDistributionChartProps) {
+  const data = useMemo(() => generateData(results), [results])
+  
+  const d10 = results?.d10_nm || 90
+  const d50 = results?.d50_nm || results?.median_size_nm || 145
+  const d90 = results?.d90_nm || 200
   return (
     <div className="h-80">
       <ResponsiveContainer width="100%" height="100%">
@@ -61,19 +75,19 @@ export function NTASizeDistributionChart() {
 
           {/* Percentile lines */}
           <ReferenceLine
-            x={90}
+            x={d10}
             stroke="#10b981"
             strokeDasharray="5 5"
             label={{ value: "D10", fill: "#10b981", fontSize: 10, position: "top" }}
           />
           <ReferenceLine
-            x={145}
+            x={d50}
             stroke="#10b981"
             strokeDasharray="5 5"
             label={{ value: "D50", fill: "#10b981", fontSize: 10, position: "top" }}
           />
           <ReferenceLine
-            x={200}
+            x={d90}
             stroke="#10b981"
             strokeDasharray="5 5"
             label={{ value: "D90", fill: "#10b981", fontSize: 10, position: "top" }}
