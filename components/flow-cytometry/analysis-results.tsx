@@ -14,13 +14,16 @@ import {
   Table2,
   Eye,
   EyeOff,
-  Loader2
+  Loader2,
+  RotateCcw
 } from "lucide-react"
 import { useAnalysisStore } from "@/lib/store"
 import { useApi } from "@/hooks/use-api"
 import { SizeDistributionChart } from "./charts/size-distribution-chart"
 import { ScatterPlotChart, type ScatterDataPoint } from "./charts/scatter-plot-with-selection"
 import { TheoryVsMeasuredChart } from "./charts/theory-vs-measured-chart"
+import { DiameterVsSSCChart } from "./charts/diameter-vs-ssc-chart"
+import { FullAnalysisDashboard } from "./full-analysis-dashboard"
 import { StatisticsCards } from "./statistics-cards"
 import { ParticleSizeVisualization } from "./particle-size-visualization"
 import { CustomSizeRanges } from "./custom-size-ranges"
@@ -31,7 +34,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { exportAnomaliesToCSV, exportScatterDataToCSV, exportToParquet, generateMarkdownReport, downloadMarkdownReport } from "@/lib/export-utils"
 
 export function AnalysisResults() {
-  const { pinChart, fcsAnalysis } = useAnalysisStore()
+  const { pinChart, fcsAnalysis, resetFCSAnalysis } = useAnalysisStore()
   const { getScatterData, getSizeBins } = useApi()
   const { toast } = useToast()
   const [showAnomalyDetails, setShowAnomalyDetails] = useState(false)
@@ -118,6 +121,14 @@ export function AnalysisResults() {
     toast({
       title: "Pinned to Dashboard",
       description: `${chartTitle} has been pinned.`,
+    })
+  }
+
+  const handleReset = () => {
+    resetFCSAnalysis()
+    toast({
+      title: "Tab Reset",
+      description: "FCS analysis cleared. Upload a new file to analyze.",
     })
   }
 
@@ -240,6 +251,15 @@ export function AnalysisResults() {
               <Badge variant="outline" className="bg-emerald/20 text-emerald border-emerald/50">
                 Analysis Complete
               </Badge>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleReset}
+                className="gap-2"
+              >
+                <RotateCcw className="h-4 w-4" />
+                Reset Tab
+              </Button>
             </div>
           </div>
         </CardContent>
@@ -299,8 +319,11 @@ export function AnalysisResults() {
           </div>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="distribution" className="space-y-4">
+          <Tabs defaultValue="dashboard" className="space-y-4">
             <TabsList className="bg-secondary/50 w-full justify-start overflow-x-auto flex-nowrap">
+              <TabsTrigger value="dashboard" className="shrink-0">
+                Full Dashboard
+              </TabsTrigger>
               <TabsTrigger value="distribution" className="shrink-0">
                 Size Distribution
               </TabsTrigger>
@@ -314,6 +337,15 @@ export function AnalysisResults() {
                 Diameter vs SSC
               </TabsTrigger>
             </TabsList>
+
+            <TabsContent value="dashboard" className="space-y-4">
+              <FullAnalysisDashboard
+                results={results}
+                scatterData={scatterData}
+                anomalyData={anomalyData}
+                sampleId={sampleId || undefined}
+              />
+            </TabsContent>
 
             <TabsContent value="distribution" className="space-y-4">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
@@ -441,12 +473,25 @@ export function AnalysisResults() {
 
             <TabsContent value="diameter" className="space-y-4">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                {anomalyData && anomalyData.total_anomalies > 0 && highlightAnomalies && (
-                  <Badge variant="outline" className="bg-amber/20 text-amber border-amber/50">
-                    Anomalies included
+                <div className="flex items-center gap-2">
+                  {anomalyData && anomalyData.total_anomalies > 0 && highlightAnomalies && (
+                    <Badge variant="outline" className="bg-amber/20 text-amber border-amber/50">
+                      Anomalies highlighted
+                    </Badge>
+                  )}
+                  <Badge variant="outline" className="bg-purple/20 text-purple border-purple/50">
+                    Mie Theory Reference
                   </Badge>
-                )}
+                </div>
                 <div className="flex items-center gap-1 ml-auto">
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-8 w-8"
+                    onClick={() => handleExport("scatter")}
+                  >
+                    <Download className="h-4 w-4" />
+                  </Button>
                   <Button variant="ghost" size="icon" className="h-8 w-8">
                     <Maximize2 className="h-4 w-4" />
                   </Button>
@@ -460,13 +505,21 @@ export function AnalysisResults() {
                   </Button>
                 </div>
               </div>
-              <ScatterPlotChart
-                title="Diameter vs SSC"
-                xLabel="Diameter (nm)"
-                yLabel="SSC-A"
+              <DiameterVsSSCChart
+                data={scatterData
+                  .filter((p) => p.diameter !== undefined && p.y !== undefined)
+                  .map((p) => ({
+                    diameter: p.diameter as number,
+                    ssc: p.y,
+                    index: p.index,
+                    isAnomaly: anomalyData?.anomalous_indices?.includes(p.index ?? -1) || false,
+                  }))
+                }
                 anomalousIndices={anomalyData?.anomalous_indices || []}
                 highlightAnomalies={highlightAnomalies}
-                showLegend={false}
+                showMieTheory={true}
+                showLegend={true}
+                height={450}
               />
             </TabsContent>
           </Tabs>

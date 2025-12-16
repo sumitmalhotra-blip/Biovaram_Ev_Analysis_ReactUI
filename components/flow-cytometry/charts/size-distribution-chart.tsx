@@ -28,6 +28,8 @@ interface SizeDistributionChartProps {
   d10?: number
   d50?: number
   d90?: number
+  height?: number
+  compact?: boolean
 }
 
 // Generate sample histogram data
@@ -91,6 +93,8 @@ export function SizeDistributionChart({
   d10 = 89,
   d50 = 127,
   d90 = 198,
+  height = 320,
+  compact = false,
 }: SizeDistributionChartProps) {
   const data = propData || generateHistogramData()
   const [brushDomain, setBrushDomain] = useState<{ startIndex?: number; endIndex?: number }>({})
@@ -100,8 +104,8 @@ export function SizeDistributionChart({
       title="Size Distribution"
       source="FCS Analysis"
       chartType="histogram"
-      showControls={showControls}
-      height={320}
+      showControls={showControls && !compact}
+      height={height}
     >
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} barCategoryGap={0}>

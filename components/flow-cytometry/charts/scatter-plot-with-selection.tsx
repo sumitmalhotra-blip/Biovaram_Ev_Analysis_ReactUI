@@ -26,6 +26,7 @@ export interface ScatterDataPoint {
   index?: number
   isAnomaly?: boolean
   isSelected?: boolean
+  diameter?: number  // Estimated particle diameter in nm
 }
 
 interface ScatterPlotChartProps {

@@ -14,7 +14,10 @@ import {
   Clock,
   Beaker,
   Thermometer,
-  Table2
+  Table2,
+  FileSpreadsheet,
+  FileJson,
+  FileText
 } from "lucide-react"
 import { useAnalysisStore } from "@/lib/store"
 import { useToast } from "@/hooks/use-toast"
@@ -25,6 +28,11 @@ import { EVSizeCategoryPieChart } from "./charts/ev-size-category-pie-chart"
 import { NTAStatisticsCards } from "./statistics-cards"
 import { NTASizeDistributionBreakdown } from "./size-distribution-breakdown"
 import { PositionAnalysis } from "./position-analysis"
+import { 
+  generateMarkdownReport, 
+  downloadMarkdownReport,
+  exportToParquet
+} from "@/lib/export-utils"
 import type { NTAResult } from "@/lib/api-client"
 
 interface NTAAnalysisResultsProps {
@@ -53,12 +61,241 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
     })
   }
 
-  const handleExport = (format: string) => {
-    toast({
-      title: "Export Started",
-      description: `Exporting NTA results as ${format}...`,
-    })
-    // TODO: Implement actual export logic
+  const handleExport = async (format: string) => {
+    const sampleName = sampleId || fileName?.replace(/\.[^/.]+$/, "") || "nta_sample"
+    
+    try {
+      switch (format) {
+        case "CSV": {
+          // Create CSV content from NTA results using actual NTAResult properties
+          const csvHeaders = [
+            "Sample ID",
+            "Median Size (nm)",
+            "Mean Size (nm)",
+            "D10 (nm)",
+            "D50 (nm)",
+            "D90 (nm)",
+            "Concentration (particles/mL)",
+            "Temperature (°C)",
+            "pH",
+            "Total Particles",
+            "50-80nm (%)",
+            "80-100nm (%)",
+            "100-120nm (%)",
+            "120-150nm (%)",
+            "150-200nm (%)",
+            "200+nm (%)"
+          ]
+          
+          const csvData = [
+            sampleName,
+            results.median_size_nm?.toFixed(2) || "N/A",
+            results.mean_size_nm?.toFixed(2) || "N/A",
+            results.d10_nm?.toFixed(2) || "N/A",
+            results.d50_nm?.toFixed(2) || "N/A",
+            results.d90_nm?.toFixed(2) || "N/A",
+            results.concentration_particles_ml?.toExponential(2) || "N/A",
+            results.temperature_celsius?.toFixed(1) || "N/A",
+            results.ph?.toFixed(2) || "N/A",
+            results.total_particles?.toString() || "N/A",
+            results.bin_50_80nm_pct?.toFixed(2) || "N/A",
+            results.bin_80_100nm_pct?.toFixed(2) || "N/A",
+            results.bin_100_120nm_pct?.toFixed(2) || "N/A",
+            results.bin_120_150nm_pct?.toFixed(2) || "N/A",
+            results.bin_150_200nm_pct?.toFixed(2) || "N/A",
+            results.bin_200_plus_pct?.toFixed(2) || "N/A"
+          ]
+          
+          const csvContent = csvHeaders.join(",") + "\n" + csvData.join(",") + "\n"
+          
+          // Create and download the CSV file
+          const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+          const url = URL.createObjectURL(blob)
+          const link = document.createElement("a")
+          link.href = url
+          link.download = `${sampleName}_nta_results.csv`
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
+          URL.revokeObjectURL(url)
+          
+          toast({
+            title: "Export Complete",
+            description: `NTA results exported as CSV successfully.`,
+          })
+          break
+        }
+        
+        case "Excel": {
+          // Export as tab-separated values (TSV) that Excel can open
+          const excelHeaders = [
+            "Sample ID",
+            "Median Size (nm)",
+            "Mean Size (nm)",
+            "D10 (nm)",
+            "D50 (nm)", 
+            "D90 (nm)",
+            "Concentration (particles/mL)",
+            "Temperature (°C)",
+            "pH",
+            "Total Particles",
+            "50-80nm (%)",
+            "80-100nm (%)",
+            "100-120nm (%)",
+            "120-150nm (%)",
+            "150-200nm (%)",
+            "200+nm (%)"
+          ]
+          
+          const excelData = [
+            sampleName,
+            results.median_size_nm?.toFixed(2) || "",
+            results.mean_size_nm?.toFixed(2) || "",
+            results.d10_nm?.toFixed(2) || "",
+            results.d50_nm?.toFixed(2) || "",
+            results.d90_nm?.toFixed(2) || "",
+            results.concentration_particles_ml?.toExponential(2) || "",
+            results.temperature_celsius?.toFixed(1) || "",
+            results.ph?.toFixed(2) || "",
+            results.total_particles?.toString() || "",
+            results.bin_50_80nm_pct?.toFixed(2) || "",
+            results.bin_80_100nm_pct?.toFixed(2) || "",
+            results.bin_100_120nm_pct?.toFixed(2) || "",
+            results.bin_120_150nm_pct?.toFixed(2) || "",
+            results.bin_150_200nm_pct?.toFixed(2) || "",
+            results.bin_200_plus_pct?.toFixed(2) || ""
+          ]
+          
+          const excelContent = excelHeaders.join("\t") + "\n" + excelData.join("\t") + "\n"
+          
+          // Tab-separated values work well with Excel
+          const blob = new Blob([excelContent], { type: "text/tab-separated-values;charset=utf-8;" })
+          const url = URL.createObjectURL(blob)
+          const link = document.createElement("a")
+          link.href = url
+          link.download = `${sampleName}_nta_results.xls`
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
+          URL.revokeObjectURL(url)
+          
+          toast({
+            title: "Export Complete",
+            description: `NTA results exported as Excel file successfully.`,
+          })
+          break
+        }
+        
+        case "JSON": {
+          // Export full results as JSON with all available NTAResult properties
+          const jsonContent = JSON.stringify({
+            sample_id: sampleName,
+            export_timestamp: new Date().toISOString(),
+            analysis_type: "NTA",
+            results: {
+              id: results.id,
+              median_size_nm: results.median_size_nm,
+              mean_size_nm: results.mean_size_nm,
+              d10_nm: results.d10_nm,
+              d50_nm: results.d50_nm,
+              d90_nm: results.d90_nm,
+              concentration_particles_ml: results.concentration_particles_ml,
+              temperature_celsius: results.temperature_celsius,
+              ph: results.ph,
+              total_particles: results.total_particles,
+              size_bins: {
+                "50-80nm_pct": results.bin_50_80nm_pct,
+                "80-100nm_pct": results.bin_80_100nm_pct,
+                "100-120nm_pct": results.bin_100_120nm_pct,
+                "120-150nm_pct": results.bin_120_150nm_pct,
+                "150-200nm_pct": results.bin_150_200nm_pct,
+                "200+nm_pct": results.bin_200_plus_pct
+              },
+              size_statistics: results.size_statistics,
+              processed_at: results.processed_at,
+              parquet_file: results.parquet_file
+            },
+            metadata: {
+              file_name: fileName
+            }
+          }, null, 2)
+          
+          const blob = new Blob([jsonContent], { type: "application/json;charset=utf-8;" })
+          const url = URL.createObjectURL(blob)
+          const link = document.createElement("a")
+          link.href = url
+          link.download = `${sampleName}_nta_results.json`
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
+          URL.revokeObjectURL(url)
+          
+          toast({
+            title: "Export Complete",
+            description: `NTA results exported as JSON successfully.`,
+          })
+          break
+        }
+        
+        case "PDF Report": {
+          // Generate markdown report using the proper generateMarkdownReport signature
+          const reportData = {
+            title: `NTA Analysis Report - ${sampleName}`,
+            sampleId: sampleName,
+            analysisType: "NTA" as const,
+            timestamp: new Date(),
+            results: {
+              "Median Size (nm)": results.median_size_nm?.toFixed(2) || "N/A",
+              "Mean Size (nm)": results.mean_size_nm?.toFixed(2) || "N/A",
+              "D10 (nm)": results.d10_nm?.toFixed(2) || "N/A",
+              "D50 (nm)": results.d50_nm?.toFixed(2) || "N/A",
+              "D90 (nm)": results.d90_nm?.toFixed(2) || "N/A",
+              "Concentration (particles/mL)": results.concentration_particles_ml?.toExponential(2) || "N/A",
+              "Temperature (°C)": results.temperature_celsius?.toFixed(1) || "N/A",
+              "pH": results.ph?.toFixed(2) || "N/A",
+              "Total Particles": results.total_particles?.toLocaleString() || "N/A"
+            } as Record<string, unknown>,
+            statistics: {
+              "50-80nm (%)": results.bin_50_80nm_pct || 0,
+              "80-100nm (%)": results.bin_80_100nm_pct || 0,
+              "100-120nm (%)": results.bin_100_120nm_pct || 0,
+              "120-150nm (%)": results.bin_120_150nm_pct || 0,
+              "150-200nm (%)": results.bin_150_200nm_pct || 0,
+              "200+nm (%)": results.bin_200_plus_pct || 0
+            },
+            charts: [
+              { title: "Size Distribution", description: "Histogram of particle size distribution" },
+              { title: "Concentration Profile", description: "Concentration vs size profile" },
+              { title: "EV Category Breakdown", description: "Pie chart of EV size categories" }
+            ],
+            notes: `File: ${fileName || "N/A"}\nProcessed: ${results.processed_at || new Date().toISOString()}`
+          }
+          
+          const reportContent = generateMarkdownReport(reportData)
+          downloadMarkdownReport(reportContent, `${sampleName}_nta_report.md`)
+          
+          toast({
+            title: "Export Complete",
+            description: `NTA report exported as Markdown successfully.`,
+          })
+          break
+        }
+        
+        default:
+          toast({
+            title: "Export Error",
+            description: `Unsupported export format: ${format}`,
+            variant: "destructive",
+          })
+      }
+    } catch (error) {
+      console.error("Export error:", error)
+      toast({
+        title: "Export Failed",
+        description: `Failed to export NTA results: ${error instanceof Error ? error.message : "Unknown error"}`,
+        variant: "destructive",
+      })
+    }
   }
 
   const handleReset = () => {
@@ -206,33 +443,37 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
                 variant="outline" 
                 size="sm" 
                 onClick={() => handleExport("CSV")} 
-                className="w-full"
+                className="w-full gap-1.5"
               >
+                <FileSpreadsheet className="h-3.5 w-3.5" />
                 CSV
               </Button>
               <Button 
                 variant="outline" 
                 size="sm" 
                 onClick={() => handleExport("Excel")} 
-                className="w-full"
+                className="w-full gap-1.5"
               >
+                <Table2 className="h-3.5 w-3.5" />
                 Excel
               </Button>
               <Button 
                 variant="outline" 
                 size="sm" 
                 onClick={() => handleExport("JSON")} 
-                className="w-full"
+                className="w-full gap-1.5"
               >
+                <FileJson className="h-3.5 w-3.5" />
                 JSON
               </Button>
               <Button 
                 variant="outline" 
                 size="sm" 
                 onClick={() => handleExport("PDF Report")} 
-                className="w-full"
+                className="w-full gap-1.5"
               >
-                PDF Report
+                <FileText className="h-3.5 w-3.5" />
+                Report
               </Button>
             </div>
           </CardContent>
