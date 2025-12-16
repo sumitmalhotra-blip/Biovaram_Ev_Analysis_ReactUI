@@ -1,0 +1,209 @@
+
+CRMIT DEVELOPMENT PLAN - QUICK REFERENCE
+========================================
+
+🎯 GOAL: Backend implementation of FCS + NTA parsers with Parquet storage
+📅 DEADLINE: Mid-January 2026 (9 weeks = 62 days)
+👤 ROLE: Senior Python Developer
+
+KEY DELIVERABLES BY JAN 15:
+✅ FCS file parser → Parquet conversion
+✅ NTA text file parser → Parquet conversion  
+✅ Quality control checks
+✅ Sample matching across instruments
+✅ Basic anomaly detection
+✅ Minimal web UI for file upload
+
+WHY PARQUET? (Your Excellent Suggestion!)
+------------------------------------------
+✓ 87% smaller files vs CSV
+✓ 34x faster queries
+✓ 99% less data scanned for analytics
+✓ Native schema + metadata support
+✓ Column-level compression (Snappy/Gzip/Zstandard)
+✓ Perfect for multi-modal data fusion
+✓ Future-proof for ML pipelines
+
+PHASE BREAKDOWN:
+----------------
+Week 1-2: FCS Parser + Parquet Writer
+Week 3-4: NTA Parser + Unified Schema
+Week 5-6: QC + Normalization + Binning
+Week 7:   Sample Matching + Feature Extraction
+Week 8:   Anomaly Detection (size discrepancy, outliers)
+Week 9:   FastAPI Backend + Simple UI + Testing
+
+TECH STACK:
+-----------
+Language: Python 3.9+
+Parsers: fcsparser, readfcs (FCS) | Custom (NTA)
+Storage: Apache Parquet (pyarrow, fastparquet)
+Data: Pandas, NumPy
+ML: Scikit-learn, SciPy
+Backend: FastAPI + Uvicorn
+DB: PostgreSQL + SQLAlchemy
+CV: OpenCV (future TEM)
+Testing: pytest
+
+PROJECT STRUCTURE:
+------------------
+src/
+├── parsers/          # FCS, NTA parsers + Parquet writer
+├── preprocessing/    # QC, normalization, binning
+├── fusion/           # Sample matching, feature extraction
+├── anomaly_detection/ # Statistical tests, outlier detection
+├── database/         # SQLAlchemy models
+├── api/              # FastAPI endpoints
+└── utils/            # Utilities
+
+CRITICAL SUCCESS FACTORS:
+-------------------------
+1. Sample ID extraction from filenames (BV_EXO_001_FC.fcs)
+2. Parquet metadata embedding (source file, timestamps)
+3. Flexible NTA parser (handle format variations)
+4. QC checks configurable via JSON
+5. Comprehensive unit tests (>85% coverage)
+
+PARQUET WORKFLOW:
+-----------------
+1. Parse FCS/NTA file
+2. Extract metadata (channels, parameters, etc.)
+3. Convert DataFrame → PyArrow Table
+4. Embed metadata in Parquet schema
+5. Write with Snappy compression
+6. Enable column statistics for fast queries
+
+FILE NAMING CONVENTION:
+-----------------------
+Input:  SAMPLEID_INSTRUMENT_DATE.ext
+Example: BV_EXO_001_FC_20251114.fcs
+         BV_EXO_001_NTA_20251114.txt
+
+Output: SAMPLEID_INSTRUMENT.parquet
+Example: BV_EXO_001_FC.parquet
+         BV_EXO_001_NTA.parquet
+
+QUALITY CHECKS:
+---------------
+FCS:
+- Minimum event count (>1000)
+- Flow rate stability
+- Signal saturation (<1%)
+- Negative values in scatter channels
+
+NTA:
+- Temperature compliance (25°C ± 2°C)
+- Minimum size bins (>10)
+- Size range validation (30-150 nm)
+- Concentration stability
+
+SAMPLE MATCHING:
+----------------
+Goal: Link FCS + NTA + TEM data for same sample
+
+Method:
+1. Parse sample ID from filename
+2. Scan Parquet directory for matching IDs
+3. Create manifest: {sample_id, has_fcs, has_nta, has_tem}
+4. Extract features from each instrument
+5. Flag if multi-modal data incomplete
+
+ANOMALY DETECTION:
+------------------
+1. Size Discrepancy: |NTA_size - TEM_size| / NTA_size > 15%
+2. Outliers: Z-score > 3.0 standard deviations
+3. QC Failures: Temperature, event count, saturation
+4. Population Shifts: >10% change vs previous sample
+
+API ENDPOINTS:
+--------------
+POST /upload/fcs      # Upload FCS file → parse → Parquet
+POST /upload/nta      # Upload NTA file → parse → Parquet
+GET  /samples         # List all samples + availability
+GET  /samples/{id}    # Get details for specific sample
+
+TESTING STRATEGY:
+-----------------
+Unit Tests:
+- Each parser independently (fixtures in tests/fixtures/)
+- Preprocessing modules
+- QC checks
+- Target: >85% coverage
+
+Integration Tests:
+- End-to-end: Upload → Parse → Parquet → QC
+- Multi-sample matching
+- API endpoints
+
+Performance Tests:
+- Large FCS files (>1M events)
+- Batch processing speed
+- Parquet vs CSV size comparison
+
+DAILY WORKFLOW:
+---------------
+Morning:
+1. Review yesterday's progress
+2. Pick 1-2 tasks from current phase
+3. Write tests FIRST (TDD)
+
+Afternoon:
+4. Implement functionality
+5. Run tests, ensure passing
+6. Commit with descriptive message
+
+Evening:
+7. Document any blockers
+8. Plan next day's tasks
+
+WEEKLY MILESTONES:
+------------------
+Week 1 END: FCS parser working, tests passing
+Week 2 END: FCS → Parquet, batch processing script
+Week 3 END: NTA parser working
+Week 4 END: NTA → Parquet, unified schema
+Week 5 END: QC module complete
+Week 6 END: Normalization + binning complete
+Week 7 END: Sample matching working
+Week 8 END: Anomaly detection functional
+Week 9 END: API + UI + documentation complete
+
+RISK MITIGATION:
+----------------
+Risk: Unknown FCS format variations
+→ Test with ALL Bio Varam samples in Week 1
+
+Risk: NTA format inconsistencies  
+→ Document variations, flexible parser
+
+Risk: Performance with large files
+→ Chunked reading, parallel processing
+
+Risk: Timeline slippage
+→ 3-4 day buffer, prioritize must-haves
+
+COMMUNICATION:
+--------------
+Daily: Git commits
+Weekly: Friday progress report to Bio Varam
+Blockers: Immediate notification
+Code Review: PR at end of each phase
+
+IMMEDIATE FIRST STEPS:
+----------------------
+Day 1 (Today):
+□ Clone repo
+□ Set up Python 3.9 venv
+□ Install requirements.txt
+□ Create project structure folders
+□ Write first unit test (test_base_parser.py)
+
+Day 2:
+□ Obtain sample FCS files from Bio Varam
+□ Study FCS format with fcsparser
+□ Document FCS structure
+□ Start implementing FCSParser class
+
+Remember: BACKEND FIRST, UI LATER!
+Focus on robust, testable, well-documented code.
+Parquet is your friend - embrace columnar storage! 🚀

@@ -1,0 +1,379 @@
+================================================================================
+V0.DEV PROMPT: EV ANALYSIS PLATFORM UI
+================================================================================
+
+PROJECT OVERVIEW
+----------------
+Create a modern, dark-themed React dashboard for a scientific Extracellular 
+Vesicle (EV) Analysis Platform. This application helps researchers analyze 
+nanoparticle data from two instruments: Flow Cytometry (FCS) and Nanoparticle 
+Tracking Analysis (NTA). The platform processes raw data files, performs 
+physics-based calculations (Mie scattering theory), detects anomalies, and 
+visualizes particle size distributions.
+
+================================================================================
+DESIGN SYSTEM REQUIREMENTS
+================================================================================
+
+THEME:
+- Dark mode primary (similar to VS Code/GitHub dark)
+- Background: #0f172a (slate-900)
+- Cards/Panels: #1e293b (slate-800) with subtle glass-morphism effect
+- Accent colors: 
+  - Primary: #3b82f6 (blue-500)
+  - Success: #10b981 (emerald-500)
+  - Warning: #f59e0b (amber-500)
+  - Error: #ef4444 (red-500)
+  - Purple accent: #8b5cf6 (violet-500)
+  - Cyan accent: #00b4d8
+- Text: #f8fafc (primary), #94a3b8 (secondary)
+
+TYPOGRAPHY:
+- Font: Inter or system-ui
+- Headers: Bold, clean sans-serif
+- Data values: Monospace for numbers/metrics
+
+================================================================================
+LAYOUT STRUCTURE
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────┐
+│  HEADER: Logo + "BioVaram EV Analysis" + API Status + User Menu     │
+├─────────────────────────────────────────────────────────────────────┤
+│  TAB NAVIGATION: [Dashboard] [Flow Cytometry] [NTA] [Cross-Compare] │
+├────────────────┬────────────────────────────────────────────────────┤
+│                │                                                     │
+│   SIDEBAR      │              MAIN CONTENT AREA                      │
+│   (Collapsible)│                                                     │
+│                │                                                     │
+│   - Filters    │   Dynamic content based on selected tab             │
+│   - Settings   │                                                     │
+│   - Sample List│                                                     │
+│                │                                                     │
+└────────────────┴────────────────────────────────────────────────────┘
+
+================================================================================
+TAB 1: DASHBOARD (HOME)
+================================================================================
+
+LEFT COLUMN (70%):
+
+1. PINNED GRAPHS SECTION (if any graphs pinned)
+   - Header: "📌 Pinned Graphs" with count badge
+   - Grid of pinned charts (2 columns)
+   - Each card has:
+     - Chart title
+     - Source badge (e.g., "From: Flow Cytometry")
+     - Timestamp when pinned
+     - "Unpin" button (trash icon)
+     - Interactive Plotly/Recharts chart
+   - "Clear All Pinned" button at bottom
+
+2. QUICK STATS OVERVIEW
+   - 4 stat cards in a row:
+     - Total Samples Analyzed
+     - Latest Analysis Date
+     - Avg Particle Size (nm)
+     - API Connection Status (green dot if connected)
+
+3. RECENT ACTIVITY FEED
+   - Timeline of recent analyses with file names and timestamps
+
+RIGHT COLUMN (30%):
+
+1. QUICK UPLOAD CARD
+   - Drag-and-drop zone with dashed border
+   - Accepted formats: .fcs, .csv, .txt, .xlsx, .parquet
+   - File icon that animates on hover
+
+2. SAMPLE METADATA FORM (appears after upload)
+   - Sample ID* (text input)
+   - Treatment (dropdown: CD81, CD9, CD63, Isotype Control, Other)
+   - Concentration (μg) (number input)
+   - Preparation Method (dropdown: SEC, Centrifugation, Ultracentrifugation)
+   - Operator Name
+   - Notes (textarea)
+   - "Save & Process" button
+
+================================================================================
+TAB 2: FLOW CYTOMETRY (FCS ANALYSIS)
+================================================================================
+
+SIDEBAR PANEL:
+
+EXPERIMENT PARAMETERS:
+- Refractive Index (slider: 1.35 - 1.60, default 1.40)
+- Laser Wavelength (dropdown: 405nm, 488nm, 561nm, 640nm)
+- Medium (dropdown: Water, PBS, Culture Media)
+- Size Range: Min/Max nm inputs
+
+ANALYSIS OPTIONS:
+- ☑️ Enable Anomaly Detection
+- Anomaly Method (radio: Z-Score, IQR, Both)
+- Z-Score Threshold (slider: 2.0 - 4.0)
+- ☑️ Highlight Anomalies on Plots
+
+SIZE CATEGORIES (Custom Ranges):
+- Preset buttons: [Standard EV] [Exosome-focused] [Custom]
+- Editable range table:
+  | Category   | Min (nm) | Max (nm) | Color  |
+  | Small EVs  | 0        | 50       | cyan   |
+  | Exosomes   | 50       | 200      | purple |
+  | Large EVs  | 200      | 1000     | orange |
+- "+ Add Range" button
+
+MAIN CONTENT:
+
+1. FILE UPLOAD/SELECTION AREA
+   - Drag-drop zone or file browser
+   - Recently uploaded files as clickable chips
+
+2. COLUMN MAPPING SECTION (expandable)
+   - Auto-detected columns with dropdown overrides
+   - FSC Column selector
+   - SSC Column selector
+   - "Confirm Mapping" button
+
+3. ANALYSIS RESULTS (after processing)
+
+   METRIC CARDS ROW:
+   [Total Events: 45,678] [Median Size: 127.4 nm] [Anomalies: 234 (0.5%)] [Quality: ✓ Good]
+
+   INTERACTIVE CHARTS SECTION:
+   
+   a. Theoretical vs Measured Plot
+      - Line chart showing Mie theory curve
+      - Scatter overlay of measured data points
+      - Hover tooltips with exact values
+      - "📌 Pin to Dashboard" button in top-right
+
+   b. Size Distribution Histogram
+      - Stacked/colored bars by size category
+      - Vertical lines for D10, D50, D90 percentiles
+      - Legend showing category counts
+      - Pin button
+
+   c. FSC vs SSC Scatter Plot
+      - Density scatter with anomalies highlighted in red
+      - Lasso select tool for gating
+      - Pin button
+
+   d. Diameter vs SSC Scatter
+      - Color gradient by density
+      - Anomaly overlay toggle
+      - Pin button
+
+4. COLLAPSIBLE DASHBOARD PANEL
+   - "📊 Full Analysis Dashboard" - expands to show 2x2 grid of all plots
+
+5. EXPORT SECTION
+   - Download buttons: CSV, Excel, Parquet
+   - "Download Anomalies Only" button
+   - "Generate PDF Report" button
+
+================================================================================
+TAB 3: NANOPARTICLE TRACKING ANALYSIS (NTA)
+================================================================================
+
+SIDEBAR PANEL:
+
+TEMPERATURE CORRECTION (expandable card with toggle):
+- ☑️ Enable Temperature Correction
+- Measurement Temperature (°C): number input with thermometer icon
+- Reference Temperature (°C): default 25
+- Medium Type (dropdown: Water, PBS, Culture Media, Custom)
+- If Custom: Viscosity Factor input
+- Live preview: "Correction Factor: 0.9876"
+
+VISUALIZATION OPTIONS:
+- Show Percentile Lines (D10, D50, D90)
+- Bin Size (slider)
+- Y-axis: Count vs Normalized
+
+MAIN CONTENT:
+
+1. DATA PREVIEW TABLE
+   - Sortable, filterable table of NTA measurements
+   - Columns: Position, Size (nm), Concentration, etc.
+   - Expandable "Column Information" section
+
+2. KEY METRICS CARDS:
+   [📍 11 Positions] [📏 Median: 142.5 nm] [🔬 Concentration: 2.4E+09 p/mL] [📊 D90: 198.3 nm]
+
+3. THREE SIZE CATEGORIES DISPLAY (always visible)
+   ┌─────────────────┬─────────────────┬─────────────────┐
+   │   <50 nm        │   50-200 nm     │   >200 nm       │
+   │   Small EVs     │   Exosomes      │   Large EVs     │
+   │   1,234 (12.5%) │   6,789 (68.9%) │   1,827 (18.6%) │
+   │   [cyan card]   │   [purple card] │   [orange card] │
+   └─────────────────┴─────────────────┴─────────────────┘
+
+4. VISUALIZATION TABS:
+   [Size Distribution] [Concentration Profile] [Position Analysis] [Corrected View]
+
+   Size Distribution Tab:
+   - Histogram with D10/D50/D90 lines
+   - Stats summary below chart
+   - Pin button
+
+   Concentration Profile Tab:
+   - Bar chart: Concentration vs Position (1-11)
+   - Helpful for assessing measurement uniformity
+   - Pin button
+
+   Position Analysis Tab:
+   - Heatmap or table showing all positions
+   - Highlight positions with high variance
+
+   Corrected View Tab (only if temperature correction enabled):
+   - Before/After comparison
+   - Summary table: Raw vs Corrected values
+   - Change percentage column with color coding
+
+================================================================================
+TAB 4: CROSS-COMPARISON
+================================================================================
+
+SIDEBAR PANEL:
+
+DATA SOURCE SELECTION:
+- FCS File dropdown (from analyzed samples)
+- NTA File dropdown (from analyzed samples)
+
+COMPARISON SETTINGS:
+- Size Range Filter: min/max sliders
+- Bin Size for histograms
+- ☑️ Normalize Distributions
+- ☑️ Show KDE Curves
+- Discrepancy Threshold: % input (default 15%)
+
+MAIN CONTENT:
+
+1. HEADER WITH QUICK SUMMARY
+   Comparing: [L5_F10_CD81.fcs] vs [EV_IPSC_P1_NTA.txt]
+   Overall Agreement: ✓ Good (12.3% avg discrepancy)
+
+2. VISUALIZATION TABS:
+   [Overlay Histogram] [KDE Comparison] [Statistics] [Discrepancy Analysis]
+
+   Overlay Histogram:
+   - Two overlapping semi-transparent histograms
+   - Blue = FCS, Purple = NTA
+   - Legend with event/particle counts
+   - Pin button
+
+   KDE Comparison:
+   - Smooth density curves for both datasets
+   - Shaded area showing overlap
+   - Pin button
+
+   Statistics Tab:
+   - Side-by-side stat cards:
+     
+     FCS Data          NTA Data
+     ─────────         ─────────
+     D10: 89.2 nm      D10: 92.1 nm
+     D50: 127.4 nm     D50: 135.2 nm
+     D90: 198.3 nm     D90: 201.8 nm
+     Mean: 134.5 nm    Mean: 141.2 nm
+     Std: 45.2 nm      Std: 42.8 nm
+     N: 45,678         N: 12,345
+   
+   - Statistical Tests Results:
+     - Kolmogorov-Smirnov Test: statistic, p-value, interpretation
+     - Mann-Whitney U Test: statistic, p-value, interpretation
+
+   Discrepancy Analysis:
+   - Bar chart showing % difference for D10, D50, D90, Mean
+   - Horizontal threshold line
+   - Color coding: green (within threshold), red (exceeds)
+   - Interpretation text below
+   - Pin button
+
+================================================================================
+GLOBAL COMPONENTS
+================================================================================
+
+HEADER BAR:
+- Logo (left)
+- App title: "BioVaram EV Analysis Platform"
+- API status indicator (green/red dot with "Connected"/"Disconnected")
+- Notification bell
+- User avatar dropdown (Settings, Help, Logout)
+
+TOAST NOTIFICATIONS:
+- Appear bottom-right
+- Types: success (green), error (red), info (blue), warning (amber)
+- Auto-dismiss after 5 seconds
+- "📌 Pinned to Dashboard!" confirmation
+
+LOADING STATES:
+- Skeleton loaders for charts
+- Spinner with "Analyzing..." text for long operations
+- Progress bar for file uploads
+
+EMPTY STATES:
+- Illustrated placeholders when no data
+- Clear call-to-action buttons
+
+================================================================================
+INTERACTIVE FEATURES
+================================================================================
+
+1. ALL CHARTS SHOULD HAVE:
+   - Zoom (scroll wheel)
+   - Pan (drag)
+   - Hover tooltips with data values
+   - Download as PNG button
+   - Fullscreen toggle
+   - "📌 Pin to Dashboard" button
+
+2. PIN TO DASHBOARD FLOW:
+   - Click pin button → Toast: "Pinned [Chart Name] to Dashboard!"
+   - Pinned chart appears in Dashboard tab
+   - Button changes to "📌 Pinned" (disabled state)
+
+3. RESPONSIVE DESIGN:
+   - Sidebar collapses to icons on smaller screens
+   - Charts resize responsively
+   - Mobile: Stack cards vertically
+
+================================================================================
+TECH STACK PREFERENCES
+================================================================================
+
+- React 18+ with TypeScript
+- Tailwind CSS for styling
+- Recharts or Plotly.js for charts
+- React Query for API state
+- Zustand or Context for global state
+- Framer Motion for animations
+- Lucide React for icons
+
+================================================================================
+API INTEGRATION POINTS
+================================================================================
+
+// Expected API endpoints (FastAPI backend)
+GET  /api/samples              // List all samples
+POST /api/samples/upload/fcs   // Upload FCS file
+POST /api/samples/upload/nta   // Upload NTA file
+GET  /api/samples/{id}         // Get sample details
+GET  /api/samples/{id}/analysis // Get analysis results
+POST /api/analyze/fcs          // Run FCS analysis
+POST /api/analyze/nta          // Run NTA analysis
+GET  /api/health               // API health check
+
+================================================================================
+ACCESSIBILITY REQUIREMENTS
+================================================================================
+
+- WCAG 2.1 AA compliant
+- Keyboard navigable
+- Screen reader friendly labels
+- Sufficient color contrast on dark theme
+- Focus indicators
+
+================================================================================
+END OF PROMPT
+================================================================================

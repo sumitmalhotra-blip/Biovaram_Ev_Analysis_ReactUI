@@ -1,0 +1,91 @@
+Original File:	Z:\20250219_0001_EV_ip_p1_F8-1000_size_488.avi	Section:	0.09999 [0]
+Operator:	Admin
+Experiment:	20250219_0001
+ZetaView S/N:	24-1152
+Cell S/N:	018-020-21-394-F24-1
+Software:	ZetaView (version 8.06.01 SP1)	Analyze:	8.06.01 SP1
+SOP:	<No SOP>
+Sample:	EV_ip_p1_F8-1000
+Electrolyte:	WATER
+pH:	7.000000	entered
+Conductivity:	53.000000	sensed
+TempControl:	1
+SetTemperature:	25.000000
+Temperature:	25.340000	sensed
+Viscosity:	0.892904
+Date:	2025-02-19
+Time:	12:26:19
+General Remarks:	
+Remarks:	
+Sample Info 1:	
+Sample Info 2:	
+Sample Info 3:
+Scattering Intensity:	4.400000
+Detected Particles:	20
+Particle Drift Checked:	1904-01-01 05:30:00
+Particle Drift Check Result:	too high
+Cell Checked:	2025-02-19 09:43:16
+Cell Check Result:	Good
+Type of Measurement:	Size Distribution
+Positions:	11
+Microscope Position:	0.099993
+Number of Traces:	0	(at 0.099990)	Average Number of Particles:	0.000000	Dilution::	1000.000000
+Concentration Correction Factor:	1.000000
+Image Evaluation:
+Minimum Brightness:	30
+Minimum Area:	10
+Maximum Area:	1000
+Maximum Brightness:	255
+Tracking Radius2:	100
+Minimum Tracelength:	15
+Begin New Traces:	1
+PSD log Correction:	0
+Multi-Threshold:	0
+MultipleAcquisition:	0
+NumberOfExperiments:	1
+DelayTime:	0.000000
+Camera:	FpSec 30 #Cycles 1 FRate 30.000000
+Sensitivity:	65.000000
+Gain:	14.400000
+Offset:	0.000000
+Shutter:	100.000000
+Brightness:	NaN
+Gamma:	NaN
+Auto Exposure:	NaN
+Camera Trigger Mode:	Camera Frequency
+Camera Trigger Duration µs:	Shutter Duration
+Camera Trigger Delay µs:	0
+Laser Wavelength nm:	488.000000
+Filter Wavelength nm:	Scatter
+LowBleach:	0
+LowBleachVolume:	0.000000
+DoseSubVolume:	0
+SubVolumePump:	0
+Position:	0.099993
+actual Microscope:	-288304	(Pos	0.099993)
+actual Laser:	-218399
+Position0 Microscope:	-295724
+Position0 Laser:	-228346
+Position1 Microscope:	-221519
+Position1 Laser:	-128879
+Cell Thickness (Microscope Steps):	-74205
+Cell Thickness (Laser Steps):	-99467
+SL1 (Stationary Layer 1):	0.149500
+SL2 (Stationary Layer 2):	0.850500
+Cell parameter:
+Cell#:	ZNTA
+Micrometer per Pixel:	0.713000
+Reference Electrode Distance:	5.150000
+Voltage:	0.000000
+Polarity:	NaN
+OscillatorFrames:	NaN
+Reference Voltage:	0.000000
+Microscope Magnification:	x10
+ZP Factor:	12.731464 (Smoluchowski)
+Results (Pos 0.099993):
+Median Number (D50):	0.000000
+Median Concentration (D50):	0.000000
+Median Volume (D50):	0.000000
+Size Distribution
+Size / nm	Number	Concentration / cm-3	Volume / nm^3	Area / nm^2
+-1.000E+0	-1.000E+0	-1.000E+0	-1.000E+0	0.000E+0

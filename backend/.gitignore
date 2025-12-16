@@ -1,0 +1,112 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environment variables
+.env
+.env.local
+
+# AWS credentials
+*.pem
+credentials
+config
+
+# Data files (do not commit raw data)
+*.fcs
+*.parquet
+*.csv
+processed_data/
+raw_data/
+cache/
+
+# Uploads directory (temporary files)
+uploads/*.fcs
+uploads/*.parquet
+uploads/*.csv
+uploads/*.txt
+uploads/analysis_results.*
+
+# Images (generated plots)
+images/*.png
+images/*.jpg
+images/*.svg
+!images/.gitkeep
+
+# Keep test data directory structure but ignore files
+test_data/*.fcs
+test_data/*.txt
+test_data/**/*.fcs
+test_data/**/*.txt
+
+# Logs
+*.log
+logs/
+*.csv
+
+# Temporary and installation files
+install_*.py
+*_install.py
+reset_*.ps1
+installed_packages.txt
+
+# Progress reports and temporary docs
+*_COMPLETE.md
+*_SUCCESS.md
+*_REPORT.md
+*_SUMMARY.md
+*_FIXES.md
+REMAINING_*.md
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Documentation builds
+docs/_build/
+docs/_static/
+docs/_templates/
+
+# OS
+Thumbs.db
+
+# Temporary Office files
+~$*.pptx
+~$*.docx
+~$*.xlsx

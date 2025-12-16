@@ -1,0 +1,99 @@
+================================================================================
+FORWARD SCATTER OUTLIER ANALYSIS REPORT
+================================================================================
+
+Date: November 19, 2025
+Total Events Analyzed: 851,202
+
+--------------------------------------------------------------------------------
+BASIC STATISTICS
+--------------------------------------------------------------------------------
+Minimum FSC:                0.0
+Maximum FSC:        3,703,855.0
+Mean FSC:               1,098.0
+Median FSC:               582.2
+Std Dev:               24,919.0
+
+--------------------------------------------------------------------------------
+PERCENTILE DISTRIBUTION
+--------------------------------------------------------------------------------
+Percentile   FSC Value       Notes
+--------------------------------------------------------------------------------
+P1.00       0.0             
+P5.00       0.0             
+P10.00      51.2            
+P25.00      301.1           
+P50.00      582.2           ← Median (typical EV)
+P75.00      869.1           
+P90.00      1145.0          
+P95.00      1335.0          
+P99.00      2632.3          ← 99% of events below this
+P99.50      7434.5          
+P99.90      60943.8         ← Recommended cutoff
+P99.99      1023521.6       
+
+--------------------------------------------------------------------------------
+OUTLIER FILTERING IMPACT
+--------------------------------------------------------------------------------
+Threshold    Cutoff FSC      Events Kept     % Kept       Events Lost     % Lost
+--------------------------------------------------------------------------------
+P99.00      2632.3          842,691         99.000      % 8,511           1.000%
+P99.50      7434.5          846,946         99.500      % 4,256           0.500%
+P99.90      60943.8         850,350         99.900      % 852             0.100% ★ RECOMMENDED
+P99.95      142898.7        850,776         99.950      % 426             0.050%
+P99.99      1023521.6       851,116         99.990      % 86              0.010%
+
+================================================================================
+RECOMMENDATION
+================================================================================
+
+Recommended Threshold: P99.9
+Reason: Large jump detected (P99→P99.9: 23.2×)
+
+Impact of Applying This Filter:
+  • Keep:   850,350 events (99.900%)
+  • Remove: 852 events (0.100%)
+  • Cutoff FSC: 60943.8
+
+--------------------------------------------------------------------------------
+INTERPRETATION
+--------------------------------------------------------------------------------
+
+✓ GOOD: Less than 0.5% of events would be filtered.
+  Most outliers are likely artifacts (debris, aggregates).
+
+Expected Extracellular Vesicle Characteristics:
+  • Exosomes:         30-150 nm (FSC typically 100-2000)
+  • Microvesicles:    100-1000 nm (FSC typically 500-5000)
+  • Apoptotic bodies: 500-5000 nm (FSC typically >5000)
+
+⚠ Note: Your max FSC (3703855) is 6362× larger than median.
+  This extreme ratio strongly suggests artifacts, not biological particles.
+
+================================================================================
+RECOMMENDED NEXT STEPS
+================================================================================
+
+1. Review the generated plots:
+   • fsc_distribution_overview.png - Overall distribution
+   • fsc_outlier_analysis.png - Outlier characteristics
+   • fsc_percentile_curve.png - Distribution jumps
+
+2. Validate filtering decision:
+   • Confirm outliers don't represent real biological population
+   • Check if other markers (SSC, fluorescence) also extreme
+   • Compare to NTA size distribution if available
+
+3. Apply filtering in processing pipeline:
+   • Filter FSC > 60944 before Mie calibration
+   • Document filtering in methods section
+   • Report % events filtered in results
+
+4. Monitor quality:
+   • Track outlier percentage across batches
+   • Investigate if outliers increase (sample prep issue?)
+   • Validate with orthogonal methods (NTA, TEM)
+
+================================================================================
+END OF REPORT
+================================================================================
