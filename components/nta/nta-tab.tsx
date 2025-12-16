@@ -237,7 +237,7 @@ export function NTATab() {
                   />
                   <label htmlFor="nta-upload" className="cursor-pointer w-full">
                     <div className="flex flex-col items-center gap-3 md:gap-4">
-                      <div className="p-4 md:p-5 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 shadow-lg touch-manipulation">
+                      <div className="p-4 md:p-5 rounded-xl bg-linear-to-br from-primary/20 to-accent/20 shadow-lg touch-manipulation">
                         <Microscope className="h-8 w-8 md:h-10 md:w-10 text-primary" />
                       </div>
                       <p className="text-base md:text-lg font-medium">Drop NTA file here or tap to browse</p>

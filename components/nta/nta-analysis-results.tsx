@@ -20,8 +20,11 @@ import { useAnalysisStore } from "@/lib/store"
 import { useToast } from "@/hooks/use-toast"
 import { NTASizeDistributionChart } from "./charts/nta-size-distribution-chart"
 import { ConcentrationProfileChart } from "./charts/concentration-profile-chart"
+import { TemperatureCorrectedComparison } from "./charts/temperature-corrected-comparison"
+import { EVSizeCategoryPieChart } from "./charts/ev-size-category-pie-chart"
 import { NTAStatisticsCards } from "./statistics-cards"
 import { NTASizeDistributionBreakdown } from "./size-distribution-breakdown"
+import { PositionAnalysis } from "./position-analysis"
 import type { NTAResult } from "@/lib/api-client"
 
 interface NTAAnalysisResultsProps {
@@ -127,8 +130,11 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
       {/* Statistics Cards */}
       <NTAStatisticsCards results={results} />
 
-      {/* Size Distribution Breakdown */}
-      <NTASizeDistributionBreakdown results={results} />
+      {/* Size Distribution Breakdown and Pie Chart */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <NTASizeDistributionBreakdown results={results} />
+        <EVSizeCategoryPieChart data={results} />
+      </div>
 
       {/* Quick Summary & Export Options */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -302,88 +308,11 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
             </TabsContent>
 
             <TabsContent value="position" className="space-y-4">
-              <div className="p-8 text-center text-muted-foreground">
-                <p>Position analysis heatmap</p>
-                <p className="text-sm mt-2">Shows spatial distribution of particle tracking</p>
-              </div>
+              <PositionAnalysis />
             </TabsContent>
 
             <TabsContent value="corrected" className="space-y-4">
-              <Card className="bg-secondary/30 shadow-inner">
-                <CardContent className="p-4">
-                  <h4 className="text-sm font-medium mb-3">Temperature Correction Applied</h4>
-                  <p className="text-xs text-muted-foreground mb-3">
-                    NTA measurements are temperature-dependent. Values have been normalized to 25°C.
-                  </p>
-                  <div className="grid grid-cols-3 gap-2 md:gap-4 text-xs md:text-sm overflow-x-auto">
-                    <div>
-                      <p className="text-muted-foreground font-medium">Parameter</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground font-medium">Raw</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground font-medium">Corrected (25°C)</p>
-                    </div>
-
-                    <div className="font-mono">D50</div>
-                    <div className="font-mono">
-                      {results.d50_nm ? `${results.d50_nm.toFixed(1)} nm` : "N/A"}
-                    </div>
-                    <div className="font-mono text-emerald-500">
-                      {results.d50_nm 
-                        ? `${(results.d50_nm * 0.988).toFixed(1)} nm` 
-                        : "N/A"
-                      }
-                      {results.temperature_celsius && results.temperature_celsius !== 25 && (
-                        <span className="text-xs ml-1">
-                          ({((0.988 - 1) * 100).toFixed(1)}%)
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="font-mono">Mean</div>
-                    <div className="font-mono">
-                      {results.mean_size_nm ? `${results.mean_size_nm.toFixed(1)} nm` : "N/A"}
-                    </div>
-                    <div className="font-mono text-emerald-500">
-                      {results.mean_size_nm 
-                        ? `${(results.mean_size_nm * 0.988).toFixed(1)} nm` 
-                        : "N/A"
-                      }
-                      {results.temperature_celsius && results.temperature_celsius !== 25 && (
-                        <span className="text-xs ml-1">
-                          ({((0.988 - 1) * 100).toFixed(1)}%)
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="font-mono">Conc.</div>
-                    <div className="font-mono">
-                      {results.concentration_particles_ml 
-                        ? `${(results.concentration_particles_ml / 1e9).toFixed(2)}E9/mL` 
-                        : "N/A"
-                      }
-                    </div>
-                    <div className="font-mono text-emerald-500">
-                      {results.concentration_particles_ml 
-                        ? `${((results.concentration_particles_ml * 1.013) / 1e9).toFixed(2)}E9/mL` 
-                        : "N/A"
-                      }
-                      {results.temperature_celsius && results.temperature_celsius !== 25 && (
-                        <span className="text-xs ml-1">
-                          (+{((1.013 - 1) * 100).toFixed(1)}%)
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  {results.temperature_celsius && (
-                    <p className="text-xs text-muted-foreground mt-3">
-                      Measured at {results.temperature_celsius.toFixed(1)}°C
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
+              <TemperatureCorrectedComparison data={results} />
             </TabsContent>
           </Tabs>
         </CardContent>

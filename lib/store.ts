@@ -3,13 +3,36 @@ import type { Sample as APISample, FCSResult, NTAResult, ProcessingJob } from ".
 
 export type TabType = "dashboard" | "flow-cytometry" | "nta" | "cross-compare" | "research-chat"
 
+// Enhanced chart data structure for proper figure storage
+export interface ChartDataPoint {
+  x: number
+  y: number
+  label?: string
+  category?: string
+}
+
+export interface PinnedChartConfig {
+  xAxisLabel?: string
+  yAxisLabel?: string
+  color?: string
+  secondaryColor?: string
+  showGrid?: boolean
+  domain?: { x?: [number, number]; y?: [number, number] }
+}
+
 export interface PinnedChart {
   id: string
   title: string
   source: string
   timestamp: Date
   type: "histogram" | "scatter" | "line" | "bar"
-  data: unknown
+  data: ChartDataPoint[] | unknown
+  config?: PinnedChartConfig
+  // Store the original results for reference
+  sourceData?: {
+    fcsResults?: FCSResult
+    ntaResults?: NTAResult
+  }
 }
 
 // Local sample type (for UI state before API integration)
@@ -31,6 +54,24 @@ export interface ChatMessage {
   content: string
   timestamp: Date
   parts?: Array<{ type: string; text?: string }>
+}
+
+// Saved Chart Image for Gallery
+export interface SavedImage {
+  id: string
+  title: string
+  source: string // e.g., "FCS Analysis", "NTA Analysis", "Cross-Compare"
+  chartType: "histogram" | "scatter" | "line" | "bar" | "heatmap" | "pie"
+  dataUrl: string // base64 encoded image
+  thumbnailUrl?: string // smaller version for gallery preview
+  timestamp: Date
+  metadata?: {
+    sampleId?: string
+    width?: number
+    height?: number
+    format?: "png" | "jpeg" | "svg"
+    notes?: string
+  }
 }
 
 // Experimental Conditions (captured during analysis)
@@ -60,6 +101,14 @@ export interface AnomalyDetectionResult {
   ssc_outliers?: number[]
 }
 
+// Size Range type for custom EV size categories
+export interface SizeRange {
+  name: string
+  min: number
+  max: number
+  color?: string
+}
+
 // Current FCS analysis state
 export interface FCSAnalysisState {
   file: File | null
@@ -69,6 +118,7 @@ export interface FCSAnalysisState {
   isAnalyzing: boolean
   error: string | null
   experimentalConditions: ExperimentalConditions | null
+  sizeRanges: SizeRange[]
 }
 
 // NTA Analysis State
@@ -88,6 +138,9 @@ export interface FCSAnalysisSettings {
   mediumRI: number
   fscRange: [number, number]
   sscRange: [number, number]
+  // Angle Ranges (Mie Scattering integration angles in degrees)
+  fscAngleRange: [number, number]  // Forward scatter angle range, default (1, 15)
+  sscAngleRange: [number, number]  // Side scatter angle range, default (85, 95)
   diameterRange: [number, number]
   diameterPoints: number
   sizeRanges: Array<{ name: string; min: number; max: number }>
@@ -166,6 +219,7 @@ export interface AnalysisState {
   setFCSAnalyzing: (analyzing: boolean) => void
   setFCSError: (error: string | null) => void
   setFCSExperimentalConditions: (conditions: ExperimentalConditions | null) => void
+  setFCSSizeRanges: (sizeRanges: SizeRange[]) => void
   resetFCSAnalysis: () => void
 
   // NTA Analysis State
@@ -196,6 +250,13 @@ export interface AnalysisState {
   addChatMessage: (message: ChatMessage) => void
   clearChatMessages: () => void
 
+  // Saved Images Gallery
+  savedImages: SavedImage[]
+  saveImage: (image: SavedImage) => void
+  removeImage: (id: string) => void
+  clearSavedImages: () => void
+  updateImageMetadata: (id: string, metadata: Partial<SavedImage['metadata']>) => void
+
   // Cross-Compare Selection
   selectedFCSSample: APISample | null
   setSelectedFCSSample: (sample: APISample | null) => void
@@ -219,6 +280,11 @@ const initialFCSAnalysis: FCSAnalysisState = {
   isAnalyzing: false,
   error: null,
   experimentalConditions: null,
+  sizeRanges: [
+    { name: "Small EVs", min: 30, max: 100, color: "#22c55e" },
+    { name: "Medium EVs", min: 100, max: 200, color: "#3b82f6" },
+    { name: "Large EVs", min: 200, max: 500, color: "#a855f7" },
+  ],
 }
 
 const initialNTAAnalysis: NTAAnalysisState = {
@@ -305,6 +371,10 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
     set((state) => ({
       fcsAnalysis: { ...state.fcsAnalysis, experimentalConditions: conditions },
     })),
+  setFCSSizeRanges: (sizeRanges) =>
+    set((state) => ({
+      fcsAnalysis: { ...state.fcsAnalysis, sizeRanges },
+    })),
   resetFCSAnalysis: () => set({ fcsAnalysis: initialFCSAnalysis }),
 
   // NTA Analysis
@@ -372,6 +442,26 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
       chatMessages: [...state.chatMessages, message],
     })),
   clearChatMessages: () => set({ chatMessages: [] }),
+
+  // Saved Images Gallery
+  savedImages: [],
+  saveImage: (image) =>
+    set((state) => ({
+      savedImages: [...state.savedImages, image],
+    })),
+  removeImage: (id) =>
+    set((state) => ({
+      savedImages: state.savedImages.filter((img) => img.id !== id),
+    })),
+  clearSavedImages: () => set({ savedImages: [] }),
+  updateImageMetadata: (id, metadata) =>
+    set((state) => ({
+      savedImages: state.savedImages.map((img) =>
+        img.id === id
+          ? { ...img, metadata: { ...img.metadata, ...metadata } }
+          : img
+      ),
+    })),
 
   // Cross-Compare
   selectedFCSSample: null,

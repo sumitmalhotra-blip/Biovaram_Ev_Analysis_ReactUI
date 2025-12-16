@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useRef, useEffect } from "react"
-import { Send, Sparkles, Loader2, RotateCcw, Upload, FileUp } from "lucide-react"
+import { Send, Sparkles, Loader2, RotateCcw, Upload, FileUp, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAnalysisStore } from "@/lib/store"
@@ -11,6 +11,14 @@ import { cn } from "@/lib/utils"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport } from "ai"
+import { useToast } from "@/hooks/use-toast"
+import { downloadChatHistory, type ChatMessageForExport } from "@/lib/export-utils"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 const suggestedQuestions = [
   "How do I interpret flow cytometry gating strategies?",
@@ -22,12 +30,13 @@ const suggestedQuestions = [
 
 export function ResearchChatTab() {
   const { addSample, addPinnedChart } = useAnalysisStore()
+  const { toast } = useToast()
   const [uploadedFiles, setUploadedFiles] = useState<Array<{ name: string; type: string; size: number }>>([])
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const { messages, sendMessage, isLoading, append } = useChat({
+  const { messages, sendMessage, isLoading, append, setMessages } = useChat({
     transport: new DefaultChatTransport({ api: "/api/research/chat" }),
   })
 
@@ -75,17 +84,86 @@ export function ResearchChatTab() {
     append({ role: "user", content: question })
   }
 
+  const handleResetTab = () => {
+    setUploadedFiles([])
+    setMessages([])
+    setIsAnalyzing(false)
+    toast({
+      title: "Research Chat Reset",
+      description: "All messages and uploaded files have been cleared.",
+    })
+  }
+
+  const handleExportChat = (format: "json" | "txt" | "md") => {
+    if (messages.length === 0) {
+      toast({
+        title: "No Messages",
+        description: "There are no messages to export.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Convert messages to export format
+    const exportMessages: ChatMessageForExport[] = messages.map((msg: any) => ({
+      id: msg.id,
+      role: msg.role,
+      content: msg.content || "",
+      parts: msg.parts,
+      timestamp: new Date(),
+    }))
+
+    downloadChatHistory(exportMessages, format, "Research Chat", {
+      uploadedFiles: uploadedFiles.length,
+      sessionDate: new Date().toLocaleDateString(),
+    })
+
+    toast({
+      title: "Chat Exported",
+      description: `Chat history has been exported as ${format.toUpperCase()}.`,
+    })
+  }
+
   return (
     <div className="flex-1 flex flex-col h-full p-4 md:p-6 gap-4">
       {/* Header */}
       <div className="card-3d p-4 md:p-6 rounded-2xl">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
-            <Sparkles className="h-5 w-5 text-white" />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-linear-to-br from-primary to-accent flex items-center justify-center">
+              <Sparkles className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-xl md:text-2xl font-bold">AI Research Assistant</h2>
+              <p className="text-xs md:text-sm text-muted-foreground">Your intelligent guide for EV analysis</p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-xl md:text-2xl font-bold">AI Research Assistant</h2>
-            <p className="text-xs md:text-sm text-muted-foreground">Your intelligent guide for EV analysis</p>
+          <div className="flex items-center gap-2">
+            {messages.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <Download className="h-4 w-4" />
+                    Export
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => handleExportChat("md")}>
+                    Export as Markdown
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExportChat("json")}>
+                    Export as JSON
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExportChat("txt")}>
+                    Export as Text
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            <Button variant="outline" size="sm" onClick={handleResetTab} className="gap-2">
+              <RotateCcw className="h-4 w-4" />
+              Reset Tab
+            </Button>
           </div>
         </div>
       </div>
@@ -96,7 +174,7 @@ export function ResearchChatTab() {
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-6 text-center min-h-full py-8">
               <div className="space-y-2">
-                <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
+                <div className="w-16 h-16 mx-auto rounded-2xl bg-linear-to-br from-primary/20 to-accent/20 flex items-center justify-center">
                   <Sparkles className="h-8 w-8 text-primary" />
                 </div>
                 <h3 className="text-lg md:text-xl font-semibold">Start Your Research Analysis</h3>
@@ -224,10 +302,7 @@ export function ResearchChatTab() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                setUploadedFiles([])
-                // Clear messages by reloading
-              }}
+              onClick={handleResetTab}
               className="gap-2 rounded-xl bg-transparent"
             >
               <RotateCcw className="h-4 w-4" />

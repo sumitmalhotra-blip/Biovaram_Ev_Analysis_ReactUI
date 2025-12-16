@@ -1,18 +1,21 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
-import { useAnalysisStore } from "@/lib/store"
+import { useState, useEffect, useMemo, useCallback } from "react"
+import { useAnalysisStore, type SizeRange } from "@/lib/store"
 import { useApi } from "@/hooks/use-api"
 import { cn } from "@/lib/utils"
-import { ChevronLeft, ChevronRight, Filter, Settings, FileText, Beaker, Thermometer, Loader2, RefreshCw, Database, SlidersHorizontal } from "lucide-react"
+import { ChevronLeft, ChevronRight, Filter, Settings, FileText, Beaker, Thermometer, Loader2, RefreshCw, Database, SlidersHorizontal, Play, RotateCcw, Plus, Trash2, FlaskConical } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Slider } from "@/components/ui/slider"
 import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Badge } from "@/components/ui/badge"
+import { useToast } from "@/hooks/use-toast"
+import { ExperimentalConditionsDialog, type ExperimentalConditions } from "@/components/experimental-conditions-dialog"
 
 interface SidebarProps {
   isMobile?: boolean
@@ -262,27 +265,266 @@ function DashboardSidebar({
 }
 
 function FlowCytometrySidebar() {
+  const { toast } = useToast()
+  const { 
+    fcsAnalysisSettings, 
+    setFcsAnalysisSettings, 
+    fcsAnalysis,
+    setFCSSizeRanges,
+    setFCSExperimentalConditions 
+  } = useAnalysisStore()
+  const { reanalyzeWithSettings } = useApi()
+
+  // Dialog state
+  const [showConditionsDialog, setShowConditionsDialog] = useState(false)
+
+  // Local state initialized from store (with defaults)
+  const [wavelength, setWavelength] = useState(fcsAnalysisSettings?.laserWavelength?.toString() || "488")
+  const [medium, setMedium] = useState("pbs")
+  const [particleRI, setParticleRI] = useState(fcsAnalysisSettings?.particleRI || 1.40)
+  const [anomalyEnabled, setAnomalyEnabled] = useState(fcsAnalysisSettings?.anomalyDetectionEnabled ?? true)
+  const [anomalyMethod, setAnomalyMethod] = useState<"Z-Score" | "IQR" | "Both">(fcsAnalysisSettings?.anomalyMethod || "Both")
+  const [zscoreThreshold, setZscoreThreshold] = useState(fcsAnalysisSettings?.zscoreThreshold || 3.0)
+  const [iqrFactor, setIqrFactor] = useState(fcsAnalysisSettings?.iqrFactor || 1.5)
+  const [activePreset, setActivePreset] = useState<"standard" | "exosome" | "isev2023" | "custom">("standard")
+  const [hasChanges, setHasChanges] = useState(false)
+  // Angle range state for Mie scattering integration
+  const [fscAngleRange, setFscAngleRange] = useState<[number, number]>(fcsAnalysisSettings?.fscAngleRange || [1, 15])
+  const [sscAngleRange, setSscAngleRange] = useState<[number, number]>(fcsAnalysisSettings?.sscAngleRange || [85, 95])
+  // Custom size range editing state
+  const [editingRanges, setEditingRanges] = useState(false)
+  const [newRangeName, setNewRangeName] = useState("")
+  const [newRangeMin, setNewRangeMin] = useState(30)
+  const [newRangeMax, setNewRangeMax] = useState(100)
+
+  // Size range presets matching Streamlit
+  const SIZE_PRESETS = {
+    standard: [
+      { name: "Small EVs (<50nm)", min: 0, max: 50, color: "#22c55e" },
+      { name: "Exosomes (50-200nm)", min: 50, max: 200, color: "#3b82f6" },
+      { name: "Microvesicles (>200nm)", min: 200, max: 1000, color: "#f59e0b" },
+    ],
+    exosome: [
+      { name: "Exosomes (40-80nm)", min: 40, max: 80, color: "#22c55e" },
+      { name: "Small MVs (80-120nm)", min: 80, max: 120, color: "#3b82f6" },
+    ],
+    isev2023: [
+      { name: "Exomeres", min: 0, max: 50, color: "#22c55e" },
+      { name: "Small EVs", min: 50, max: 100, color: "#3b82f6" },
+      { name: "Medium EVs", min: 100, max: 200, color: "#a855f7" },
+      { name: "Large EVs", min: 200, max: 500, color: "#f59e0b" },
+    ],
+  }
+
+  const currentSizeRanges = fcsAnalysis.sizeRanges || SIZE_PRESETS.standard
+
+  // Medium RI mapping
+  const MEDIUM_RI: Record<string, number> = {
+    water: 1.33,
+    pbs: 1.34,
+    culture: 1.35,
+  }
+
+  // Sync local state when store changes
+  useEffect(() => {
+    if (fcsAnalysisSettings) {
+      setWavelength(fcsAnalysisSettings.laserWavelength?.toString() || "488")
+      setParticleRI(fcsAnalysisSettings.particleRI || 1.40)
+      setAnomalyEnabled(fcsAnalysisSettings.anomalyDetectionEnabled ?? true)
+      setAnomalyMethod(fcsAnalysisSettings.anomalyMethod || "Both")
+      setZscoreThreshold(fcsAnalysisSettings.zscoreThreshold || 3.0)
+      setIqrFactor(fcsAnalysisSettings.iqrFactor || 1.5)
+      setFscAngleRange(fcsAnalysisSettings.fscAngleRange || [1, 15])
+      setSscAngleRange(fcsAnalysisSettings.sscAngleRange || [85, 95])
+    }
+  }, [fcsAnalysisSettings])
+
+  // Update store when settings change
+  const updateSettings = useCallback(() => {
+    const newSettings = {
+      laserWavelength: parseInt(wavelength),
+      particleRI,
+      mediumRI: MEDIUM_RI[medium] || 1.33,
+      fscRange: fcsAnalysisSettings?.fscRange || [1, 65535] as [number, number],
+      sscRange: fcsAnalysisSettings?.sscRange || [1, 65535] as [number, number],
+      fscAngleRange,
+      sscAngleRange,
+      diameterRange: fcsAnalysisSettings?.diameterRange || [30, 200] as [number, number],
+      diameterPoints: fcsAnalysisSettings?.diameterPoints || 180,
+      sizeRanges: currentSizeRanges,
+      ignoreNegativeH: fcsAnalysisSettings?.ignoreNegativeH ?? true,
+      dropNaRows: fcsAnalysisSettings?.dropNaRows ?? true,
+      anomalyDetectionEnabled: anomalyEnabled,
+      anomalyMethod,
+      zscoreThreshold,
+      iqrFactor,
+      highlightAnomalies: fcsAnalysisSettings?.highlightAnomalies ?? true,
+      useInteractivePlots: fcsAnalysisSettings?.useInteractivePlots ?? true,
+    }
+    setFcsAnalysisSettings(newSettings)
+    setHasChanges(true)
+  }, [wavelength, medium, particleRI, fscAngleRange, sscAngleRange, anomalyEnabled, anomalyMethod, zscoreThreshold, iqrFactor, currentSizeRanges, fcsAnalysisSettings, setFcsAnalysisSettings])
+
+  // Handle preset change
+  const handlePresetChange = (preset: "standard" | "exosome" | "isev2023" | "custom") => {
+    setActivePreset(preset)
+    if (preset !== "custom" && SIZE_PRESETS[preset]) {
+      setFCSSizeRanges(SIZE_PRESETS[preset])
+      setHasChanges(true)
+      setEditingRanges(false)
+    } else if (preset === "custom") {
+      setEditingRanges(true)
+    }
+  }
+
+  // Add a new custom size range
+  const handleAddRange = () => {
+    if (newRangeName.trim() && newRangeMin < newRangeMax) {
+      const colors = ["#22c55e", "#3b82f6", "#a855f7", "#f59e0b", "#ef4444", "#06b6d4"]
+      const newRange: SizeRange = {
+        name: newRangeName.trim(),
+        min: newRangeMin,
+        max: newRangeMax,
+        color: colors[currentSizeRanges.length % colors.length],
+      }
+      setFCSSizeRanges([...currentSizeRanges, newRange])
+      setNewRangeName("")
+      setNewRangeMin(30)
+      setNewRangeMax(100)
+      setHasChanges(true)
+    }
+  }
+
+  // Remove a size range
+  const handleRemoveRange = (index: number) => {
+    const updated = currentSizeRanges.filter((_, i) => i !== index)
+    setFCSSizeRanges(updated)
+    setHasChanges(true)
+  }
+
+  // Handle re-analyze
+  const handleReanalyze = async () => {
+    if (!fcsAnalysis.sampleId) {
+      toast({
+        title: "No sample loaded",
+        description: "Please upload an FCS file first",
+        variant: "destructive",
+      })
+      return
+    }
+
+    updateSettings()
+    
+    // Trigger re-analysis with new settings
+    if (reanalyzeWithSettings) {
+      toast({
+        title: "Re-analyzing...",
+        description: "Applying new settings to the analysis",
+      })
+      
+      // Map medium to refractive index
+      const mediumRIMap: Record<string, number> = {
+        water: 1.33,
+        pbs: 1.34,
+        culture: 1.35,
+      }
+      
+      await reanalyzeWithSettings(fcsAnalysis.sampleId, {
+        // Optical parameters
+        wavelength_nm: parseInt(wavelength),
+        n_particle: particleRI,
+        n_medium: mediumRIMap[medium] || 1.33,
+        // Angular parameters for Mie scattering
+        fsc_angle_range: fscAngleRange,
+        ssc_angle_range: sscAngleRange,
+        // Anomaly detection
+        anomaly_detection: anomalyEnabled,
+        anomaly_method: anomalyMethod.toLowerCase().replace("-", ""),
+        zscore_threshold: zscoreThreshold,
+        iqr_factor: iqrFactor,
+        // Size ranges
+        size_ranges: currentSizeRanges.map(r => ({
+          name: r.name,
+          min: r.min,
+          max: r.max,
+        })),
+      })
+      setHasChanges(false)
+    } else {
+      toast({
+        title: "Settings saved",
+        description: "Settings will be applied to the next analysis",
+      })
+      setHasChanges(false)
+    }
+  }
+
+  // Handle saving experimental conditions
+  const handleSaveConditions = (conditions: ExperimentalConditions) => {
+    setFCSExperimentalConditions(conditions)
+    setShowConditionsDialog(false)
+    toast({
+      title: "✅ Conditions saved",
+      description: `Experimental conditions recorded for ${fcsAnalysis.sampleId || "sample"}`,
+    })
+  }
+
   return (
-    <Accordion type="multiple" defaultValue={["params", "analysis", "categories"]} className="space-y-2">
-      <AccordionItem value="params" className="border rounded-lg px-3">
-        <AccordionTrigger className="text-sm font-medium py-3">
-          <span className="flex items-center gap-2">
-            <Beaker className="h-4 w-4 text-primary" />
-            Experiment Parameters
-          </span>
-        </AccordionTrigger>
-        <AccordionContent className="space-y-4 pb-4">
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Refractive Index</Label>
-            <div className="flex items-center gap-2">
-              <Slider defaultValue={[1.4]} min={1.35} max={1.6} step={0.01} className="flex-1" />
-              <span className="text-sm font-mono w-12">1.40</span>
+    <>
+      {/* Experimental Conditions Button */}
+      <div className="mb-3">
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full gap-2 text-xs"
+          onClick={() => setShowConditionsDialog(true)}
+        >
+          <FlaskConical className="h-3.5 w-3.5" />
+          {fcsAnalysis.experimentalConditions ? "Edit Experiment Conditions" : "Record Experiment Conditions"}
+          {fcsAnalysis.experimentalConditions && (
+            <Badge variant="secondary" className="ml-auto text-[10px] px-1">Saved</Badge>
+          )}
+        </Button>
+      </div>
+
+      <Accordion type="multiple" defaultValue={["params", "angles", "analysis", "categories"]} className="space-y-2">
+        <AccordionItem value="params" className="border rounded-lg px-3">
+          <AccordionTrigger className="text-sm font-medium py-3">
+            <span className="flex items-center gap-2">
+              <Beaker className="h-4 w-4 text-primary" />
+              Experiment Parameters
+            </span>
+          </AccordionTrigger>
+          <AccordionContent className="space-y-4 pb-4">
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Refractive Index</Label>
+              <div className="flex items-center gap-2">
+                <Slider 
+                  value={[particleRI]} 
+                  min={1.35} 
+                  max={1.6} 
+                  step={0.01} 
+                  className="flex-1"
+                onValueChange={(v) => {
+                  setParticleRI(v[0])
+                  setHasChanges(true)
+                }}
+                onValueCommit={() => updateSettings()}
+              />
+              <span className="text-sm font-mono w-12">{particleRI.toFixed(2)}</span>
             </div>
           </div>
 
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Laser Wavelength</Label>
-            <Select defaultValue="488">
+            <Select 
+              value={wavelength} 
+              onValueChange={(v) => {
+                setWavelength(v)
+                setHasChanges(true)
+                updateSettings()
+              }}
+            >
               <SelectTrigger className="h-9">
                 <SelectValue />
               </SelectTrigger>
@@ -297,7 +539,14 @@ function FlowCytometrySidebar() {
 
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Medium</Label>
-            <Select defaultValue="pbs">
+            <Select 
+              value={medium} 
+              onValueChange={(v) => {
+                setMedium(v)
+                setHasChanges(true)
+                updateSettings()
+              }}
+            >
               <SelectTrigger className="h-9">
                 <SelectValue />
               </SelectTrigger>
@@ -307,6 +556,60 @@ function FlowCytometrySidebar() {
                 <SelectItem value="culture">Culture Media</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+        </AccordionContent>
+      </AccordionItem>
+
+      <AccordionItem value="angles" className="border rounded-lg px-3">
+        <AccordionTrigger className="text-sm font-medium py-3">
+          <span className="flex items-center gap-2">
+            <SlidersHorizontal className="h-4 w-4 text-primary" />
+            Angular Parameters
+          </span>
+        </AccordionTrigger>
+        <AccordionContent className="space-y-4 pb-4">
+          <div className="text-xs text-muted-foreground mb-2">
+            Mie scattering integration angle ranges for FSC/SSC signal calculation.
+          </div>
+          
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">FSC Angle Range (°)</Label>
+            <div className="flex items-center gap-2">
+              <Slider 
+                value={fscAngleRange}
+                min={0} 
+                max={30} 
+                step={1} 
+                className="flex-1"
+                onValueChange={(v) => {
+                  setFscAngleRange([v[0], v[1]])
+                  setHasChanges(true)
+                }}
+                onValueCommit={() => updateSettings()}
+              />
+              <span className="text-xs font-mono w-14 text-right">{fscAngleRange[0]}–{fscAngleRange[1]}°</span>
+            </div>
+            <p className="text-[10px] text-muted-foreground">Forward scatter (typical: 1-15°)</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">SSC Angle Range (°)</Label>
+            <div className="flex items-center gap-2">
+              <Slider 
+                value={sscAngleRange}
+                min={30} 
+                max={180} 
+                step={1} 
+                className="flex-1"
+                onValueChange={(v) => {
+                  setSscAngleRange([v[0], v[1]])
+                  setHasChanges(true)
+                }}
+                onValueCommit={() => updateSettings()}
+              />
+              <span className="text-xs font-mono w-16 text-right">{sscAngleRange[0]}–{sscAngleRange[1]}°</span>
+            </div>
+            <p className="text-[10px] text-muted-foreground">Side scatter (typical: 85-95°)</p>
           </div>
         </AccordionContent>
       </AccordionItem>
@@ -321,77 +624,235 @@ function FlowCytometrySidebar() {
         <AccordionContent className="space-y-4 pb-4">
           <div className="flex items-center justify-between">
             <Label className="text-xs text-muted-foreground">Enable Anomaly Detection</Label>
-            <Switch defaultChecked />
+            <Switch 
+              checked={anomalyEnabled}
+              onCheckedChange={(checked) => {
+                setAnomalyEnabled(checked)
+                setHasChanges(true)
+                updateSettings()
+              }}
+            />
           </div>
 
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Anomaly Method</Label>
-            <Select defaultValue="both">
-              <SelectTrigger className="h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="zscore">Z-Score</SelectItem>
-                <SelectItem value="iqr">IQR</SelectItem>
-                <SelectItem value="both">Both</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {anomalyEnabled && (
+            <>
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Anomaly Method</Label>
+                <Select 
+                  value={anomalyMethod.toLowerCase().replace("-", "")} 
+                  onValueChange={(v) => {
+                    const method = v === "zscore" ? "Z-Score" : v === "iqr" ? "IQR" : "Both"
+                    setAnomalyMethod(method)
+                    setHasChanges(true)
+                    updateSettings()
+                  }}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="zscore">Z-Score</SelectItem>
+                    <SelectItem value="iqr">IQR</SelectItem>
+                    <SelectItem value="both">Both</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Z-Score Threshold</Label>
-            <div className="flex items-center gap-2">
-              <Slider defaultValue={[3.0]} min={2.0} max={4.0} step={0.1} className="flex-1" />
-              <span className="text-sm font-mono w-10">3.0</span>
-            </div>
-          </div>
+              {(anomalyMethod === "Z-Score" || anomalyMethod === "Both") && (
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Z-Score Threshold</Label>
+                  <div className="flex items-center gap-2">
+                    <Slider 
+                      value={[zscoreThreshold]} 
+                      min={2.0} 
+                      max={4.0} 
+                      step={0.1} 
+                      className="flex-1"
+                      onValueChange={(v) => {
+                        setZscoreThreshold(v[0])
+                        setHasChanges(true)
+                      }}
+                      onValueCommit={() => updateSettings()}
+                    />
+                    <span className="text-sm font-mono w-10">{zscoreThreshold.toFixed(1)}</span>
+                  </div>
+                </div>
+              )}
+
+              {(anomalyMethod === "IQR" || anomalyMethod === "Both") && (
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">IQR Factor</Label>
+                  <div className="flex items-center gap-2">
+                    <Slider 
+                      value={[iqrFactor]} 
+                      min={1.0} 
+                      max={3.0} 
+                      step={0.1} 
+                      className="flex-1"
+                      onValueChange={(v) => {
+                        setIqrFactor(v[0])
+                        setHasChanges(true)
+                      }}
+                      onValueCommit={() => updateSettings()}
+                    />
+                    <span className="text-sm font-mono w-10">{iqrFactor.toFixed(1)}</span>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </AccordionContent>
       </AccordionItem>
 
       <AccordionItem value="categories" className="border rounded-lg px-3">
         <AccordionTrigger className="text-sm font-medium py-3">Size Categories</AccordionTrigger>
         <AccordionContent className="space-y-3 pb-4">
-          <div className="flex flex-wrap gap-1">
-            <Button variant="outline" size="sm" className="flex-1 text-xs h-8 bg-transparent min-w-[70px]">
-              Standard EV
-            </Button>
-            <Button variant="outline" size="sm" className="flex-1 text-xs h-8 bg-transparent min-w-[70px]">
-              Exosome
-            </Button>
-            <Button variant="secondary" size="sm" className="flex-1 text-xs h-8 min-w-[70px]">
-              Custom
-            </Button>
+          {/* Preset buttons */}
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">Quick Presets</Label>
+            <div className="grid grid-cols-2 gap-1">
+              <Button 
+                variant={activePreset === "standard" ? "secondary" : "outline"} 
+                size="sm" 
+                className="text-xs h-8"
+                onClick={() => handlePresetChange("standard")}
+              >
+                Standard EV
+              </Button>
+              <Button 
+                variant={activePreset === "exosome" ? "secondary" : "outline"} 
+                size="sm" 
+                className="text-xs h-8"
+                onClick={() => handlePresetChange("exosome")}
+              >
+                Exosome Focus
+              </Button>
+              <Button 
+                variant={activePreset === "isev2023" ? "secondary" : "outline"} 
+                size="sm" 
+                className="text-xs h-8"
+                onClick={() => handlePresetChange("isev2023")}
+              >
+                ISEV 2023
+              </Button>
+              <Button 
+                variant={activePreset === "custom" ? "secondary" : "outline"} 
+                size="sm" 
+                className="text-xs h-8"
+                onClick={() => handlePresetChange("custom")}
+              >
+                Custom
+              </Button>
+            </div>
           </div>
 
-          <div className="space-y-2 text-xs overflow-x-auto">
-            <div className="grid grid-cols-4 gap-2 text-muted-foreground font-medium min-w-[200px]">
-              <span>Category</span>
-              <span>Min</span>
-              <span>Max</span>
-              <span>Color</span>
-            </div>
-            <div className="grid grid-cols-4 gap-2 items-center min-w-[200px]">
-              <span className="truncate">Small EVs</span>
-              <span className="font-mono">0</span>
-              <span className="font-mono">50</span>
-              <div className="w-4 h-4 rounded bg-cyan" />
-            </div>
-            <div className="grid grid-cols-4 gap-2 items-center min-w-[200px]">
-              <span className="truncate">Exosomes</span>
-              <span className="font-mono">50</span>
-              <span className="font-mono">200</span>
-              <div className="w-4 h-4 rounded bg-purple" />
-            </div>
-            <div className="grid grid-cols-4 gap-2 items-center min-w-[200px]">
-              <span className="truncate">Large EVs</span>
-              <span className="font-mono">200</span>
-              <span className="font-mono">1000</span>
-              <div className="w-4 h-4 rounded bg-amber" />
+          {/* Current ranges display */}
+          <div className="space-y-2 text-xs">
+            <Label className="text-xs text-muted-foreground">Current Ranges</Label>
+            <div className="space-y-1 max-h-[180px] overflow-y-auto">
+              {currentSizeRanges.map((range, i) => (
+                <div key={i} className="flex items-center gap-2 p-1.5 rounded bg-secondary/30 group">
+                  <div 
+                    className="w-3 h-3 rounded shrink-0" 
+                    style={{ backgroundColor: range.color || ["#22c55e", "#3b82f6", "#f59e0b", "#a855f7"][i % 4] }}
+                  />
+                  <span className="flex-1 truncate text-xs">{range.name}</span>
+                  <span className="font-mono text-muted-foreground text-[10px]">{range.min}-{range.max}nm</span>
+                  {(activePreset === "custom" || editingRanges) && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => handleRemoveRange(i)}
+                    >
+                      <Trash2 className="h-3 w-3 text-destructive" />
+                    </Button>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
+
+          {/* Add new range (when in custom mode) */}
+          {(activePreset === "custom" || editingRanges) && (
+            <div className="space-y-2 pt-2 border-t">
+              <Label className="text-xs text-muted-foreground">Add New Range</Label>
+              <div className="space-y-2">
+                <Input
+                  placeholder="Range name (e.g., Small EVs)"
+                  value={newRangeName}
+                  onChange={(e) => setNewRangeName(e.target.value)}
+                  className="h-8 text-xs"
+                />
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <Label className="text-[10px] text-muted-foreground">Min (nm)</Label>
+                    <Input
+                      type="number"
+                      value={newRangeMin}
+                      onChange={(e) => setNewRangeMin(parseInt(e.target.value) || 0)}
+                      min={0}
+                      max={500}
+                      className="h-8 text-xs font-mono"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <Label className="text-[10px] text-muted-foreground">Max (nm)</Label>
+                    <Input
+                      type="number"
+                      value={newRangeMax}
+                      onChange={(e) => setNewRangeMax(parseInt(e.target.value) || 0)}
+                      min={0}
+                      max={1000}
+                      className="h-8 text-xs font-mono"
+                    />
+                  </div>
+                </div>
+                <Button 
+                  size="sm" 
+                  className="w-full h-8 text-xs gap-1"
+                  onClick={handleAddRange}
+                  disabled={!newRangeName.trim() || newRangeMin >= newRangeMax}
+                >
+                  <Plus className="h-3 w-3" />
+                  Add Range
+                </Button>
+              </div>
+            </div>
+          )}
         </AccordionContent>
       </AccordionItem>
+
+      {/* Re-analyze button */}
+      {fcsAnalysis.sampleId && (
+        <div className="pt-2 space-y-2">
+          {hasChanges && (
+            <Badge variant="secondary" className="w-full justify-center text-xs py-1">
+              Settings changed - Re-analyze to apply
+            </Badge>
+          )}
+          <Button 
+            className="w-full gap-2" 
+            size="sm"
+            onClick={handleReanalyze}
+            disabled={!hasChanges && !fcsAnalysis.results}
+          >
+            <Play className="h-3.5 w-3.5" />
+            Re-analyze with Settings
+          </Button>
+        </div>
+      )}
     </Accordion>
+
+      {/* Experimental Conditions Dialog */}
+      <ExperimentalConditionsDialog
+        open={showConditionsDialog}
+        onOpenChange={setShowConditionsDialog}
+        onSave={handleSaveConditions}
+        sampleType="FCS"
+        sampleId={fcsAnalysis.sampleId || undefined}
+      />
+    </>
   )
 }
 
@@ -484,6 +945,22 @@ function NTASidebar() {
 }
 
 function CrossCompareSidebar() {
+  const { crossComparisonSettings, setCrossComparisonSettings, apiSamples } = useAnalysisStore()
+  
+  // Get available samples for selection
+  const fcsSamples = apiSamples.filter(s => s.files?.fcs)
+  const ntaSamples = apiSamples.filter(s => s.files?.nta)
+  
+  const handleSettingChange = <K extends keyof typeof crossComparisonSettings>(
+    key: K,
+    value: typeof crossComparisonSettings[K]
+  ) => {
+    setCrossComparisonSettings({
+      ...crossComparisonSettings,
+      [key]: value,
+    })
+  }
+  
   return (
     <div className="space-y-4">
       <div>
@@ -499,8 +976,18 @@ function CrossCompareSidebar() {
                 <SelectValue placeholder="Select FCS file..." />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="l5_f10_cd81">L5_F10_CD81.fcs</SelectItem>
-                <SelectItem value="sample_cd9">Sample_CD9.fcs</SelectItem>
+                {fcsSamples.length > 0 ? (
+                  fcsSamples.map((sample) => (
+                    <SelectItem key={sample.id} value={String(sample.id)}>
+                      {sample.sample_id}
+                    </SelectItem>
+                  ))
+                ) : (
+                  <>
+                    <SelectItem value="l5_f10_cd81">L5_F10_CD81.fcs</SelectItem>
+                    <SelectItem value="sample_cd9">Sample_CD9.fcs</SelectItem>
+                  </>
+                )}
               </SelectContent>
             </Select>
           </div>
@@ -512,8 +999,18 @@ function CrossCompareSidebar() {
                 <SelectValue placeholder="Select NTA file..." />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ev_ipsc_p1">EV_IPSC_P1_NTA.txt</SelectItem>
-                <SelectItem value="ev_sample2">EV_Sample2.csv</SelectItem>
+                {ntaSamples.length > 0 ? (
+                  ntaSamples.map((sample) => (
+                    <SelectItem key={sample.id} value={String(sample.id)}>
+                      {sample.sample_id}
+                    </SelectItem>
+                  ))
+                ) : (
+                  <>
+                    <SelectItem value="ev_ipsc_p1">EV_IPSC_P1_NTA.txt</SelectItem>
+                    <SelectItem value="ev_sample2">EV_Sample2.csv</SelectItem>
+                  </>
+                )}
               </SelectContent>
             </Select>
           </div>
@@ -526,32 +1023,94 @@ function CrossCompareSidebar() {
           Comparison Settings
         </h3>
         <div className="space-y-4">
+          {/* Size Range Filter */}
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Size Range (nm)</Label>
             <div className="flex items-center gap-2">
-              <Slider defaultValue={[0, 500]} min={0} max={1000} step={10} className="flex-1" />
+              <Slider 
+                value={[crossComparisonSettings.minSizeFilter, crossComparisonSettings.maxSizeFilter]} 
+                min={0} 
+                max={1000} 
+                step={10}
+                onValueChange={([min, max]) => {
+                  handleSettingChange("minSizeFilter", min)
+                  handleSettingChange("maxSizeFilter", max)
+                }}
+                className="flex-1" 
+              />
             </div>
             <div className="flex justify-between text-xs font-mono text-muted-foreground">
-              <span>0</span>
-              <span>500</span>
+              <span>{crossComparisonSettings.minSizeFilter} nm</span>
+              <span>{crossComparisonSettings.maxSizeFilter} nm</span>
             </div>
           </div>
 
-          <div className="flex items-center justify-between">
-            <Label className="text-xs text-muted-foreground">Normalize Distributions</Label>
-            <Switch defaultChecked />
+          {/* Bin Size */}
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">Histogram Bin Size (nm)</Label>
+            <div className="flex items-center gap-2">
+              <Slider 
+                value={[crossComparisonSettings.binSize]} 
+                min={1} 
+                max={20} 
+                step={1}
+                onValueChange={([value]) => handleSettingChange("binSize", value)}
+                className="flex-1" 
+              />
+              <span className="text-sm font-mono w-12">{crossComparisonSettings.binSize} nm</span>
+            </div>
           </div>
 
+          {/* Normalize Distributions */}
           <div className="flex items-center justify-between">
-            <Label className="text-xs text-muted-foreground">Show KDE Curves</Label>
-            <Switch defaultChecked />
+            <div>
+              <Label className="text-xs text-muted-foreground">Normalize Distributions</Label>
+              <p className="text-[10px] text-muted-foreground/70">Scale to 0-1 for comparison</p>
+            </div>
+            <Switch 
+              checked={crossComparisonSettings.normalizeHistograms}
+              onCheckedChange={(checked) => handleSettingChange("normalizeHistograms", checked)}
+            />
           </div>
 
+          {/* Show KDE Curves */}
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="text-xs text-muted-foreground">Show KDE Curves</Label>
+              <p className="text-[10px] text-muted-foreground/70">Kernel density estimation</p>
+            </div>
+            <Switch 
+              checked={crossComparisonSettings.showKde}
+              onCheckedChange={(checked) => handleSettingChange("showKde", checked)}
+            />
+          </div>
+
+          {/* Show Statistics */}
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="text-xs text-muted-foreground">Show Statistics</Label>
+              <p className="text-[10px] text-muted-foreground/70">Mann-Whitney, K-S tests</p>
+            </div>
+            <Switch 
+              checked={crossComparisonSettings.showStatistics}
+              onCheckedChange={(checked) => handleSettingChange("showStatistics", checked)}
+            />
+          </div>
+
+          {/* Discrepancy Threshold */}
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Discrepancy Threshold</Label>
+            <p className="text-[10px] text-muted-foreground/70">Highlight bins with difference above threshold</p>
             <div className="flex items-center gap-2">
-              <Slider defaultValue={[15]} min={5} max={30} step={1} className="flex-1" />
-              <span className="text-sm font-mono w-10">15%</span>
+              <Slider 
+                value={[crossComparisonSettings.discrepancyThreshold]} 
+                min={5} 
+                max={50} 
+                step={1}
+                onValueChange={([value]) => handleSettingChange("discrepancyThreshold", value)}
+                className="flex-1" 
+              />
+              <span className="text-sm font-mono w-10">{crossComparisonSettings.discrepancyThreshold}%</span>
             </div>
           </div>
         </div>

@@ -4,17 +4,16 @@ import { useEffect, useState } from "react"
 import { FileUploadZone } from "./file-upload-zone"
 import { AnalysisResults } from "./analysis-results"
 import { ColumnMapping } from "./column-mapping"
-import { AnalysisSettings } from "./analysis-settings"
 import { FCSBestPracticesGuide } from "./best-practices-guide"
 import { ExperimentalConditionsDialog, type ExperimentalConditions } from "@/components/experimental-conditions-dialog"
 import { useAnalysisStore } from "@/lib/store"
 import { useApi } from "@/hooks/use-api"
 import { Card, CardContent } from "@/components/ui/card"
-import { AlertCircle, Loader2 } from "lucide-react"
+import { AlertCircle, Loader2, Settings2 } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 export function FlowCytometryTab() {
-  const { fcsAnalysis, apiConnected, setFCSExperimentalConditions } = useAnalysisStore()
+  const { fcsAnalysis, apiConnected, setFCSExperimentalConditions, sidebarCollapsed } = useAnalysisStore()
   const { checkHealth } = useApi()
   const [showConditionsDialog, setShowConditionsDialog] = useState(false)
   const [justUploadedSampleId, setJustUploadedSampleId] = useState<string | null>(null)
@@ -59,8 +58,17 @@ export function FlowCytometryTab() {
 
       <FileUploadZone />
 
-      {/* Analysis Settings Panel - show only after file is uploaded */}
-      {hasFile && !isAnalyzing && <AnalysisSettings />}
+      {/* Hint about sidebar settings when collapsed */}
+      {hasFile && !isAnalyzing && sidebarCollapsed && (
+        <Alert>
+          <Settings2 className="h-4 w-4" />
+          <AlertTitle>Analysis Settings</AlertTitle>
+          <AlertDescription>
+            Expand the sidebar to access analysis settings including optical parameters, 
+            angular ranges, anomaly detection, and size categories.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {isAnalyzing && (
         <Card className="card-3d">

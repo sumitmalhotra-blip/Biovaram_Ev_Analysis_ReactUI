@@ -56,6 +56,135 @@ function getCorrectionFactor(
   return { factor, details }
 }
 
+// Stokes-Einstein Equation Display Component
+interface StokesEinsteinEquationProps {
+  measurementTemp: number
+  referenceTemp: number
+  mediaType: string
+  correctionFactor: number
+}
+
+function StokesEinsteinEquation({ 
+  measurementTemp, 
+  referenceTemp, 
+  mediaType, 
+  correctionFactor 
+}: StokesEinsteinEquationProps) {
+  const measViscosity = calculateWaterViscosity(measurementTemp) * (MEDIA_VISCOSITY_FACTORS[mediaType]?.factor || 1.0)
+  const refViscosity = calculateWaterViscosity(referenceTemp)
+  const kB = 1.380649e-23 // Boltzmann constant
+
+  return (
+    <div className="p-4 rounded-lg border bg-linear-to-br from-primary/5 to-accent/5 space-y-4">
+      <h4 className="text-sm font-medium flex items-center gap-2">
+        <Calculator className="h-4 w-4 text-primary" />
+        Stokes-Einstein Equation
+      </h4>
+      
+      {/* Main Equation Display */}
+      <div className="p-4 bg-background/80 rounded-lg text-center space-y-3">
+        <div className="text-lg font-mono">
+          <span className="text-primary font-bold">D</span>
+          <span className="text-muted-foreground"> = </span>
+          <span className="inline-flex flex-col items-center mx-1">
+            <span className="border-b border-foreground px-2">k<sub>B</sub>T</span>
+            <span className="px-2">6πηr</span>
+          </span>
+        </div>
+        
+        <p className="text-xs text-muted-foreground">
+          Diffusion coefficient relates to hydrodynamic diameter
+        </p>
+      </div>
+
+      {/* Size Correction Formula */}
+      <div className="p-4 bg-background/80 rounded-lg text-center space-y-3">
+        <p className="text-xs text-muted-foreground mb-2">Temperature/Viscosity Correction:</p>
+        <div className="text-base font-mono">
+          <span className="text-emerald-500 font-bold">d<sub>corrected</sub></span>
+          <span className="text-muted-foreground"> = d<sub>measured</sub> × </span>
+          <span className="inline-flex flex-col items-center mx-1">
+            <span className="border-b border-foreground px-2">η<sub>ref</sub></span>
+            <span className="px-2">η<sub>meas</sub></span>
+          </span>
+          <span className="text-muted-foreground"> × </span>
+          <span className="inline-flex flex-col items-center mx-1">
+            <span className="border-b border-foreground px-2">T<sub>meas</sub></span>
+            <span className="px-2">T<sub>ref</sub></span>
+          </span>
+        </div>
+      </div>
+
+      {/* Parameter Explanation */}
+      <div className="grid grid-cols-2 gap-3 text-xs">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="font-mono font-bold text-primary">D</span>
+            <span className="text-muted-foreground">Diffusion coefficient (m²/s)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-mono font-bold">k<sub>B</sub></span>
+            <span className="text-muted-foreground">Boltzmann constant</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-mono font-bold">T</span>
+            <span className="text-muted-foreground">Temperature (K)</span>
+          </div>
+        </div>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="font-mono font-bold">η</span>
+            <span className="text-muted-foreground">Dynamic viscosity (Pa·s)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-mono font-bold">r</span>
+            <span className="text-muted-foreground">Hydrodynamic radius (m)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-mono font-bold">d</span>
+            <span className="text-muted-foreground">Particle diameter (nm)</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Current Values */}
+      <div className="p-3 bg-secondary/30 rounded-lg">
+        <p className="text-xs font-medium mb-2">Current Calculation Values:</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs font-mono">
+          <div>
+            <span className="text-muted-foreground">T<sub>meas</sub> = </span>
+            <span className="text-foreground">{(measurementTemp + 273.15).toFixed(2)} K</span>
+          </div>
+          <div>
+            <span className="text-muted-foreground">T<sub>ref</sub> = </span>
+            <span className="text-foreground">{(referenceTemp + 273.15).toFixed(2)} K</span>
+          </div>
+          <div>
+            <span className="text-muted-foreground">η<sub>meas</sub> = </span>
+            <span className="text-foreground">{(measViscosity * 1000).toFixed(4)} mPa·s</span>
+          </div>
+          <div>
+            <span className="text-muted-foreground">η<sub>ref</sub> = </span>
+            <span className="text-foreground">{(refViscosity * 1000).toFixed(4)} mPa·s</span>
+          </div>
+        </div>
+        <div className="mt-2 pt-2 border-t border-border/50">
+          <span className="text-muted-foreground">Correction Factor = </span>
+          <span className="text-primary font-bold">{correctionFactor.toFixed(6)}</span>
+        </div>
+      </div>
+
+      {/* Scientific Context */}
+      <p className="text-xs text-muted-foreground">
+        <strong>Note:</strong> The Stokes-Einstein equation relates Brownian motion to particle size 
+        through medium viscosity and temperature. NTA tracks particles to measure their diffusion 
+        coefficient, which is then converted to hydrodynamic diameter. Temperature affects both 
+        particle diffusion (faster at higher temps) and medium viscosity (lower at higher temps).
+      </p>
+    </div>
+  )
+}
+
 export function NTATemperatureSettings() {
   const { ntaAnalysisSettings, setNtaAnalysisSettings } = useAnalysisStore()
   
@@ -287,6 +416,14 @@ export function NTATemperatureSettings() {
                     </Table>
                   </CollapsibleContent>
                 </Collapsible>
+
+                {/* Stokes-Einstein Equation Display */}
+                <StokesEinsteinEquation 
+                  measurementTemp={measurementTemp}
+                  referenceTemp={referenceTemp}
+                  mediaType={mediaType}
+                  correctionFactor={correctionFactor}
+                />
               </>
             )}
 

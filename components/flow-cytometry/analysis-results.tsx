@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -13,31 +13,68 @@ import {
   AlertCircle,
   Table2,
   Eye,
-  EyeOff
+  EyeOff,
+  Loader2
 } from "lucide-react"
 import { useAnalysisStore } from "@/lib/store"
+import { useApi } from "@/hooks/use-api"
 import { SizeDistributionChart } from "./charts/size-distribution-chart"
-import { ScatterPlotChart, type ScatterDataPoint } from "./charts/scatter-plot-chart"
+import { ScatterPlotChart, type ScatterDataPoint } from "./charts/scatter-plot-with-selection"
 import { TheoryVsMeasuredChart } from "./charts/theory-vs-measured-chart"
 import { StatisticsCards } from "./statistics-cards"
-import { SizeCategoryBreakdown } from "./size-category-breakdown"
+import { ParticleSizeVisualization } from "./particle-size-visualization"
+import { CustomSizeRanges } from "./custom-size-ranges"
 import { AnomalySummaryCard } from "./anomaly-summary-card"
 import { AnomalyEventsTable, type AnomalyEvent } from "./anomaly-events-table"
 import { useToast } from "@/hooks/use-toast"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { exportAnomaliesToCSV, exportScatterDataToCSV } from "@/lib/export-utils"
+import { exportAnomaliesToCSV, exportScatterDataToCSV, exportToParquet, generateMarkdownReport, downloadMarkdownReport } from "@/lib/export-utils"
 
 export function AnalysisResults() {
   const { pinChart, fcsAnalysis } = useAnalysisStore()
+  const { getScatterData, getSizeBins } = useApi()
   const { toast } = useToast()
   const [showAnomalyDetails, setShowAnomalyDetails] = useState(false)
   const [highlightAnomalies, setHighlightAnomalies] = useState(true)
+  const [scatterData, setScatterData] = useState<ScatterDataPoint[]>([])
+  const [loadingScatter, setLoadingScatter] = useState(false)
+  const [sizeCategories, setSizeCategories] = useState<{ small: number; medium: number; large: number } | null>(null)
+  const [loadingSizeBins, setLoadingSizeBins] = useState(false)
+  const [selectedIndices, setSelectedIndices] = useState<number[]>([])
 
   // Use real results from the API
   const results = fcsAnalysis.results
   const anomalyData = fcsAnalysis.anomalyData
   const sampleId = fcsAnalysis.sampleId
   const fileName = fcsAnalysis.file?.name
+
+  // Load real scatter data from backend
+  useEffect(() => {
+    if (sampleId && results) {
+      setLoadingScatter(true)
+      getScatterData(sampleId, 5000)
+        .then((data) => {
+          if (data) {
+            setScatterData(data.data)
+          }
+        })
+        .finally(() => setLoadingScatter(false))
+    }
+  }, [sampleId, results, getScatterData])
+
+  // Load real size bins from backend
+  useEffect(() => {
+    if (sampleId && results) {
+      setLoadingSizeBins(true)
+      getSizeBins(sampleId)
+        .then((data) => {
+          if (data) {
+            setSizeCategories(data.bins)
+          }
+        })
+        .finally(() => setLoadingSizeBins(false))
+    }
+  }, [sampleId, results, getSizeBins])
 
   if (!results) {
     return (
@@ -53,19 +90,6 @@ export function AnalysisResults() {
 
   const totalEvents = results.total_events || results.event_count || 0
   const medianSize = results.particle_size_median_nm
-
-  // Generate mock scatter data for demo (TODO: Replace with real data from backend)
-  const scatterData: ScatterDataPoint[] = useMemo(() => {
-    const data: ScatterDataPoint[] = []
-    for (let i = 0; i < Math.min(totalEvents, 1000); i++) {
-      data.push({
-        x: Math.random() * 1000 + 100,
-        y: Math.random() * 800 + 50,
-        index: i,
-      })
-    }
-    return data
-  }, [totalEvents])
 
   // Generate mock anomaly events for table (TODO: Replace with real data)
   const anomalyEvents: AnomalyEvent[] = useMemo(() => {
@@ -97,7 +121,7 @@ export function AnalysisResults() {
     })
   }
 
-  const handleExport = (format: string) => {
+  const handleExport = async (format: string) => {
     if (format === "anomalies" && anomalyData && sampleId) {
       exportAnomaliesToCSV(anomalyEvents, anomalyData, sampleId)
       toast({
@@ -116,11 +140,76 @@ export function AnalysisResults() {
       return
     }
 
+    if (format === "parquet" && sampleId) {
+      toast({
+        title: "Exporting...",
+        description: "Preparing Parquet export...",
+      })
+      
+      const success = await exportToParquet(sampleId, "fcs", {
+        includeMetadata: true,
+        includeStatistics: true,
+        onSuccess: (filename) => {
+          toast({
+            title: "✅ Export Complete",
+            description: `${filename} downloaded successfully`,
+          })
+        },
+        onError: (error) => {
+          toast({
+            title: "Export Failed",
+            description: error,
+            variant: "destructive",
+          })
+        },
+      })
+      return
+    }
+
+    if (format === "markdown" && sampleId && results) {
+      const reportContent = generateMarkdownReport({
+        title: `FCS Analysis Report - ${sampleId}`,
+        sampleId,
+        analysisType: "FCS",
+        timestamp: new Date(),
+        results: {
+          total_events: results.total_events,
+          gated_events: results.gated_events,
+          fsc_median: results.fsc_median,
+          fsc_mean: results.fsc_mean,
+          ssc_median: results.ssc_median,
+          ssc_mean: results.ssc_mean,
+          particle_size_median_nm: results.particle_size_median_nm,
+          particle_size_mean_nm: results.particle_size_mean_nm,
+        },
+        statistics: {
+          fsc_cv_percent: results.fsc_cv_pct || 0,
+          ssc_cv_percent: results.ssc_cv_pct || 0,
+          noise_events_removed: results.noise_events_removed || 0,
+        },
+        charts: [
+          { title: "Size Distribution", description: "Particle diameter histogram" },
+          { title: "FSC vs SSC Scatter", description: "Forward vs Side scatter density plot" },
+          { title: "Theory vs Measured", description: "Mie theory prediction comparison" },
+        ],
+      })
+      
+      downloadMarkdownReport(
+        reportContent,
+        `${sampleId}_fcs_report_${new Date().toISOString().split('T')[0]}.md`
+      )
+      
+      toast({
+        title: "✅ Report Generated",
+        description: "Markdown report downloaded successfully",
+      })
+      return
+    }
+
     toast({
       title: "Exporting...",
       description: `Preparing ${format.toUpperCase()} export`,
     })
-    // TODO: Implement other export formats
   }
 
   return (
@@ -159,10 +248,28 @@ export function AnalysisResults() {
       {/* Statistics Cards */}
       <StatisticsCards results={results} />
 
-      {/* Size Category Breakdown */}
-      <SizeCategoryBreakdown 
-        totalEvents={totalEvents}
-        medianSize={medianSize}
+      {/* Particle Size Visualization with Real Data */}
+      {loadingSizeBins ? (
+        <Card className="card-3d">
+          <CardContent className="p-8 flex items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-primary mr-3" />
+            <span className="text-muted-foreground">Calculating size distribution...</span>
+          </CardContent>
+        </Card>
+      ) : (
+        <ParticleSizeVisualization
+          totalEvents={totalEvents}
+          medianSize={medianSize}
+          sizeCategories={sizeCategories || undefined}
+        />
+      )}
+
+      {/* Custom Size Range Analysis */}
+      <CustomSizeRanges 
+        sizeData={scatterData
+          .filter((p) => p.diameter !== undefined)
+          .map((p) => p.diameter as number)
+        }
       />
 
       {/* Anomaly Detection Summary - show if anomaly data exists */}
@@ -304,16 +411,32 @@ export function AnalysisResults() {
                   </Button>
                 </div>
               </div>
-              <ScatterPlotChart
-                title="FSC vs SSC"
-                xLabel="FSC-A"
-                yLabel="SSC-A"
-                data={scatterData}
-                anomalousIndices={anomalyData?.anomalous_indices || []}
-                highlightAnomalies={highlightAnomalies}
-                showLegend={true}
-                height={400}
-              />
+              {loadingScatter ? (
+                <div className="flex items-center justify-center h-[400px]">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <span className="ml-3 text-muted-foreground">Loading scatter data...</span>
+                </div>
+              ) : (
+                <ScatterPlotChart
+                  title="FSC vs SSC - Interactive"
+                  xLabel="FSC-A"
+                  yLabel="SSC-A"
+                  data={scatterData}
+                  anomalousIndices={anomalyData?.anomalous_indices || []}
+                  highlightAnomalies={highlightAnomalies}
+                  showLegend={true}
+                  height={400}
+                  onSelectionChange={(indices) => {
+                    setSelectedIndices(indices)
+                    if (indices.length > 0) {
+                      toast({
+                        title: "Selection made",
+                        description: `${indices.length} events selected`,
+                      })
+                    }
+                  }}
+                />
+              )}
             </TabsContent>
 
             <TabsContent value="diameter" className="space-y-4">
@@ -409,6 +532,14 @@ export function AnalysisResults() {
                 >
                   <FileText className="h-4 w-4 mr-1" />
                   PDF Report
+                </Button>
+                <Button 
+                  variant="secondary" 
+                  size="sm"
+                  onClick={() => handleExport("markdown")}
+                >
+                  <FileText className="h-4 w-4 mr-1" />
+                  Markdown
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">

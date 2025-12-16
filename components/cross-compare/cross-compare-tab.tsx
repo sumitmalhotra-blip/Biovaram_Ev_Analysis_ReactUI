@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Pin, Maximize2, CheckCircle, GitCompare, Loader2, AlertCircle, RefreshCw, Download } from "lucide-react"
+import { Pin, Maximize2, CheckCircle, GitCompare, Loader2, AlertCircle, RefreshCw, Download, RotateCcw } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useAnalysisStore } from "@/lib/store"
 import { useToast } from "@/hooks/use-toast"
@@ -13,7 +13,10 @@ import { useApi } from "@/hooks/use-api"
 import { apiClient, type Sample, type FCSResult, type NTAResult } from "@/lib/api-client"
 import { OverlayHistogramChart } from "./charts/overlay-histogram-chart"
 import { DiscrepancyChart } from "./charts/discrepancy-chart"
+import { KDEComparisonChart } from "./charts/kde-comparison-chart"
+import { CorrelationScatterChart } from "./charts/correlation-scatter-chart"
 import { StatisticalComparisonTable } from "./statistical-comparison-table"
+import { StatisticalTestsCard } from "./statistical-tests-card"
 import { MethodComparisonSummary } from "./method-comparison-summary"
 
 export function CrossCompareTab() {
@@ -202,8 +205,36 @@ export function CrossCompareTab() {
 
   const hasData = fcsResults || ntaResults || fcsAnalysis.results || ntaAnalysis.results
 
+  const handleResetTab = () => {
+    setSelectedFcsSample("")
+    setSelectedNtaSample("")
+    setFcsResults(null)
+    setNtaResults(null)
+    setLoading(false)
+    setError(null)
+    toast({
+      title: "Cross-Compare Reset",
+      description: "All sample selections and comparison data have been cleared.",
+    })
+  }
+
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-6">
+      {/* Header with Reset Button */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold flex items-center gap-2">
+            <GitCompare className="h-6 w-6 text-primary" />
+            Cross-Compare Analysis
+          </h2>
+          <p className="text-sm text-muted-foreground">Compare FCS and NTA size distributions side by side</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={handleResetTab} className="gap-2">
+          <RotateCcw className="h-4 w-4" />
+          Reset Tab
+        </Button>
+      </div>
+
       {/* Sample Selection Card */}
       <Card className="card-3d">
         <CardHeader className="pb-3">
@@ -295,6 +326,9 @@ export function CrossCompareTab() {
               <TabsTrigger value="kde" className="shrink-0">
                 KDE
               </TabsTrigger>
+              <TabsTrigger value="correlation" className="shrink-0">
+                Correlation
+              </TabsTrigger>
               <TabsTrigger value="statistics" className="shrink-0">
                 Statistics
               </TabsTrigger>
@@ -336,15 +370,42 @@ export function CrossCompareTab() {
             </TabsContent>
 
             <TabsContent value="kde" className="space-y-4">
-              <div className="p-8 text-center text-muted-foreground">
-                <p>KDE comparison curves would display here</p>
+              <KDEComparisonChart
+                fcsData={fcsResults?.size_distribution || fcsAnalysis.results?.size_distribution}
+                ntaData={ntaResults?.size_distribution || ntaAnalysis.results?.size_distribution}
+              />
+            </TabsContent>
+
+            <TabsContent value="correlation" className="space-y-4">
+              <div className="flex items-center justify-end gap-1">
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <Maximize2 className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => handlePin("Correlation Scatter", "line")}
+                >
+                  <Pin className="h-4 w-4" />
+                </Button>
               </div>
+              <CorrelationScatterChart
+                fcsValues={[fcsStats.d10, fcsStats.d50, fcsStats.d90, fcsStats.mean, fcsStats.std]}
+                ntaValues={[ntaStats.d10, ntaStats.d50, ntaStats.d90, ntaStats.mean, ntaStats.std]}
+                metric="Size"
+                title="FCS vs NTA Size Correlation"
+              />
             </TabsContent>
 
             <TabsContent value="statistics" className="space-y-4">
               <StatisticalComparisonTable 
                 fcsResults={fcsResults} 
                 ntaResults={ntaResults} 
+              />
+              <StatisticalTestsCard
+                fcsData={fcsResults?.size_distribution?.map(d => d.size) || fcsAnalysis.results?.size_distribution?.map(d => d.size)}
+                ntaData={ntaResults?.size_distribution?.map(d => d.size) || ntaAnalysis.results?.size_distribution?.map(d => d.size)}
               />
             </TabsContent>
 

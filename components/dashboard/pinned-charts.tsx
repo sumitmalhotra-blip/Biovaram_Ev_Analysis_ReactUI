@@ -3,9 +3,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Pin, Trash2, X } from "lucide-react"
+import { Pin, Trash2, X, Download, Maximize2 } from "lucide-react"
 import { useAnalysisStore, type PinnedChart } from "@/lib/store"
 import { MiniChart } from "./mini-chart"
+import { useToast } from "@/hooks/use-toast"
 
 interface PinnedChartsProps {
   charts: PinnedChart[]
@@ -13,6 +14,34 @@ interface PinnedChartsProps {
 
 export function PinnedCharts({ charts }: PinnedChartsProps) {
   const { unpinChart, clearPinnedCharts } = useAnalysisStore()
+  const { toast } = useToast()
+
+  const handleExportChart = (chart: PinnedChart) => {
+    // Export chart data as JSON
+    const exportData = {
+      title: chart.title,
+      source: chart.source,
+      timestamp: chart.timestamp,
+      type: chart.type,
+      data: chart.data,
+      config: chart.config,
+    }
+    
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${chart.title.replace(/\s+/g, '_').toLowerCase()}_${new Date().toISOString().split('T')[0]}.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    
+    toast({
+      title: "Chart Exported",
+      description: `${chart.title} data exported as JSON.`,
+    })
+  }
 
   return (
     <Card className="card-3d">
@@ -50,15 +79,34 @@ export function PinnedCharts({ charts }: PinnedChartsProps) {
                     <Badge variant="outline" className="text-xs">
                       From: {chart.source}
                     </Badge>
-                    <span className="text-xs text-muted-foreground">{chart.timestamp.toLocaleTimeString()}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(chart.timestamp).toLocaleTimeString()}
+                    </span>
                   </div>
                 </div>
-                <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => unpinChart(chart.id)}>
-                  <X className="h-3 w-3" />
-                </Button>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-6 w-6"
+                    onClick={() => handleExportChart(chart)}
+                    title="Export chart data"
+                  >
+                    <Download className="h-3 w-3" />
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-6 w-6" 
+                    onClick={() => unpinChart(chart.id)}
+                    title="Remove from pinned"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="pt-0">
-                <MiniChart type={chart.type} data={chart.data} />
+                <MiniChart type={chart.type} data={chart.data} config={chart.config} />
               </CardContent>
             </Card>
           ))}

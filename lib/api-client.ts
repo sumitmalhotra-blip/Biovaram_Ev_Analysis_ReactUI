@@ -146,6 +146,11 @@ class ApiClient {
     return this.isOffline;
   }
 
+  // Get the base URL for the API
+  getBaseUrl(): string {
+    return this.baseUrl;
+  }
+
   private async handleResponse<T>(response: Response): Promise<T> {
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({
@@ -443,6 +448,332 @@ class ApiClient {
     } catch (error) {
       console.error("[API] Retry job failed:", error);
       throw error;
+    }
+  }
+
+  // =========================================================================
+  // Scatter Data & Size Binning
+  // =========================================================================
+
+  async getScatterData(
+    sampleId: string,
+    maxPoints: number = 5000
+  ): Promise<{
+    sample_id: string;
+    total_events: number;
+    returned_points: number;
+    data: Array<{ x: number; y: number; index: number }>;
+    channels: { fsc: string; ssc: string };
+  }> {
+    try {
+      const response = await fetch(
+        `${this.baseUrl}/samples/${sampleId}/scatter-data?max_points=${maxPoints}`,
+        {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Get scatter data failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  async getSizeBins(sampleId: string): Promise<{
+    sample_id: string;
+    total_events: number;
+    bins: {
+      small: number;
+      medium: number;
+      large: number;
+    };
+    percentages: {
+      small: number;
+      medium: number;
+      large: number;
+    };
+    thresholds: {
+      small_max: number;
+      medium_min: number;
+      medium_max: number;
+      large_min: number;
+    };
+  }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/samples/${sampleId}/size-bins`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Get size bins failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  /**
+   * Re-analyze a sample with custom settings
+   */
+  async reanalyzeSample(
+    sampleId: string,
+    settings: {
+      wavelength_nm?: number;
+      n_particle?: number;
+      n_medium?: number;
+      anomaly_detection?: boolean;
+      anomaly_method?: string;
+      zscore_threshold?: number;
+      iqr_factor?: number;
+      size_ranges?: Array<{ name: string; min: number; max: number }>;
+    }
+  ): Promise<{
+    sample_id: string;
+    analysis_settings: {
+      wavelength_nm: number;
+      n_particle: number;
+      n_medium: number;
+      anomaly_detection: boolean;
+      anomaly_method?: string;
+    };
+    results: {
+      total_events: number;
+      channels: string[];
+      fsc_channel: string | null;
+      ssc_channel: string | null;
+      fsc_mean: number | null;
+      fsc_median: number | null;
+      ssc_mean: number | null;
+      ssc_median: number | null;
+      particle_size_median_nm: number | null;
+      size_statistics: {
+        d10: number;
+        d50: number;
+        d90: number;
+        mean: number;
+        std: number;
+      } | null;
+      custom_size_bins: Record<string, { count: number; percentage: number }>;
+    };
+    anomaly_data: {
+      enabled: boolean;
+      method: string;
+      total_anomalies: number;
+      anomaly_percentage: number;
+      anomalous_indices: number[];
+    } | null;
+  }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/samples/${sampleId}/reanalyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settings),
+      });
+
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Reanalyze sample failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  // =========================================================================
+  // Statistical Analysis
+  // =========================================================================
+
+  async runStatisticalTests(
+    groupA: string[],
+    groupB: string[],
+    options?: {
+      metrics?: string[];
+      testTypes?: string[];
+      alpha?: number;
+    }
+  ): Promise<{
+    success: boolean;
+    message: string;
+    group_a_samples: string[];
+    group_b_samples: string[];
+    comparisons: Array<{
+      metric: string;
+      group_a_stats: {
+        group_name: string;
+        n_samples: number;
+        mean: number;
+        std: number;
+        median: number;
+        min_val: number;
+        max_val: number;
+      };
+      group_b_stats: {
+        group_name: string;
+        n_samples: number;
+        mean: number;
+        std: number;
+        median: number;
+        min_val: number;
+        max_val: number;
+      };
+      tests: Array<{
+        test_name: string;
+        metric: string;
+        statistic: number;
+        p_value: number;
+        significant: boolean;
+        effect_size: number | null;
+        interpretation: string;
+      }>;
+    }>;
+    summary: {
+      total_tests: number;
+      significant_tests: number;
+      significance_level: number;
+      metrics_compared: number;
+    };
+  }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/analysis/statistical-tests`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sample_ids_group_a: groupA,
+          sample_ids_group_b: groupB,
+          metrics: options?.metrics || ["fsc_median", "ssc_median", "particle_size_median_nm"],
+          test_types: options?.testTypes || ["mann_whitney", "ks_test"],
+          alpha: options?.alpha || 0.05,
+        }),
+      });
+
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Statistical tests failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  async compareDistributions(
+    sampleIdA: string,
+    sampleIdB: string,
+    channel: string = "FSC"
+  ): Promise<{
+    success: boolean;
+    sample_a: {
+      sample_id: string;
+      channel: string;
+      n_events: number;
+      mean: number;
+      median: number;
+      std: number;
+    };
+    sample_b: {
+      sample_id: string;
+      channel: string;
+      n_events: number;
+      mean: number;
+      median: number;
+      std: number;
+    };
+    histograms: {
+      bins: number[];
+      sample_a: number[];
+      sample_b: number[];
+    };
+    ks_test: {
+      statistic: number;
+      p_value: number;
+      significant: boolean;
+    };
+  }> {
+    try {
+      const response = await fetch(
+        `${this.baseUrl}/analysis/distribution-comparison?sample_id_a=${sampleIdA}&sample_id_b=${sampleIdB}&channel=${channel}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Distribution comparison failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  // =========================================================================
+  // Export Functions
+  // =========================================================================
+
+  async exportToParquet(
+    sampleId: string,
+    dataType: "fcs" | "nta",
+    options?: {
+      includeMetadata?: boolean;
+      includeStatistics?: boolean;
+    }
+  ): Promise<{
+    success: boolean;
+    filename: string;
+    content_base64: string;
+    size_bytes: number;
+    metadata: {
+      sample_id: string;
+      data_type: string;
+      export_timestamp: string;
+    };
+    columns: string[];
+    rows: number;
+  }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/analysis/export/parquet`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sample_id: sampleId,
+          data_type: dataType,
+          include_metadata: options?.includeMetadata ?? true,
+          include_statistics: options?.includeStatistics ?? true,
+        }),
+      });
+
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Parquet export failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  // Download the parquet file from base64 response
+  async downloadParquet(
+    sampleId: string,
+    dataType: "fcs" | "nta",
+    options?: {
+      includeMetadata?: boolean;
+      includeStatistics?: boolean;
+    }
+  ): Promise<void> {
+    const result = await this.exportToParquet(sampleId, dataType, options);
+    
+    if (result.success && result.content_base64) {
+      // Decode base64 to binary
+      const binaryString = atob(result.content_base64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      
+      // Create blob and download
+      const blob = new Blob([bytes], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = result.filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     }
   }
 }
