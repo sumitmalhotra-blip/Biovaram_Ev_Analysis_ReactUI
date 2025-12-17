@@ -88,9 +88,25 @@ export function CustomSizeRanges({ sizeData, className }: CustomSizeRangesProps)
   }
 
   const counts = calculateCounts(sizeRanges, sizeData)
+  
+  // TASK-006: Validate that new range doesn't overlap with existing ranges
+  const checkOverlap = (newMin: number, newMax: number): string | null => {
+    for (const range of sizeRanges) {
+      // Check if ranges overlap: (A.min <= B.max) AND (A.max >= B.min)
+      if (newMin <= range.max && newMax >= range.min) {
+        return `Overlaps with "${range.name}" (${range.min}-${range.max}nm)`
+      }
+    }
+    return null
+  }
+  
+  const overlapError = newRange.min < newRange.max ? checkOverlap(newRange.min, newRange.max) : null
 
   const handleAddRange = () => {
-    if (!newRange.name.trim() || newRange.min >= newRange.max) return
+    // TASK-006: Enhanced validation with overlap check
+    if (!newRange.name.trim()) return
+    if (newRange.min >= newRange.max) return
+    if (overlapError) return
     
     const colors = ["#22c55e", "#3b82f6", "#a855f7", "#f59e0b", "#ef4444", "#06b6d4"]
     const newRangeWithColor: SizeRange = {
@@ -248,6 +264,13 @@ export function CustomSizeRanges({ sizeData, className }: CustomSizeRangesProps)
                     />
                   </div>
                 </div>
+                {/* TASK-006: Validation error display */}
+                {newRange.min >= newRange.max && newRange.max > 0 && (
+                  <p className="text-xs text-destructive">Min must be less than Max</p>
+                )}
+                {overlapError && (
+                  <p className="text-xs text-destructive">{overlapError}</p>
+                )}
                 <div className="flex gap-2 justify-end">
                   <Button
                     variant="ghost"
@@ -262,7 +285,7 @@ export function CustomSizeRanges({ sizeData, className }: CustomSizeRangesProps)
                   <Button
                     size="sm"
                     onClick={handleAddRange}
-                    disabled={!newRange.name.trim() || newRange.min >= newRange.max}
+                    disabled={!newRange.name.trim() || newRange.min >= newRange.max || !!overlapError}
                   >
                     Add Range
                   </Button>

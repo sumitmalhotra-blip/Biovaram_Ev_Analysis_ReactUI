@@ -17,7 +17,7 @@ import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialo
 
 export function DashboardTab() {
   const { pinnedCharts, clearPinnedCharts, clearChatMessages } = useAnalysisStore()
-  const { getSample, getFCSResults, getNTAResults, deleteSample } = useApi()
+  const { getSample, getFCSResults, getNTAResults, deleteSample, openSampleInTab } = useApi()
   const { toast } = useToast()
   
   const [selectedSampleId, setSelectedSampleId] = useState<string | null>(null)
@@ -110,6 +110,7 @@ export function DashboardTab() {
         onFetchFCSResults={getFCSResults}
         onFetchNTAResults={getNTAResults}
         onDelete={handleDeleteClick}
+        onOpenInTab={openSampleInTab}
       />
 
       {/* Delete Confirmation Dialog */}

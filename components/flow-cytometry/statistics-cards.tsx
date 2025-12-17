@@ -23,34 +23,52 @@ export function StatisticsCards({ results }: StatisticsCardsProps) {
     return null
   }
 
-  // Log the results structure for debugging
-  console.log("[StatisticsCards] Received results:", results)
-
   // Extract statistics from results
+  // Note: Mean values are NOT displayed per client request (Surya, Dec 3, 2025)
+  // "Mean is basically not the real metric... median is something that really existed in the data set"
   const totalEvents = results.total_events || results.event_count || 0
   const medianSize = results.particle_size_median_nm || results.size_statistics?.d50
   const fscMedian = results.fsc_median
-  const fscMean = results.fsc_mean
   const sscMedian = results.ssc_median
-  const sscMean = results.ssc_mean
   const debrisPct = results.debris_pct
   const cd81Pct = results.cd81_positive_pct
+  // Size standard deviation for display
+  const sizeStdDev = results.size_statistics?.std
+  
+  // TASK-002: Size filtering info (Dec 17, 2025) - particles excluded from analysis
+  const excludedPct = results.excluded_particles_pct
+  const sizeFiltering = results.size_filtering
+  const sizeRange = results.size_range
+  
+  // TASK-010: VSSC_MAX auto-selection info (Dec 17, 2025)
+  // Parvesh: "Create VSSC max... pick whichever the larger one is"
+  const vsscMaxUsed = results.vssc_max_used
+  const vsscSelection = results.vssc_selection
+  const sscChannelUsed = results.ssc_channel_used
 
   // Determine quality status based on debris and event count
   const qualityStatus = (() => {
     if (totalEvents < 5000) return { label: "Low Count", color: "amber", icon: AlertTriangle }
     if (debrisPct && debrisPct > 20) return { label: "High Debris", color: "destructive", icon: AlertTriangle }
     if (debrisPct && debrisPct > 10) return { label: "Fair", color: "amber", icon: AlertTriangle }
+    // Check exclusion rate - warn if too many particles filtered
+    if (excludedPct && excludedPct > 30) return { label: "High Exclusion", color: "amber", icon: AlertTriangle }
     return { label: "Good", color: "emerald", icon: CheckCircle }
   })()
 
+  // Note: Mean values are intentionally NOT displayed per client request (Surya, Dec 3, 2025)
+  // "Mean is basically not the real metric... median is something that really existed in the data set"
+  // Mean is still calculated in backend for ML modeling purposes
+  
   const metrics = [
     {
       label: "Total Events",
       value: totalEvents.toLocaleString(),
       icon: FileText,
       gradient: "from-primary/20 to-primary/5",
-      description: "Particles detected",
+      description: sizeFiltering 
+        ? `${sizeFiltering.valid_count.toLocaleString()} valid (${sizeRange?.valid_min ?? 30}-${sizeRange?.valid_max ?? 220}nm)`
+        : "Particles detected",
     },
     {
       label: "Median Size",
@@ -64,28 +82,26 @@ export function StatisticsCards({ results }: StatisticsCardsProps) {
       value: fscMedian ? fscMedian.toLocaleString() : "N/A",
       icon: Hash,
       gradient: "from-purple/20 to-purple/5",
-      description: "Forward scatter",
+      description: "Forward scatter intensity",
     },
     {
       label: "SSC Median",
       value: sscMedian ? sscMedian.toLocaleString() : "N/A",
       icon: Activity,
       gradient: "from-indigo/20 to-indigo/5",
-      description: "Side scatter",
+      // TASK-010: Show VSSC_MAX selection info if used
+      description: vsscMaxUsed && vsscSelection
+        ? `Auto-selected: ${vsscSelection.vssc1_channel?.split('-')[0] || 'VSSC1'}=${vsscSelection.vssc1_selected_pct?.toFixed(0) || 0}%, ${vsscSelection.vssc2_channel?.split('-')[0] || 'VSSC2'}=${vsscSelection.vssc2_selected_pct?.toFixed(0) || 0}%`
+        : sscChannelUsed 
+          ? `Using ${sscChannelUsed}` 
+          : "Side scatter intensity",
     },
     {
-      label: "FSC Mean",
-      value: fscMean ? fscMean.toLocaleString() : "N/A",
-      icon: TrendingUp,
-      gradient: "from-pink/20 to-pink/5",
-      description: "Average FSC intensity",
-    },
-    {
-      label: "SSC Mean",
-      value: sscMean ? sscMean.toLocaleString() : "N/A",
+      label: "Size Std Dev",
+      value: sizeStdDev ? `±${sizeStdDev.toFixed(1)} nm` : "N/A",
       icon: BarChart3,
       gradient: "from-orange/20 to-orange/5",
-      description: "Average SSC intensity",
+      description: "Size distribution spread",
     },
     ...(cd81Pct
       ? [

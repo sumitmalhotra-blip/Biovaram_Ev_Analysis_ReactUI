@@ -3,6 +3,7 @@
 import { useMemo } from "react"
 import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ZAxis, Legend } from "recharts"
 import { Badge } from "@/components/ui/badge"
+import { CHART_COLORS } from "@/lib/store"
 
 export interface ScatterDataPoint {
   x: number
@@ -137,10 +138,11 @@ export function ScatterPlotChart({
                 height={36}
               />
             )}
+            {/* TASK-018: Use consistent purple color for normal events */}
             <Scatter
               name="Normal Events"
               data={normalData}
-              fill="#3b82f6"
+              fill={CHART_COLORS.primary}
               fillOpacity={0.6}
               shape="circle"
             />
@@ -148,7 +150,7 @@ export function ScatterPlotChart({
               <Scatter
                 name="Anomalous Events"
                 data={anomalyData}
-                fill="#ef4444"
+                fill={CHART_COLORS.anomaly}
                 fillOpacity={0.9}
                 shape="circle"
               />

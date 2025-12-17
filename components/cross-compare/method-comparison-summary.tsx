@@ -32,25 +32,31 @@ export function MethodComparisonSummary({ fcsResults, ntaResults, className }: M
     return Math.abs(ntaValue - fcsValue) / average * 100
   }
 
-  // Extract values
+  // Extract values - NOTE: Mean is NOT displayed per client request (Surya, Dec 3, 2025)
+  // "Mean is basically not the real metric... median is what really existed in the data set"
   const fcsD10 = fcsResults.size_statistics?.d10
   const fcsD50 = fcsResults.particle_size_median_nm || fcsResults.size_statistics?.d50
   const fcsD90 = fcsResults.size_statistics?.d90
-  const fcsMean = fcsResults.size_statistics?.mean
+  const fcsStd = fcsResults.size_statistics?.std
 
   const ntaD10 = ntaResults.d10_nm || ntaResults.size_statistics?.d10
   const ntaD50 = ntaResults.median_size_nm || ntaResults.d50_nm || ntaResults.size_statistics?.d50
   const ntaD90 = ntaResults.d90_nm || ntaResults.size_statistics?.d90
-  const ntaMean = ntaResults.mean_size_nm || ntaResults.size_statistics?.mean
+  const ntaStd = ntaResults.size_statistics?.std
 
-  // Calculate discrepancies
+  // Calculate discrepancies - focused on Median (D50) rather than Mean
   const discD10 = calculateDiscrepancy(ntaD10, fcsD10)
   const discD50 = calculateDiscrepancy(ntaD50, fcsD50)
   const discD90 = calculateDiscrepancy(ntaD90, fcsD90)
-  const discMean = calculateDiscrepancy(ntaMean, fcsMean)
+  const discStd = calculateDiscrepancy(ntaStd, fcsStd)
 
-  // Calculate average discrepancy
-  const validDiscrepancies = [discD10, discD50, discD90, discMean].filter(d => d !== null) as number[]
+  // Calculate average discrepancy - D50 (Median) weighted higher
+  const validDiscrepancies = [
+    discD10, 
+    discD50, discD50, // D50 counted twice for higher weight
+    discD90,
+    discStd
+  ].filter(d => d !== null) as number[]
   const avgDiscrepancy = validDiscrepancies.length > 0
     ? validDiscrepancies.reduce((sum, d) => sum + d, 0) / validDiscrepancies.length
     : 0

@@ -47,7 +47,11 @@ export function NTAStatisticsCards({ results, className }: StatisticsCardsProps)
 
   const qualityStatus = getQualityStatus()
 
-  // Define metrics with proper typing
+  // Note: Mean Size is intentionally NOT displayed per client request (Surya, Dec 3, 2025)
+  // \"Mean is basically not the real metric... median is something that really existed in the data set\"
+  // Mean is still available in results for ML modeling purposes
+
+  // Define metrics with proper typing - showing Median instead of Mean
   const metrics: Array<{
     label: string
     value: string
@@ -79,24 +83,26 @@ export function NTAStatisticsCards({ results, className }: StatisticsCardsProps)
       description: "Particle concentration per milliliter"
     },
     {
-      label: "Mean Size",
-      value: results.mean_size_nm ? `${results.mean_size_nm.toFixed(1)} nm` : "N/A",
-      icon: Ruler,
-      color: "purple",
-      gradient: "from-purple-500/20 via-fuchsia-500/20 to-purple-600/20",
-      description: "Average particle diameter"
-    },
-    {
       label: "Median Size (D50)",
       value: results.median_size_nm 
         ? `${results.median_size_nm.toFixed(1)} nm`
         : results.d50_nm 
         ? `${results.d50_nm.toFixed(1)} nm`
         : "N/A",
+      icon: Ruler,
+      color: "purple",
+      gradient: "from-purple-500/20 via-fuchsia-500/20 to-purple-600/20",
+      description: "Median particle diameter - the true representative size"
+    },
+    {
+      label: "Std Deviation",
+      value: results.size_statistics?.std 
+        ? `±${results.size_statistics.std.toFixed(1)} nm`
+        : "N/A",
       icon: BarChart3,
       color: "indigo",
       gradient: "from-indigo-500/20 via-purple-500/20 to-indigo-600/20",
-      description: "50th percentile of size distribution"
+      description: "Size distribution spread"
     },
     {
       label: "D10",

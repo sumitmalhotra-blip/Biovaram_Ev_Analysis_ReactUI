@@ -27,6 +27,8 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
+  Microscope,
+  FlaskConical,
 } from "lucide-react"
 import type { Sample, FCSResult, NTAResult } from "@/lib/api-client"
 
@@ -39,6 +41,7 @@ interface SampleDetailsModalProps {
   onFetchNTAResults?: (sampleId: string) => Promise<{ sample_id: string; results: NTAResult[] } | null>
   onDelete?: (sampleId: string) => void
   onExport?: (sampleId: string) => void
+  onOpenInTab?: (sampleId: string, type: "fcs" | "nta") => void
 }
 
 export function SampleDetailsModal({
@@ -50,6 +53,7 @@ export function SampleDetailsModal({
   onFetchNTAResults,
   onDelete,
   onExport,
+  onOpenInTab,
 }: SampleDetailsModalProps) {
   const [sample, setSample] = useState<Sample | null>(null)
   const [fcsResults, setFcsResults] = useState<FCSResult[]>([])
@@ -369,23 +373,49 @@ export function SampleDetailsModal({
                     {sample.files.fcs && (
                       <div className="flex items-center justify-between p-2 rounded-lg border">
                         <div className="flex items-center gap-2">
-                          <FileText className="h-4 w-4 text-blue-500" />
+                          <FlaskConical className="h-4 w-4 text-blue-500" />
                           <span className="text-sm font-medium">FCS File</span>
                         </div>
-                        <Button variant="ghost" size="sm">
-                          <ExternalLink className="h-3 w-3" />
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          {onOpenInTab && fcsResults.length > 0 && (
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => {
+                                onOpenInTab(sample.sample_id, "fcs")
+                                onOpenChange(false)
+                              }}
+                              className="gap-1"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              Open in Tab
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     )}
                     {sample.files.nta && (
                       <div className="flex items-center justify-between p-2 rounded-lg border">
                         <div className="flex items-center gap-2">
-                          <FileText className="h-4 w-4 text-green-500" />
+                          <Microscope className="h-4 w-4 text-green-500" />
                           <span className="text-sm font-medium">NTA File</span>
                         </div>
-                        <Button variant="ghost" size="sm">
-                          <ExternalLink className="h-3 w-3" />
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          {onOpenInTab && ntaResults.length > 0 && (
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => {
+                                onOpenInTab(sample.sample_id, "nta")
+                                onOpenChange(false)
+                              }}
+                              className="gap-1"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              Open in Tab
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     )}
                     {sample.files.tem && (

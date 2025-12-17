@@ -63,10 +63,12 @@ function calculateLinearRegression(points: ScatterPoint[]) {
 }
 
 // Generate default correlation data for demo
+// Note: Mean removed from labels per client request (Surya, Dec 3, 2025)
+// "Mean is basically not the real metric... median is what really existed in the data set"
 const generateDefaultData = (): ScatterPoint[] => {
-  const labels = ["D10", "D50", "D90", "Mean", "Mode", "Std Dev"]
-  const fcsBase = [89.2, 127.4, 198.3, 134.5, 125.0, 45.2]
-  const ntaBase = [92.1, 135.2, 201.8, 141.2, 132.0, 42.8]
+  const labels = ["D10", "D50 (Median)", "D90", "Mode", "Std Dev"]
+  const fcsBase = [89.2, 127.4, 198.3, 125.0, 45.2]
+  const ntaBase = [92.1, 135.2, 201.8, 132.0, 42.8]
 
   return labels.map((label, i) => ({
     fcs: fcsBase[i] * (0.95 + Math.random() * 0.1),

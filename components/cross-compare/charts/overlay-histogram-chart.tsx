@@ -2,6 +2,7 @@
 
 import { useMemo } from "react"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts"
+import { CHART_COLORS } from "@/lib/store"
 
 interface SizeDistribution {
   bins: number[]
@@ -98,8 +99,9 @@ export function OverlayHistogramChart({ fcsData, ntaData }: OverlayHistogramChar
             labelFormatter={(value) => `${value} nm`}
           />
           <Legend wrapperStyle={{ fontSize: "12px" }} />
-          <Bar dataKey="fcs" fill="#3b82f6" fillOpacity={0.7} name="FCS" />
-          <Bar dataKey="nta" fill="#8b5cf6" fillOpacity={0.7} name="NTA" />
+          {/* TASK-018: Use consistent purple color scheme */}
+          <Bar dataKey="fcs" fill={CHART_COLORS.primary} fillOpacity={0.7} name="FCS" />
+          <Bar dataKey="nta" fill={CHART_COLORS.secondary} fillOpacity={0.7} name="NTA" />
         </BarChart>
       </ResponsiveContainer>
     </div>

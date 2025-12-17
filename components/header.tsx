@@ -38,7 +38,7 @@ export function Header() {
   }
 
   return (
-    <header className="h-16 border-b border-border/50 bg-card/80 backdrop-blur-md flex items-center justify-between px-3 md:px-6 shrink-0 shadow-sm">
+    <header className="h-16 border-b border-border/50 bg-card flex items-center justify-between px-3 md:px-6 shrink-0 shadow-sm">
       <div className="flex items-center gap-2 md:gap-4 min-w-0">
         <Sheet>
           <SheetTrigger asChild>

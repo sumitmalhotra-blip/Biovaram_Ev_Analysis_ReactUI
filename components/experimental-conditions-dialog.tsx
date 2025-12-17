@@ -33,18 +33,25 @@ import {
   FileText,
   CheckCircle2,
   AlertCircle,
+  Loader2,
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { useApi } from "@/hooks/use-api"
 
-// Experimental conditions interface
+// Experimental conditions interface - TASK-009
+// Matches backend ExperimentalConditions model
 export interface ExperimentalConditions {
   temperature_celsius?: number
+  ph?: number
   substrate_buffer?: string
   custom_buffer?: string
   sample_volume_ul?: number
-  ph?: number
+  dilution_factor?: number
+  antibody_used?: string
+  antibody_concentration_ug?: number
   incubation_time_min?: number
-  antibody_details?: string
+  sample_type?: string
+  filter_size_um?: number
   operator: string
   notes?: string
 }
@@ -77,6 +84,7 @@ export function ExperimentalConditionsDialog({
   sampleId,
 }: ExperimentalConditionsDialogProps) {
   const { toast } = useToast()
+  const { saveExperimentalConditions } = useApi()
   
   // Form state
   const [temperature, setTemperature] = useState<string>("")
@@ -88,6 +96,9 @@ export function ExperimentalConditionsDialog({
   const [antibodyDetails, setAntibodyDetails] = useState<string>("")
   const [operator, setOperator] = useState<string>("")
   const [notes, setNotes] = useState<string>("")
+  
+  // Saving state (TASK-009)
+  const [isSaving, setIsSaving] = useState<boolean>(false)
 
   // Validation errors
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -130,8 +141,8 @@ export function ExperimentalConditionsDialog({
     return Object.keys(newErrors).length === 0
   }
 
-  // Handle save
-  const handleSave = () => {
+  // Handle save - TASK-009: Save to backend API if sampleId is provided
+  const handleSave = async () => {
     if (!validateForm()) {
       toast({
         title: "Validation Error",
@@ -152,6 +163,9 @@ export function ExperimentalConditionsDialog({
 
     if (buffer) {
       conditions.substrate_buffer = buffer === "Custom" ? customBuffer.trim() : buffer
+      if (buffer === "Custom" && customBuffer.trim()) {
+        conditions.custom_buffer = customBuffer.trim()
+      }
     }
 
     if (volume) {
@@ -167,23 +181,80 @@ export function ExperimentalConditionsDialog({
     }
 
     if (antibodyDetails.trim()) {
-      conditions.antibody_details = antibodyDetails.trim()
+      // Parse antibody details into used and concentration if possible
+      // Format: "CD81 (1.0 µg)" or just "CD81"
+      const antibodyMatch = antibodyDetails.match(/^([^(]+)(?:\s*\(\s*([\d.]+)\s*(?:µg|ug|μg)?\s*\))?$/i)
+      if (antibodyMatch) {
+        conditions.antibody_used = antibodyMatch[1].trim()
+        if (antibodyMatch[2]) {
+          conditions.antibody_concentration_ug = parseFloat(antibodyMatch[2])
+        }
+      } else {
+        conditions.antibody_used = antibodyDetails.trim()
+      }
     }
 
     if (notes.trim()) {
       conditions.notes = notes.trim()
     }
 
-    onSave(conditions)
-    
-    toast({
-      title: "Conditions Saved",
-      description: "Experimental conditions have been saved successfully.",
-    })
+    // TASK-009: If sampleId is provided, try to save to backend API
+    // If API fails (sample not in DB yet), fallback to local save
+    if (sampleId) {
+      setIsSaving(true)
+      try {
+        const result = await saveExperimentalConditions(sampleId, {
+          operator: conditions.operator,
+          temperature_celsius: conditions.temperature_celsius,
+          ph: conditions.ph,
+          substrate_buffer: conditions.substrate_buffer,
+          custom_buffer: conditions.custom_buffer,
+          sample_volume_ul: conditions.sample_volume_ul,
+          incubation_time_min: conditions.incubation_time_min,
+          antibody_used: conditions.antibody_used,
+          antibody_concentration_ug: conditions.antibody_concentration_ug,
+          notes: conditions.notes,
+        })
+        
+        if (result) {
+          // Also call onSave for local state if needed
+          onSave(conditions)
+          handleReset()
+          onOpenChange(false)
+        } else {
+          // API returned null (failed) - save locally instead
+          onSave(conditions)
+          toast({
+            title: "Conditions Saved Locally",
+            description: "Saved to session. Will sync to database when sample is available.",
+          })
+          handleReset()
+          onOpenChange(false)
+        }
+      } catch {
+        // Error toast is shown by the API hook - also save locally as fallback
+        onSave(conditions)
+        toast({
+          title: "Saved Locally",
+          description: "Conditions saved to session (database sync failed).",
+        })
+        handleReset()
+        onOpenChange(false)
+      } finally {
+        setIsSaving(false)
+      }
+    } else {
+      // No sampleId - just use local callback
+      onSave(conditions)
+      
+      toast({
+        title: "Conditions Saved",
+        description: "Experimental conditions have been saved locally.",
+      })
 
-    // Reset form
-    handleReset()
-    onOpenChange(false)
+      handleReset()
+      onOpenChange(false)
+    }
   }
 
   // Handle skip
@@ -424,6 +495,7 @@ export function ExperimentalConditionsDialog({
             type="button"
             variant="outline"
             onClick={handleSkip}
+            disabled={isSaving}
           >
             Skip for Now
           </Button>
@@ -431,9 +503,19 @@ export function ExperimentalConditionsDialog({
             type="button"
             onClick={handleSave}
             className="gap-2"
+            disabled={isSaving}
           >
-            <CheckCircle2 className="h-4 w-4" />
-            Save & Continue
+            {isSaving ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="h-4 w-4" />
+                Save & Continue
+              </>
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

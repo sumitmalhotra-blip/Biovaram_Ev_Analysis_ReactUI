@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import {
   BarChart,
   Bar,
@@ -14,6 +14,8 @@ import {
   Brush,
 } from "recharts"
 import { InteractiveChartWrapper, EnhancedChartTooltip } from "@/components/charts/interactive-chart-wrapper"
+import { CHART_COLORS } from "@/lib/store"
+import { useAnalysisStore, type SizeRange } from "@/lib/store"
 
 interface SizeDistributionChartProps {
   data?: Array<{
@@ -30,27 +32,74 @@ interface SizeDistributionChartProps {
   d90?: number
   height?: number
   compact?: boolean
+  binCount?: number  // TASK-019: Configurable bin count
+  // Raw size data for dynamic range calculation
+  sizeData?: number[]
 }
 
-// Generate sample histogram data
-const generateHistogramData = () => {
+// Generate sample histogram data with configurable bins and dynamic ranges
+// TASK-019: Support configurable histogram bin size
+// Now supports dynamic size ranges from store
+const generateHistogramData = (
+  binCount: number = 20, 
+  sizeRanges?: SizeRange[],
+  sizeData?: number[]
+) => {
   const data = []
-  for (let size = 0; size <= 500; size += 20) {
-    let count = 0
-    // Small EVs peak around 30-40nm
-    count += Math.max(0, 800 * Math.exp(-Math.pow((size - 35) / 20, 2)))
-    // Exosomes peak around 100-150nm
-    count += Math.max(0, 2000 * Math.exp(-Math.pow((size - 120) / 50, 2)))
-    // Large EVs peak around 250-300nm
-    count += Math.max(0, 600 * Math.exp(-Math.pow((size - 280) / 80, 2)))
+  const maxSize = 500
+  const binWidth = maxSize / binCount
+  
+  // Default ranges if none provided
+  const ranges = sizeRanges?.length ? sizeRanges : [
+    { name: "Small EVs", min: 30, max: 100, color: "#22c55e" },
+    { name: "Medium EVs", min: 100, max: 200, color: "#7c3aed" },
+    { name: "Large EVs", min: 200, max: 500, color: "#f59e0b" },
+  ]
+  
+  for (let i = 0; i < binCount; i++) {
+    const binStart = i * binWidth
+    const binEnd = (i + 1) * binWidth
+    const size = Math.round(binStart + binWidth / 2)
+    
+    // If we have actual size data, calculate real counts
+    if (sizeData && sizeData.length > 0) {
+      const binData: Record<string, number | string> = { size }
+      let totalCount = 0
+      
+      // Count particles in this bin for each size range
+      ranges.forEach((range, idx) => {
+        const count = sizeData.filter(s => 
+          s >= binStart && s < binEnd && s >= range.min && s <= range.max
+        ).length
+        binData[`range${idx}`] = count
+        totalCount += count
+      })
+      
+      binData.total = totalCount
+      data.push(binData)
+    } else {
+      // Generate sample data
+      let count = 0
+      // Small EVs peak around 30-40nm
+      count += Math.max(0, 800 * Math.exp(-Math.pow((size - 35) / 20, 2)))
+      // Exosomes peak around 100-150nm
+      count += Math.max(0, 2000 * Math.exp(-Math.pow((size - 120) / 50, 2)))
+      // Large EVs peak around 250-300nm
+      count += Math.max(0, 600 * Math.exp(-Math.pow((size - 280) / 80, 2)))
 
-    data.push({
-      size,
-      smallEV: size <= 50 ? Math.round(count * 0.3) : 0,
-      exosomes: size > 50 && size <= 200 ? Math.round(count * 0.8) : 0,
-      largeEV: size > 200 ? Math.round(count * 0.4) : 0,
-      total: Math.round(count * (0.3 + Math.random() * 0.2)),
-    })
+      const binData: Record<string, number | string> = { size, total: Math.round(count * (0.3 + Math.random() * 0.2)) }
+      
+      // Distribute count among ranges based on bin position
+      ranges.forEach((range, idx) => {
+        if (size >= range.min && size <= range.max) {
+          binData[`range${idx}`] = Math.round(count * 0.7)
+        } else {
+          binData[`range${idx}`] = 0
+        }
+      })
+      
+      data.push(binData)
+    }
   }
   return data
 }
@@ -95,8 +144,32 @@ export function SizeDistributionChart({
   d90 = 198,
   height = 320,
   compact = false,
+  binCount: propBinCount,
+  sizeData,
 }: SizeDistributionChartProps) {
-  const data = propData || generateHistogramData()
+  // TASK-019: Get histogram bins from store settings
+  // Also get dynamic size ranges from store
+  const { fcsAnalysisSettings, fcsAnalysis } = useAnalysisStore()
+  const binCount = propBinCount ?? fcsAnalysisSettings?.histogramBins ?? 20
+  const sizeRanges = fcsAnalysis.sizeRanges
+  
+  // Generate data using dynamic size ranges
+  const data = useMemo(() => {
+    if (propData) return propData
+    return generateHistogramData(binCount, sizeRanges, sizeData)
+  }, [propData, binCount, sizeRanges, sizeData])
+  
+  // Get range colors for bars
+  const rangeColors = useMemo(() => {
+    if (!sizeRanges?.length) return [CHART_COLORS.smallEV, CHART_COLORS.primary, CHART_COLORS.largeEV]
+    return sizeRanges.map(r => r.color || CHART_COLORS.primary)
+  }, [sizeRanges])
+  
+  const rangeNames = useMemo(() => {
+    if (!sizeRanges?.length) return ["Small EVs (<100nm)", "Exosomes (100-200nm)", "Large EVs (>200nm)"]
+    return sizeRanges.map(r => `${r.name} (${r.min}-${r.max}nm)`)
+  }, [sizeRanges])
+  
   const [brushDomain, setBrushDomain] = useState<{ startIndex?: number; endIndex?: number }>({})
 
   return (
@@ -123,9 +196,27 @@ export function SizeDistributionChart({
           />
           <Tooltip content={<CustomTooltip />} />
           <Legend wrapperStyle={{ fontSize: "12px" }} />
-          <Bar dataKey="smallEV" stackId="a" fill="#00b4d8" name="Small EVs (<50nm)" radius={[0, 0, 0, 0]} />
-          <Bar dataKey="exosomes" stackId="a" fill="#8b5cf6" name="Exosomes (50-200nm)" radius={[0, 0, 0, 0]} />
-          <Bar dataKey="largeEV" stackId="a" fill="#f59e0b" name="Large EVs (>200nm)" radius={[2, 2, 0, 0]} />
+          
+          {/* Dynamic bars based on size ranges from store */}
+          {sizeRanges?.length ? (
+            sizeRanges.map((range, idx) => (
+              <Bar 
+                key={range.name}
+                dataKey={`range${idx}`} 
+                stackId="a" 
+                fill={range.color || rangeColors[idx]} 
+                name={rangeNames[idx]} 
+                radius={idx === sizeRanges.length - 1 ? [2, 2, 0, 0] : [0, 0, 0, 0]} 
+              />
+            ))
+          ) : (
+            <>
+              {/* Default bars if no custom ranges */}
+              <Bar dataKey="range0" stackId="a" fill={CHART_COLORS.smallEV} name="Small EVs (<100nm)" radius={[0, 0, 0, 0]} />
+              <Bar dataKey="range1" stackId="a" fill={CHART_COLORS.primary} name="Exosomes (100-200nm)" radius={[0, 0, 0, 0]} />
+              <Bar dataKey="range2" stackId="a" fill={CHART_COLORS.largeEV} name="Large EVs (>200nm)" radius={[2, 2, 0, 0]} />
+            </>
+          )}
 
           {/* Percentile lines */}
           <ReferenceLine

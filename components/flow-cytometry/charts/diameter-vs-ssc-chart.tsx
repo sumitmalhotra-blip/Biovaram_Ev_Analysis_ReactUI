@@ -17,6 +17,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Info } from "lucide-react"
 import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { CHART_COLORS } from "@/lib/store"
 
 export interface DiameterDataPoint {
   diameter: number
@@ -92,12 +93,12 @@ function generateMieTheoryCurve(
   return curve
 }
 
-// Generate EV size reference lines
+// Generate EV size reference lines - TASK-018: Use consistent colors
 const EV_SIZE_REFERENCES = [
-  { diameter: 50, label: "Small EVs", color: "#06b6d4" },
-  { diameter: 100, label: "Exosomes upper", color: "#8b5cf6" },
-  { diameter: 150, label: "Microvesicles", color: "#f59e0b" },
-  { diameter: 200, label: "Large EVs", color: "#ef4444" },
+  { diameter: 50, label: "Small EVs", color: CHART_COLORS.smallEV },
+  { diameter: 100, label: "Exosomes upper", color: CHART_COLORS.primary },
+  { diameter: 150, label: "Microvesicles", color: CHART_COLORS.largeEV },
+  { diameter: 200, label: "Large EVs", color: CHART_COLORS.anomaly },
 ]
 
 export function DiameterVsSSCChart({
@@ -339,13 +340,13 @@ export function DiameterVsSSCChart({
               />
             ))}
 
-            {/* Mie theory curve */}
+            {/* Mie theory curve - TASK-018: Use consistent purple */}
             {showMieTheory && (
               <Line
                 data={mieTheoryCurve}
                 type="monotone"
                 dataKey="mieSSC"
-                stroke="#8b5cf6"
+                stroke={CHART_COLORS.primary}
                 strokeWidth={2}
                 dot={false}
                 name="Mie Theory"
@@ -353,21 +354,21 @@ export function DiameterVsSSCChart({
               />
             )}
 
-            {/* Normal events scatter */}
+            {/* Normal events scatter - TASK-018: Purple for normal */}
             <Scatter
               name="Normal Events"
               data={normalData}
-              fill="#3b82f6"
+              fill={CHART_COLORS.primary}
               fillOpacity={0.5}
               shape="circle"
             />
 
-            {/* Anomalous events scatter */}
+            {/* Anomalous events scatter - TASK-018: Red for anomalies */}
             {anomalyData.length > 0 && highlightAnomalies && (
               <Scatter
                 name="Anomalous Events"
                 data={anomalyData}
-                fill="#ef4444"
+                fill={CHART_COLORS.anomaly}
                 fillOpacity={0.8}
                 shape="diamond"
               />

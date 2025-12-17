@@ -190,15 +190,16 @@ export function CrossCompareTab() {
     n: 12345,
   }
 
-  // Calculate discrepancy
+  // Calculate discrepancy - focused on D50 (Median) per client preference (Surya, Dec 3, 2025)
+  // "Mean is basically not the real metric... median is something that really existed in the data set"
   const calculateDiscrepancy = (fcs: number, nta: number) => {
     if (fcs === 0 && nta === 0) return 0
     return Math.abs((nta - fcs) / ((nta + fcs) / 2)) * 100
   }
 
+  // Average discrepancy now emphasizes D50 (Median) as the primary metric
   const avgDiscrepancy = (
-    calculateDiscrepancy(fcsStats.d50, ntaStats.d50) +
-    calculateDiscrepancy(fcsStats.mean, ntaStats.mean) +
+    calculateDiscrepancy(fcsStats.d50, ntaStats.d50) * 2 +  // Weight D50 (Median) higher
     calculateDiscrepancy(fcsStats.d10, ntaStats.d10) +
     calculateDiscrepancy(fcsStats.d90, ntaStats.d90)
   ) / 4

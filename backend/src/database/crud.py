@@ -27,6 +27,7 @@ from src.database.models import (  # type: ignore[import-not-found]
     NTAResult,
     ProcessingJob,
     QCReport,
+    ExperimentalConditions,
     ProcessingStatus,
     QCStatus,
 )
@@ -695,3 +696,180 @@ async def get_job_counts(db: AsyncSession) -> Dict[str, int]:
         "completed": completed,
         "failed": failed,
     }
+
+
+# ============================================================================
+# Experimental Conditions CRUD Operations (TASK-009)
+# ============================================================================
+
+async def create_experimental_conditions(
+    db: AsyncSession,
+    sample_id: int,
+    operator: str,
+    temperature_celsius: Optional[float] = None,
+    ph: Optional[float] = None,
+    substrate_buffer: Optional[str] = None,
+    custom_buffer: Optional[str] = None,
+    sample_volume_ul: Optional[float] = None,
+    dilution_factor: Optional[int] = None,
+    antibody_used: Optional[str] = None,
+    antibody_concentration_ug: Optional[float] = None,
+    incubation_time_min: Optional[float] = None,
+    sample_type: Optional[str] = None,
+    filter_size_um: Optional[float] = None,
+    notes: Optional[str] = None,
+) -> ExperimentalConditions:
+    """
+    Create experimental conditions record for a sample.
+    
+    TASK-009: Save experimental conditions to database for reproducibility.
+    
+    Args:
+        db: Database session
+        sample_id: Database ID of the sample
+        operator: Name of the operator (required)
+        temperature_celsius: Temperature in Celsius
+        ph: pH value
+        substrate_buffer: Buffer used (PBS, HEPES, etc.)
+        custom_buffer: Custom buffer name if substrate_buffer is "Custom"
+        sample_volume_ul: Sample volume in microliters
+        dilution_factor: Dilution factor (100, 500, 1000, etc.)
+        antibody_used: Antibody type (CD81, CD9, CD63, etc.)
+        antibody_concentration_ug: Antibody concentration in µg
+        incubation_time_min: Incubation time in minutes
+        sample_type: Sample preparation method
+        filter_size_um: Filter size in micrometers
+        notes: Free-text notes
+        
+    Returns:
+        Created ExperimentalConditions object
+    """
+    try:
+        conditions = ExperimentalConditions(
+            sample_id=sample_id,
+            operator=operator,
+            temperature_celsius=temperature_celsius,
+            ph=ph,
+            substrate_buffer=substrate_buffer,
+            custom_buffer=custom_buffer,
+            sample_volume_ul=sample_volume_ul,
+            dilution_factor=dilution_factor,
+            antibody_used=antibody_used,
+            antibody_concentration_ug=antibody_concentration_ug,
+            incubation_time_min=incubation_time_min,
+            sample_type=sample_type,
+            filter_size_um=filter_size_um,
+            notes=notes,
+        )
+        
+        db.add(conditions)
+        await db.commit()
+        await db.refresh(conditions)
+        
+        logger.success(f"✅ Created experimental conditions for sample {sample_id} (ID: {conditions.id})")
+        return conditions
+        
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"❌ Failed to create experimental conditions: {e}")
+        raise
+
+
+async def get_experimental_conditions_by_sample(
+    db: AsyncSession,
+    sample_id: int
+) -> Optional[ExperimentalConditions]:
+    """
+    Get experimental conditions for a sample.
+    
+    Args:
+        db: Database session
+        sample_id: Database ID of the sample
+        
+    Returns:
+        ExperimentalConditions object or None
+    """
+    query = select(ExperimentalConditions).where(
+        ExperimentalConditions.sample_id == sample_id
+    ).order_by(ExperimentalConditions.created_at.desc())
+    result = await db.execute(query)
+    return result.scalar_one_or_none()
+
+
+async def update_experimental_conditions(
+    db: AsyncSession,
+    conditions_id: int,
+    **kwargs
+) -> Optional[ExperimentalConditions]:
+    """
+    Update experimental conditions.
+    
+    Args:
+        db: Database session
+        conditions_id: ID of the conditions record
+        **kwargs: Fields to update
+        
+    Returns:
+        Updated ExperimentalConditions object or None
+    """
+    try:
+        query = select(ExperimentalConditions).where(
+            ExperimentalConditions.id == conditions_id
+        )
+        result = await db.execute(query)
+        conditions = result.scalar_one_or_none()
+        
+        if not conditions:
+            logger.warning(f"⚠️ Experimental conditions not found: {conditions_id}")
+            return None
+        
+        # Update fields
+        for key, value in kwargs.items():
+            if hasattr(conditions, key) and value is not None:
+                setattr(conditions, key, value)
+        
+        await db.commit()
+        await db.refresh(conditions)
+        
+        logger.success(f"✅ Updated experimental conditions: {conditions_id}")
+        return conditions
+        
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"❌ Failed to update experimental conditions: {e}")
+        raise
+
+
+async def delete_experimental_conditions(
+    db: AsyncSession,
+    conditions_id: int
+) -> bool:
+    """
+    Delete experimental conditions.
+    
+    Args:
+        db: Database session
+        conditions_id: ID of the conditions record
+        
+    Returns:
+        True if deleted, False if not found
+    """
+    try:
+        query = delete(ExperimentalConditions).where(
+            ExperimentalConditions.id == conditions_id
+        )
+        result = await db.execute(query)
+        await db.commit()
+        
+        deleted = result.rowcount > 0
+        if deleted:
+            logger.success(f"✅ Deleted experimental conditions: {conditions_id}")
+        else:
+            logger.warning(f"⚠️ Experimental conditions not found for deletion: {conditions_id}")
+        
+        return deleted
+        
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"❌ Failed to delete experimental conditions: {e}")
+        raise

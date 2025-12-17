@@ -504,6 +504,8 @@ async def delete_sample(
 async def get_scatter_data(
     sample_id: str,
     max_points: int = Query(5000, ge=100, le=100000, description="Maximum points to return"),
+    fsc_channel: Optional[str] = Query(None, description="FSC channel name override (e.g., 'Channel_3')"),
+    ssc_channel: Optional[str] = Query(None, description="SSC channel name override (e.g., 'Channel_4')"),
     db: AsyncSession = Depends(get_session)
 ):
     """
@@ -549,6 +551,7 @@ async def get_scatter_data(
         
         # Parse FCS file to get scatter data
         from src.parsers.fcs_parser import FCSParser  # type: ignore[import-not-found]
+        from src.utils.channel_config import get_channel_config  # type: ignore[import-not-found]
         import pandas as pd
         import numpy as np
         
@@ -557,43 +560,45 @@ async def get_scatter_data(
         parser = FCSParser(sample.file_path_fcs)
         parsed_data = parser.parse()
         
-        # Detect FSC and SSC channels - use channel_names attribute after parsing
+        # Get available channels
         channels = parser.channel_names
-        fsc_channel = None
-        ssc_channel = None
         
-        # Look for FSC channel (prefer Area, fallback to Height, then generic)
-        for ch in channels:
-            ch_upper = ch.upper()
-            if 'FSC-A' in ch_upper or 'VFSC-A' in ch_upper:
-                fsc_channel = ch
-                break
-            elif 'FSC-H' in ch_upper and not fsc_channel:
-                fsc_channel = ch
-            elif 'FSC' in ch_upper and not fsc_channel:
-                fsc_channel = ch
+        # Get channel configuration
+        channel_config = get_channel_config()
         
-        # Look for SSC channel
-        for ch in channels:
-            ch_upper = ch.upper()
-            if 'SSC-A' in ch_upper:
-                ssc_channel = ch
-                break
-            elif 'SSC-H' in ch_upper and not ssc_channel:
-                ssc_channel = ch
-            elif 'SSC' in ch_upper and not ssc_channel:
-                ssc_channel = ch
+        # Use override if provided, otherwise use config-based detection
+        fsc_ch = fsc_channel  # From query parameter
+        ssc_ch = ssc_channel  # From query parameter
         
-        # Fallback: Use first two channels if FSC/SSC not found
-        if not fsc_channel and len(channels) >= 1:
-            fsc_channel = channels[0]
-            logger.warning(f"⚠️ FSC channel not found, using first channel: {fsc_channel}")
+        # Validate override channels exist
+        if fsc_ch and fsc_ch not in channels:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"FSC channel '{fsc_ch}' not found. Available: {', '.join(channels)}"
+            )
+        if ssc_ch and ssc_ch not in channels:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"SSC channel '{ssc_ch}' not found. Available: {', '.join(channels)}"
+            )
         
-        if not ssc_channel and len(channels) >= 2:
-            ssc_channel = channels[1]
-            logger.warning(f"⚠️ SSC channel not found, using second channel: {ssc_channel}")
+        # Use channel config for detection if not overridden
+        if not fsc_ch:
+            fsc_ch = channel_config.detect_fsc_channel(channels)
         
-        if not fsc_channel or not ssc_channel:
+        if not ssc_ch:
+            ssc_ch = channel_config.detect_ssc_channel(channels)
+        
+        # Fallback: Use first two channels if detection fails
+        if not fsc_ch and len(channels) >= 1:
+            fsc_ch = channels[0]
+            logger.warning(f"⚠️ FSC channel not found, using first channel: {fsc_ch}")
+        
+        if not ssc_ch and len(channels) >= 2:
+            ssc_ch = channels[1]
+            logger.warning(f"⚠️ SSC channel not found, using second channel: {ssc_ch}")
+        
+        if not fsc_ch or not ssc_ch:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Could not find FSC/SSC channels in FCS file. Available: {', '.join(channels)}"
@@ -617,8 +622,8 @@ async def get_scatter_data(
         scatter_data = []
         for idx, (orig_idx, row) in enumerate(zip(sampled_indices, sampled_data.itertuples())):
             scatter_data.append({
-                "x": float(getattr(row, fsc_channel)),
-                "y": float(getattr(row, ssc_channel)),
+                "x": float(getattr(row, fsc_ch)),
+                "y": float(getattr(row, ssc_ch)),
                 "index": int(orig_idx)
             })
         
@@ -630,8 +635,9 @@ async def get_scatter_data(
             "returned_points": len(scatter_data),
             "data": scatter_data,
             "channels": {
-                "fsc": fsc_channel,
-                "ssc": ssc_channel
+                "fsc": fsc_ch,
+                "ssc": ssc_ch,
+                "available": channels  # Include all available channels for UI
             }
         }
         
@@ -652,6 +658,7 @@ async def get_scatter_data(
 @router.get("/{sample_id}/size-bins", response_model=dict)
 async def get_size_bins(
     sample_id: str,
+    fsc_channel: Optional[str] = Query(None, description="FSC channel name override (e.g., 'Channel_3')"),
     db: AsyncSession = Depends(get_session)
 ):
     """
@@ -711,23 +718,31 @@ async def get_size_bins(
         parser = FCSParser(sample.file_path_fcs)
         parsed_data = parser.parse()
         
-        # Detect FSC channel - use channel_names attribute after parsing
+        # Get available channels
         channels = parser.channel_names
-        fsc_channel = None
-        for ch in channels:
-            ch_upper = ch.upper()
-            if 'FSC-A' in ch_upper or 'VFSC-A' in ch_upper:
-                fsc_channel = ch
-                break
-            elif 'FSC-H' in ch_upper and not fsc_channel:
-                fsc_channel = ch
-            elif 'FSC' in ch_upper and not fsc_channel:
-                fsc_channel = ch
         
-        # Fallback: Use first channel if FSC not found
-        if not fsc_channel and len(channels) >= 1:
-            fsc_channel = channels[0]
-            logger.warning(f"⚠️ FSC channel not found for size bins, using first channel: {fsc_channel}")
+        # Get channel configuration
+        from src.utils.channel_config import get_channel_config  # type: ignore[import-not-found]
+        channel_config = get_channel_config()
+        
+        # Use override if provided
+        fsc_ch = fsc_channel  # From query parameter
+        
+        # Validate override channel exists
+        if fsc_ch and fsc_ch not in channels:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"FSC channel '{fsc_ch}' not found. Available: {', '.join(channels)}"
+            )
+        
+        # Use channel config for detection if not overridden
+        if not fsc_ch:
+            fsc_ch = channel_config.detect_fsc_channel(channels)
+        
+        # Fallback: Use first channel if detection fails
+        if not fsc_ch and len(channels) >= 1:
+            fsc_ch = channels[0]
+            logger.warning(f"⚠️ FSC channel not found for size bins, using first channel: {fsc_ch}")
         
         # Initialize Mie calculator
         mie_calc = MieScatterCalculator(
@@ -740,7 +755,7 @@ async def get_size_bins(
         
         # Sample for performance (calculate on subset, extrapolate to full dataset)
         sample_size = min(10000, total_events)
-        sampled_fsc = parsed_data[fsc_channel].sample(n=sample_size, random_state=42)
+        sampled_fsc = parsed_data[fsc_ch].sample(n=sample_size, random_state=42)
         
         # Convert FSC to size for sampled events
         sizes = []
@@ -1058,3 +1073,434 @@ async def reanalyze_sample(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to re-analyze sample: {str(e)}"
         )
+
+
+# ============================================================================
+# Experimental Conditions Endpoints (TASK-009)
+# ============================================================================
+
+from pydantic import BaseModel
+from src.database.crud import (
+    create_experimental_conditions,
+    get_experimental_conditions_by_sample,
+    update_experimental_conditions as update_conditions_db,
+)
+
+
+class ExperimentalConditionsCreate(BaseModel):
+    """Request model for creating experimental conditions."""
+    operator: str
+    temperature_celsius: Optional[float] = None
+    ph: Optional[float] = None
+    substrate_buffer: Optional[str] = None
+    custom_buffer: Optional[str] = None
+    sample_volume_ul: Optional[float] = None
+    dilution_factor: Optional[int] = None
+    antibody_used: Optional[str] = None
+    antibody_concentration_ug: Optional[float] = None
+    incubation_time_min: Optional[float] = None
+    sample_type: Optional[str] = None
+    filter_size_um: Optional[float] = None
+    notes: Optional[str] = None
+
+
+class ExperimentalConditionsUpdate(BaseModel):
+    """Request model for updating experimental conditions."""
+    operator: Optional[str] = None
+    temperature_celsius: Optional[float] = None
+    ph: Optional[float] = None
+    substrate_buffer: Optional[str] = None
+    custom_buffer: Optional[str] = None
+    sample_volume_ul: Optional[float] = None
+    dilution_factor: Optional[int] = None
+    antibody_used: Optional[str] = None
+    antibody_concentration_ug: Optional[float] = None
+    incubation_time_min: Optional[float] = None
+    sample_type: Optional[str] = None
+    filter_size_um: Optional[float] = None
+    notes: Optional[str] = None
+
+
+@router.post("/{sample_id}/conditions", response_model=dict)
+async def save_experimental_conditions(
+    sample_id: str,
+    conditions: ExperimentalConditionsCreate,
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    Save experimental conditions for a sample.
+    
+    TASK-009: Store experimental metadata for reproducibility and AI analysis.
+    
+    **Request Body:**
+    ```json
+    {
+        "operator": "John Doe",
+        "temperature_celsius": 22.5,
+        "substrate_buffer": "PBS",
+        "antibody_used": "CD81",
+        "antibody_concentration_ug": 1.0,
+        "incubation_time_min": 30,
+        "notes": "Standard protocol"
+    }
+    ```
+    
+    **Response:**
+    ```json
+    {
+        "success": true,
+        "conditions_id": 1,
+        "sample_id": "P5_F10_CD81",
+        "message": "Experimental conditions saved successfully"
+    }
+    ```
+    """
+    logger.info(f"📝 Saving experimental conditions for sample: {sample_id}")
+    
+    try:
+        # Find sample by sample_id string
+        query = select(Sample).where(Sample.sample_id == sample_id)
+        result = await db.execute(query)
+        sample = result.scalar_one_or_none()
+        
+        if not sample:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Sample not found: {sample_id}"
+            )
+        
+        # Create experimental conditions
+        conditions_record = await create_experimental_conditions(
+            db=db,
+            sample_id=sample.id,  # type: ignore[arg-type]
+            operator=conditions.operator,
+            temperature_celsius=conditions.temperature_celsius,
+            ph=conditions.ph,
+            substrate_buffer=conditions.substrate_buffer,
+            custom_buffer=conditions.custom_buffer,
+            sample_volume_ul=conditions.sample_volume_ul,
+            dilution_factor=conditions.dilution_factor,
+            antibody_used=conditions.antibody_used,
+            antibody_concentration_ug=conditions.antibody_concentration_ug,
+            incubation_time_min=conditions.incubation_time_min,
+            sample_type=conditions.sample_type,
+            filter_size_um=conditions.filter_size_um,
+            notes=conditions.notes,
+        )
+        
+        logger.success(f"✅ Saved experimental conditions for sample {sample_id}")
+        
+        return {
+            "success": True,
+            "conditions_id": conditions_record.id,
+            "sample_id": sample_id,
+            "conditions": conditions_record.to_dict(),
+            "message": "Experimental conditions saved successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"❌ Failed to save conditions: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save experimental conditions: {str(e)}"
+        )
+
+
+@router.get("/{sample_id}/conditions", response_model=dict)
+async def get_experimental_conditions(
+    sample_id: str,
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    Get experimental conditions for a sample.
+    
+    **Response:**
+    ```json
+    {
+        "sample_id": "P5_F10_CD81",
+        "conditions": {
+            "id": 1,
+            "operator": "John Doe",
+            "temperature_celsius": 22.5,
+            ...
+        }
+    }
+    ```
+    """
+    try:
+        # Find sample by sample_id string
+        query = select(Sample).where(Sample.sample_id == sample_id)
+        result = await db.execute(query)
+        sample = result.scalar_one_or_none()
+        
+        if not sample:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Sample not found: {sample_id}"
+            )
+        
+        # Get conditions
+        conditions = await get_experimental_conditions_by_sample(db, sample.id)  # type: ignore[arg-type]
+        
+        return {
+            "sample_id": sample_id,
+            "has_conditions": conditions is not None,
+            "conditions": conditions.to_dict() if conditions else None,
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"❌ Failed to get conditions: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get experimental conditions: {str(e)}"
+        )
+
+
+@router.put("/{sample_id}/conditions", response_model=dict)
+async def update_experimental_conditions(
+    sample_id: str,
+    conditions: ExperimentalConditionsUpdate,
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    Update experimental conditions for a sample.
+    """
+    logger.info(f"📝 Updating experimental conditions for sample: {sample_id}")
+    
+    try:
+        # Find sample
+        query = select(Sample).where(Sample.sample_id == sample_id)
+        result = await db.execute(query)
+        sample = result.scalar_one_or_none()
+        
+        if not sample:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Sample not found: {sample_id}"
+            )
+        
+        # Get existing conditions
+        existing = await get_experimental_conditions_by_sample(db, sample.id)  # type: ignore[arg-type]
+        
+        if not existing:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No experimental conditions found for sample: {sample_id}"
+            )
+        
+        # Build update dict (only non-None values)
+        update_data = conditions.model_dump(exclude_unset=True)
+        
+        # Update conditions
+        updated = await update_conditions_db(db, existing.id, **update_data)  # type: ignore[arg-type]
+        
+        return {
+            "success": True,
+            "sample_id": sample_id,
+            "conditions": updated.to_dict() if updated else None,
+            "message": "Experimental conditions updated successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"❌ Failed to update conditions: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update experimental conditions: {str(e)}"
+        )
+
+
+# ============================================================================
+# Channel Configuration Endpoints
+# ============================================================================
+
+@router.get("/channel-config", response_model=dict)
+async def get_channel_configuration():
+    """
+    Get current channel configuration for FCS analysis.
+    
+    Returns the active instrument settings and all available instrument configurations.
+    """
+    try:
+        from src.utils.channel_config import get_channel_config  # type: ignore[import-not-found]
+        
+        config = get_channel_config()
+        
+        return {
+            "success": True,
+            "active_instrument": config.active_instrument,
+            "instruments": list(config.list_instruments()),
+            "fsc_channels": config.get_fsc_channel_names(),
+            "ssc_channels": config.get_ssc_channel_names(),
+            "preferred": {
+                "for_size_analysis": config.get_preferred_channels("for_size_analysis"),
+                "for_scatter_plot": config.get_preferred_channels("for_scatter_plot")
+            }
+        }
+    except Exception as e:
+        logger.exception(f"❌ Failed to get channel config: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get channel configuration: {str(e)}"
+        )
+
+
+@router.put("/channel-config", response_model=dict)
+async def update_channel_configuration(
+    instrument: Optional[str] = Query(None, description="Instrument name to activate"),
+    fsc_channel: Optional[str] = Query(None, description="FSC channel name to add/set as preferred"),
+    ssc_channel: Optional[str] = Query(None, description="SSC channel name to add/set as preferred"),
+    save: bool = Query(True, description="Save configuration to file")
+):
+    """
+    Update channel configuration for FCS analysis.
+    
+    **Parameters:**
+    - instrument: Activate a specific instrument configuration
+    - fsc_channel: Set the preferred FSC channel
+    - ssc_channel: Set the preferred SSC channel
+    - save: Whether to persist changes to file (default: True)
+    
+    **Example:**
+    ```
+    PUT /samples/channel-config?fsc_channel=Channel_5&ssc_channel=Channel_6&save=true
+    ```
+    """
+    try:
+        from src.utils.channel_config import get_channel_config  # type: ignore[import-not-found]
+        
+        config = get_channel_config()
+        
+        # Activate specific instrument if provided
+        if instrument:
+            if not config.set_active_instrument(instrument):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Instrument '{instrument}' not found. Available: {config.list_instruments()}"
+                )
+        
+        # Add custom channel mapping if both FSC and SSC provided
+        if fsc_channel and ssc_channel:
+            config.add_custom_channel_mapping(fsc_channel, ssc_channel)
+            logger.info(f"✓ Updated channel mapping: FSC={fsc_channel}, SSC={ssc_channel}")
+        
+        # Save configuration if requested
+        if save:
+            config.save_config()
+        
+        return {
+            "success": True,
+            "message": "Channel configuration updated",
+            "active_instrument": config.active_instrument,
+            "preferred_fsc": config.get_preferred_channels()[0],
+            "preferred_ssc": config.get_preferred_channels()[1],
+            "saved": save
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"❌ Failed to update channel config: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update channel configuration: {str(e)}"
+        )
+
+
+@router.get("/{sample_id}/available-channels", response_model=dict)
+async def get_available_channels(
+    sample_id: str,
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    Get available channels for a specific FCS sample.
+    
+    Returns all channel names from the FCS file with statistics to help identify
+    FSC/SSC channels.
+    """
+    try:
+        # Get sample
+        result = await db.execute(
+            select(Sample).where(Sample.sample_id == sample_id)
+        )
+        sample = result.scalar_one_or_none()
+        
+        if not sample:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Sample not found: {sample_id}"
+            )
+        
+        if not sample.file_path_fcs:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No FCS file associated with sample {sample_id}"
+            )
+        
+        from src.parsers.fcs_parser import FCSParser  # type: ignore[import-not-found]
+        from src.utils.channel_config import get_channel_config  # type: ignore[import-not-found]
+        import numpy as np
+        
+        parser = FCSParser(sample.file_path_fcs)
+        parsed_data = parser.parse()
+        
+        config = get_channel_config()
+        
+        # Build channel info with statistics
+        channels_info = []
+        for i, col in enumerate(parsed_data.columns):
+            if col in ['sample_id', 'biological_sample_id', 'measurement_id', 
+                       'is_baseline', 'file_name', 'instrument_type', 'parse_timestamp']:
+                continue
+            
+            mean_val = parsed_data[col].mean()
+            max_val = parsed_data[col].max()
+            min_val = parsed_data[col].min()
+            std_val = parsed_data[col].std()
+            
+            # Check if this is a detected FSC/SSC channel
+            is_fsc = col in config.get_fsc_channel_names()
+            is_ssc = col in config.get_ssc_channel_names()
+            
+            channels_info.append({
+                "index": i + 1,
+                "name": col,
+                "mean": float(mean_val),
+                "max": float(max_val),
+                "min": float(min_val),
+                "std": float(std_val),
+                "cv": float(std_val / mean_val * 100) if mean_val > 0 else 0,
+                "is_configured_fsc": is_fsc,
+                "is_configured_ssc": is_ssc
+            })
+        
+        # Detect channels based on config
+        detected_fsc = config.detect_fsc_channel(parser.channel_names)
+        detected_ssc = config.detect_ssc_channel(parser.channel_names)
+        
+        return {
+            "sample_id": sample_id,
+            "file_name": sample.file_path_fcs.name if sample.file_path_fcs else None,
+            "total_events": len(parsed_data),
+            "channels": channels_info,
+            "detected_fsc": detected_fsc,
+            "detected_ssc": detected_ssc,
+            "active_instrument": config.active_instrument,
+            "recommendation": (
+                f"For accurate EV sizing, configure FSC={detected_fsc or 'Channel_5'} "
+                f"and SSC={detected_ssc or 'Channel_6'}"
+            ) if not detected_fsc or not detected_ssc else None
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"❌ Failed to get available channels: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get available channels: {str(e)}"
+        )
+

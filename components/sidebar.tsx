@@ -4,7 +4,9 @@ import { useState, useEffect, useMemo, useCallback } from "react"
 import { useAnalysisStore, type SizeRange } from "@/lib/store"
 import { useApi } from "@/hooks/use-api"
 import { cn } from "@/lib/utils"
-import { ChevronLeft, ChevronRight, Filter, Settings, FileText, Beaker, Thermometer, Loader2, RefreshCw, Database, SlidersHorizontal, Play, RotateCcw, Plus, Trash2, FlaskConical } from "lucide-react"
+import { ChevronLeft, ChevronRight, Filter, Settings, FileText, Beaker, Thermometer, Loader2, RefreshCw, Database, SlidersHorizontal, Play, RotateCcw, Plus, Trash2, FlaskConical, Shield } from "lucide-react"
+import { BestPracticesPanel } from "@/components/best-practices-panel"
+import type { ExperimentData } from "@/lib/best-practices"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Slider } from "@/components/ui/slider"
@@ -23,7 +25,7 @@ interface SidebarProps {
 
 export function Sidebar({ isMobile = false }: SidebarProps) {
   const { sidebarCollapsed, toggleSidebar, activeTab, samples, apiSamples, samplesLoading, apiConnected } = useAnalysisStore()
-  const { fetchSamples } = useApi()
+  const { fetchSamples, openSampleInTab } = useApi()
 
   // Fetch samples on mount only if API is connected
   useEffect(() => {
@@ -55,7 +57,15 @@ export function Sidebar({ isMobile = false }: SidebarProps) {
             {activeTab === "flow-cytometry" && <FlowCytometrySidebar />}
             {activeTab === "nta" && <NTASidebar />}
             {activeTab === "cross-compare" && <CrossCompareSidebar />}
-            {activeTab === "dashboard" && <DashboardSidebar samples={samples} apiSamples={apiSamples} samplesLoading={samplesLoading} fetchSamples={fetchSamples} />}
+            {activeTab === "dashboard" && (
+              <DashboardSidebar 
+                samples={samples} 
+                apiSamples={apiSamples} 
+                samplesLoading={samplesLoading} 
+                fetchSamples={fetchSamples}
+                onSampleClick={openSampleInTab}
+              />
+            )}
           </div>
         </ScrollArea>
       )}
@@ -81,12 +91,14 @@ function DashboardSidebar({
   samples, 
   apiSamples, 
   samplesLoading,
-  fetchSamples 
+  fetchSamples,
+  onSampleClick,
 }: { 
   samples: { id: string; name: string; type: string }[]
   apiSamples: { id: number; sample_id: string; treatment?: string; files?: { fcs?: string; nta?: string } }[]
   samplesLoading: boolean
   fetchSamples: () => void
+  onSampleClick?: (sampleId: string, type: "fcs" | "nta") => void
 }) {
   const [treatmentFilter, setTreatmentFilter] = useState<string>("all")
   const [statusFilter, setStatusFilter] = useState<string>("all")
@@ -220,7 +232,7 @@ function DashboardSidebar({
             {filteredApiSamples.slice(0, 5).map((sample) => (
               <div 
                 key={sample.id} 
-                className="text-sm p-2 rounded-md hover:bg-secondary/50 cursor-pointer flex items-center justify-between"
+                className="text-sm p-2 rounded-md hover:bg-secondary/50 cursor-pointer flex items-center justify-between group"
               >
                 <div className="flex-1 min-w-0">
                   <span className="truncate block">{sample.sample_id}</span>
@@ -230,10 +242,24 @@ function DashboardSidebar({
                 </div>
                 <div className="flex gap-1">
                   {sample.files?.fcs && (
-                    <Badge variant="outline" className="text-[10px] px-1">FCS</Badge>
+                    <Badge 
+                      variant="outline" 
+                      className="text-[10px] px-1 hover:bg-primary hover:text-primary-foreground cursor-pointer transition-colors"
+                      onClick={() => onSampleClick?.(sample.sample_id, "fcs")}
+                      title="Open in Flow Cytometry tab"
+                    >
+                      FCS
+                    </Badge>
                   )}
                   {sample.files?.nta && (
-                    <Badge variant="outline" className="text-[10px] px-1">NTA</Badge>
+                    <Badge 
+                      variant="outline" 
+                      className="text-[10px] px-1 hover:bg-primary hover:text-primary-foreground cursor-pointer transition-colors"
+                      onClick={() => onSampleClick?.(sample.sample_id, "nta")}
+                      title="Open in NTA tab"
+                    >
+                      NTA
+                    </Badge>
                   )}
                 </div>
               </div>
@@ -820,6 +846,73 @@ function FlowCytometrySidebar() {
               </div>
             </div>
           )}
+        </AccordionContent>
+      </AccordionItem>
+
+      {/* TASK-019: Visualization Settings with Histogram Bin Configuration */}
+      <AccordionItem value="visualization" className="border rounded-lg px-3">
+        <AccordionTrigger className="text-sm font-medium py-3">
+          <span className="flex items-center gap-2">
+            <SlidersHorizontal className="h-4 w-4 text-primary" />
+            Visualization
+          </span>
+        </AccordionTrigger>
+        <AccordionContent className="space-y-4 pb-4">
+          {/* Histogram Bins Slider - TASK-019 */}
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">Histogram Bins</Label>
+            <div className="flex items-center gap-2">
+              <Slider 
+                value={[fcsAnalysisSettings?.histogramBins || 20]} 
+                min={10} 
+                max={100} 
+                step={5} 
+                className="flex-1"
+                onValueChange={(v) => {
+                  setFcsAnalysisSettings({
+                    ...fcsAnalysisSettings!,
+                    histogramBins: v[0],
+                  })
+                }}
+              />
+              <span className="text-sm font-mono w-10">{fcsAnalysisSettings?.histogramBins || 20}</span>
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              Number of bins for size distribution histogram (10-100)
+            </p>
+          </div>
+        </AccordionContent>
+      </AccordionItem>
+
+      {/* TASK-016: Best Practices Comparison Engine */}
+      <AccordionItem value="best-practices" className="border rounded-lg px-3">
+        <AccordionTrigger className="text-sm font-medium py-3">
+          <span className="flex items-center gap-2">
+            <Shield className="h-4 w-4 text-primary" />
+            Best Practices
+          </span>
+        </AccordionTrigger>
+        <AccordionContent className="pb-4">
+          <BestPracticesPanel 
+            data={{
+              // Experimental conditions from saved data
+              antibody_concentration_ug: fcsAnalysis.experimentalConditions?.antibodyConcentration,
+              dilution_factor: fcsAnalysis.experimentalConditions?.dilutionFactor,
+              incubation_time_min: fcsAnalysis.experimentalConditions?.incubationTime,
+              // Size statistics from analysis results
+              median_size_nm: fcsAnalysis.results?.statistics?.medianDiameter,
+              d10_nm: fcsAnalysis.results?.statistics?.d10,
+              d50_nm: fcsAnalysis.results?.statistics?.d50,
+              d90_nm: fcsAnalysis.results?.statistics?.d90,
+              // Quality metrics
+              total_events: fcsAnalysis.results?.statistics?.totalParticles,
+              anomaly_pct: fcsAnalysis.results?.statistics?.anomalyPercentage,
+              valid_events_pct: fcsAnalysis.results?.statistics?.validParticles 
+                ? (fcsAnalysis.results.statistics.validParticles / (fcsAnalysis.results.statistics.totalParticles || 1)) * 100
+                : undefined,
+            } as ExperimentData} 
+            compact={true}
+          />
         </AccordionContent>
       </AccordionItem>
 

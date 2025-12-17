@@ -56,6 +56,35 @@ export interface FCSResult {
     mean: number;
     std: number;
   };
+  // TASK-002: Size filtering statistics (Dec 17, 2025)
+  size_filtering?: {
+    total_input: number;
+    valid_count: number;
+    display_count: number;
+    excluded_below: number;
+    excluded_above: number;
+    exclusion_pct: number;
+  };
+  excluded_particles_pct?: number;
+  size_range?: {
+    valid_min: number;
+    valid_max: number;
+    display_min: number;
+    display_max: number;
+  };
+  // TASK-010: VSSC_MAX auto-selection statistics (Dec 17, 2025)
+  // Parvesh: "Create a new column... VSSC max and let it look at the VSSC 1 H and VSSC 2 H 
+  // and pick whichever the larger one is"
+  vssc_max_used?: boolean;
+  vssc_selection?: {
+    vssc1_channel: string;
+    vssc2_channel: string;
+    vssc1_selected_count: number;
+    vssc2_selected_count: number;
+    vssc1_selected_pct: number;
+    vssc2_selected_pct: number;
+  };
+  ssc_channel_used?: string;
 }
 
 export interface NTAResult {
@@ -84,6 +113,40 @@ export interface NTAResult {
     mean: number;
     std: number;
   };
+  // TASK-007: PDF-extracted data (Dec 17, 2025)
+  // Concentration and dilution from ZetaView PDF report
+  pdf_data?: {
+    original_concentration: number | null;
+    dilution_factor: number | null;
+    true_particle_population: number | null;
+    mode_size_nm: number | null;
+    pdf_file_name: string | null;
+    extraction_successful: boolean;
+  };
+}
+
+/**
+ * TASK-009: Experimental Conditions interface
+ * Stores metadata about experiment setup for reproducibility and AI analysis
+ */
+export interface ExperimentalConditions {
+  id: number;
+  sample_id: number;
+  operator: string;
+  temperature_celsius?: number;
+  ph?: number;
+  substrate_buffer?: string;
+  custom_buffer?: string;
+  sample_volume_ul?: number;
+  dilution_factor?: number;
+  antibody_used?: string;
+  antibody_concentration_ug?: number;
+  incubation_time_min?: number;
+  sample_type?: string;
+  filter_size_um?: number;
+  notes?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface ProcessingJob {
@@ -270,6 +333,59 @@ class ApiClient {
     }
   }
 
+  /**
+   * TASK-007: Upload NTA PDF report to extract concentration and dilution factor
+   * 
+   * Client Quote (Surya, Dec 3, 2025):
+   * "That number is not ever mentioned in a text format... it is always mentioned 
+   * only in the PDF file"
+   */
+  async uploadNtaPdf(
+    file: File,
+    linkedSampleId?: string
+  ): Promise<{
+    success: boolean;
+    pdf_file: string;
+    pdf_data: {
+      original_concentration: number | null;
+      dilution_factor: number | null;
+      true_particle_population: number | null;
+      mean_size_nm: number | null;
+      mode_size_nm: number | null;
+      median_size_nm: number | null;
+      d10_nm: number | null;
+      d50_nm: number | null;
+      d90_nm: number | null;
+      sample_name: string | null;
+      measurement_date: string | null;
+      operator: string | null;
+      extraction_successful: boolean;
+      extraction_errors: string[];
+    };
+    linked_sample_id: string | null;
+    message: string;
+  }> {
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      
+      if (linkedSampleId) {
+        formData.append("linked_sample_id", linkedSampleId);
+      }
+
+      const response = await fetch(`${this.baseUrl}/upload/nta-pdf`, {
+        method: "POST",
+        body: formData,
+      });
+
+      this.isOffline = false;
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] NTA PDF upload failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
   async uploadBatch(files: File[]): Promise<{
     success: boolean;
     uploaded: number;
@@ -388,6 +504,116 @@ class ApiClient {
     } catch (error) {
       console.error("[API] Delete sample failed:", error);
       throw error;
+    }
+  }
+
+  // =========================================================================
+  // Experimental Conditions (TASK-009)
+  // =========================================================================
+
+  /**
+   * TASK-009: Save experimental conditions for a sample
+   * 
+   * Client Quote (Parvesh, Dec 5, 2025):
+   * "We'd also want a way to be able to log conditions for the experiment"
+   * 
+   * Store metadata for: temperature, pH, buffer, antibody, operator, etc.
+   */
+  async saveExperimentalConditions(
+    sampleId: string,
+    conditions: {
+      operator: string;
+      temperature_celsius?: number;
+      ph?: number;
+      substrate_buffer?: string;
+      custom_buffer?: string;
+      sample_volume_ul?: number;
+      dilution_factor?: number;
+      antibody_used?: string;
+      antibody_concentration_ug?: number;
+      incubation_time_min?: number;
+      sample_type?: string;
+      filter_size_um?: number;
+      notes?: string;
+    }
+  ): Promise<{
+    success: boolean;
+    conditions_id: number;
+    sample_id: string;
+    conditions: ExperimentalConditions;
+    message: string;
+  }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/samples/${sampleId}/conditions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(conditions),
+      });
+
+      this.isOffline = false;
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Save experimental conditions failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  async getExperimentalConditions(
+    sampleId: string
+  ): Promise<{
+    sample_id: string;
+    has_conditions: boolean;
+    conditions: ExperimentalConditions | null;
+  }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/samples/${sampleId}/conditions`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      this.isOffline = false;
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Get experimental conditions failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  async updateExperimentalConditions(
+    sampleId: string,
+    conditions: Partial<{
+      operator: string;
+      temperature_celsius: number;
+      ph: number;
+      substrate_buffer: string;
+      custom_buffer: string;
+      sample_volume_ul: number;
+      dilution_factor: number;
+      antibody_used: string;
+      antibody_concentration_ug: number;
+      incubation_time_min: number;
+      sample_type: string;
+      filter_size_um: number;
+      notes: string;
+    }>
+  ): Promise<{
+    success: boolean;
+    sample_id: string;
+    conditions: ExperimentalConditions | null;
+    message: string;
+  }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/samples/${sampleId}/conditions`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(conditions),
+      });
+
+      this.isOffline = false;
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Update experimental conditions failed:", error);
+      this.handleNetworkError(error);
     }
   }
 

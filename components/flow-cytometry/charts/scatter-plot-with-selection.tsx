@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Download, ZoomIn, ZoomOut, Maximize2, RefreshCw, Box } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { CHART_COLORS } from "@/lib/store"
 
 export interface ScatterDataPoint {
   x: number
@@ -321,7 +322,7 @@ export function ScatterPlotChart({
                 stroke="#64748b"
                 tick={{ fontSize: 11 }}
                 label={{ value: xLabel, position: "bottom", offset: -5, fill: "#64748b", fontSize: 12 }}
-                domain={zoom.xMin ? [zoom.xMin, zoom.xMax] : ["auto", "auto"]}
+                domain={zoom.xMin && zoom.xMax ? [zoom.xMin, zoom.xMax] : ["auto", "auto"]}
               />
               <YAxis
                 dataKey="y"
@@ -329,7 +330,7 @@ export function ScatterPlotChart({
                 stroke="#64748b"
                 tick={{ fontSize: 11 }}
                 label={{ value: yLabel, angle: -90, position: "insideLeft", fill: "#64748b", fontSize: 12 }}
-                domain={zoom.yMin ? [zoom.yMin, zoom.yMax] : ["auto", "auto"]}
+                domain={zoom.yMin && zoom.yMax ? [zoom.yMin, zoom.yMax] : ["auto", "auto"]}
               />
               <ZAxis dataKey="z" range={[20, 100]} />
               <Tooltip
@@ -355,12 +356,13 @@ export function ScatterPlotChart({
                   y2={selectionBox.y2}
                   strokeOpacity={0.3}
                   fillOpacity={0.1}
-                  fill="#3b82f6"
-                  stroke="#3b82f6"
+                  fill={CHART_COLORS.primary}
+                  stroke={CHART_COLORS.primary}
                 />
               )}
 
-              <Scatter name="Normal Events" data={normalData} fill="#3b82f6" fillOpacity={0.6} shape="circle" />
+              {/* TASK-018: Use consistent purple color for normal events */}
+              <Scatter name="Normal Events" data={normalData} fill={CHART_COLORS.primary} fillOpacity={0.6} shape="circle" />
               {anomalyData.length > 0 && highlightAnomalies && (
                 <Scatter name="Anomalous Events" data={anomalyData} fill="#ef4444" fillOpacity={0.9} shape="circle" />
               )}

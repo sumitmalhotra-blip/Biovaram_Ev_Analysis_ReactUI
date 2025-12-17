@@ -153,9 +153,28 @@ export interface FCSAnalysisSettings {
   zscoreThreshold: number
   iqrFactor: number
   highlightAnomalies: boolean
-  // Visualization Settings
+  // Visualization Settings (TASK-019: Histogram bin configuration)
   useInteractivePlots: boolean
+  histogramBins: number  // TASK-019: Configurable histogram bin count (10-100)
 }
+
+// Chart Color Scheme (TASK-018: Consistent color scheme)
+// Client requested: Purple for normal, Red for anomalies (matches Streamlit)
+export const CHART_COLORS = {
+  primary: "#7c3aed",        // Purple - normal data points
+  secondary: "#a855f7",      // Light purple - secondary data
+  anomaly: "#ef4444",        // Red - anomalies
+  warning: "#f59e0b",        // Amber - warnings
+  success: "#22c55e",        // Green - success/valid
+  info: "#3b82f6",           // Blue - informational
+  muted: "#6b7280",          // Gray - reference lines
+  background: "#1f2937",     // Dark background
+  // EV Size Category Colors
+  smallEV: "#22c55e",        // Green - small EVs
+  exosomes: "#7c3aed",       // Purple - exosomes (main)
+  largeEV: "#f59e0b",        // Amber - large EVs
+  microvesicles: "#ef4444",  // Red - microvesicles
+} as const
 
 // Cross-Comparison Settings
 export interface CrossComparisonSettings {

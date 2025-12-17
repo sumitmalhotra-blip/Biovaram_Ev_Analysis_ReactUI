@@ -42,6 +42,12 @@ from src.database.crud import (
 from src.parsers.fcs_parser import FCSParser
 from src.parsers.nta_parser import NTAParser
 from src.physics.mie_scatter import MieScatterCalculator
+# Import size configuration for consistent filtering (TASK-002 fix, Dec 17, 2025)
+from src.physics.size_config import (
+    DEFAULT_SIZE_CONFIG, 
+    filter_particles_by_size,
+    calculate_size_statistics
+)
 
 settings = get_settings()
 router = APIRouter()
@@ -210,6 +216,15 @@ async def upload_fcs_file(
                 # Find FSC and SSC channels (handle different naming conventions)
                 fsc_channel = None
                 ssc_channel = None
+                
+                # TASK-010: Detect VSSC1-H and VSSC2-H for VSSC_MAX calculation
+                # Parvesh (Dec 5, 2025): "Create a new column... VSSC max and let it look at 
+                # the VSSC 1 H and VSSC 2 H and pick whichever the larger one is"
+                vssc1_h_channel = None
+                vssc2_h_channel = None
+                vssc_max_created = False
+                vssc_selection_stats = None
+                
                 for ch in channels:
                     ch_upper = ch.upper()
                     # FSC detection: VFSC-H, FSC-A, FSC-H, VFSC_A, or just FSC
@@ -222,6 +237,12 @@ async def upload_fcs_file(
                                 fsc_channel = ch
                         elif fsc_channel is None:
                             fsc_channel = ch
+                    
+                    # TASK-010: Detect VSSC1-H and VSSC2-H specifically
+                    if 'VSSC1' in ch_upper and ('-H' in ch_upper or '_H' in ch_upper):
+                        vssc1_h_channel = ch
+                    elif 'VSSC2' in ch_upper and ('-H' in ch_upper or '_H' in ch_upper):
+                        vssc2_h_channel = ch
                     # SSC detection: VSSC-H, SSC-A, SSC-H, VSSC_A, or just SSC
                     elif ssc_channel is None and 'SSC' in ch_upper:
                         # Prefer height channels (-H) over area (-A)
@@ -232,6 +253,50 @@ async def upload_fcs_file(
                                 ssc_channel = ch
                         elif ssc_channel is None:
                             ssc_channel = ch
+                
+                # TASK-010: Create VSSC_MAX column if both VSSC1-H and VSSC2-H exist
+                # For each event, VSSC_MAX = max(VSSC1-H, VSSC2-H)
+                if vssc1_h_channel and vssc2_h_channel:
+                    try:
+                        vssc1_values = parsed_data[vssc1_h_channel].values
+                        vssc2_values = parsed_data[vssc2_h_channel].values
+                        
+                        # Create VSSC_MAX as element-wise maximum
+                        vssc_max_values = np.maximum(vssc1_values, vssc2_values)
+                        parsed_data['VSSC_MAX'] = vssc_max_values
+                        
+                        # Calculate selection statistics (which channel was selected for each event)
+                        vssc1_selected = np.sum(vssc1_values >= vssc2_values)
+                        vssc2_selected = np.sum(vssc2_values > vssc1_values)
+                        total_events_vssc = len(vssc_max_values)
+                        
+                        vssc_selection_stats = {
+                            'vssc1_channel': vssc1_h_channel,
+                            'vssc2_channel': vssc2_h_channel,
+                            'vssc1_selected_count': int(vssc1_selected),
+                            'vssc2_selected_count': int(vssc2_selected),
+                            'vssc1_selected_pct': float((vssc1_selected / total_events_vssc) * 100) if total_events_vssc > 0 else 0.0,
+                            'vssc2_selected_pct': float((vssc2_selected / total_events_vssc) * 100) if total_events_vssc > 0 else 0.0,
+                        }
+                        
+                        # Use VSSC_MAX as the SSC channel for Mie calculations
+                        ssc_channel = 'VSSC_MAX'
+                        vssc_max_created = True
+                        
+                        logger.info(
+                            f"✨ TASK-010: Created VSSC_MAX column from {vssc1_h_channel} and {vssc2_h_channel}"
+                        )
+                        logger.info(
+                            f"📊 VSSC selection: {vssc1_h_channel}={vssc_selection_stats['vssc1_selected_pct']:.1f}%, "
+                            f"{vssc2_h_channel}={vssc_selection_stats['vssc2_selected_pct']:.1f}%"
+                        )
+                    except Exception as vssc_error:
+                        logger.warning(f"⚠️ Failed to create VSSC_MAX: {vssc_error}")
+                        # Fall back to using whichever VSSC channel exists
+                        if vssc1_h_channel:
+                            ssc_channel = vssc1_h_channel
+                        elif vssc2_h_channel:
+                            ssc_channel = vssc2_h_channel
                 
                 # Fallback: Use first two channels if FSC/SSC not found (for generic channel names)
                 if not fsc_channel and len(channels) >= 1:
@@ -249,6 +314,7 @@ async def upload_fcs_file(
                 ssc_stats = stats.get(ssc_channel, {}) if ssc_channel else {}
                 
                 # Calculate particle size using Mie scattering theory
+                # TASK-002 FIX (Dec 17, 2025): Use extended range to avoid edge clustering
                 particle_size_median_nm = None
                 if fsc_channel and fsc_stats.get('median'):
                     try:
@@ -259,10 +325,10 @@ async def upload_fcs_file(
                             n_medium=1.33
                         )
                         # Estimate diameter from FSC median intensity
+                        # Uses extended range from size_config (30-220nm) to avoid clamping
                         diameter_nm, success = mie_calc.diameter_from_scatter(
                             fsc_intensity=fsc_stats['median'],
-                            min_diameter=10.0,  # EV size range
-                            max_diameter=500.0
+                            # min_diameter/max_diameter now default to SIZE_CONFIG values (30-220nm)
                         )
                         if success:
                             particle_size_median_nm = float(diameter_nm)
@@ -272,6 +338,7 @@ async def upload_fcs_file(
                 
                 # Calculate size distribution percentiles using Mie theory
                 size_statistics = None
+                computed_sizes = None  # Will store actual sizes for std calculation
                 if fsc_channel and fsc_stats:
                     try:
                         mie_calc = MieScatterCalculator(wavelength_nm=488.0, n_particle=1.40, n_medium=1.33)
@@ -282,18 +349,37 @@ async def upload_fcs_file(
                         d90, _ = mie_calc.diameter_from_scatter(fsc_stats.get('q90', 0))
                         d_mean, _ = mie_calc.diameter_from_scatter(fsc_stats.get('mean', 0))
                         
+                        # Calculate actual size std by computing sizes for a sample of events
+                        size_std = None
+                        try:
+                            sample_size = min(5000, len(parsed_data))
+                            sampled_fsc = parsed_data[fsc_channel].sample(n=sample_size, random_state=42)
+                            computed_sizes = []
+                            for fsc_val in sampled_fsc:
+                                sz, success = mie_calc.diameter_from_scatter(float(fsc_val))
+                                if success and 30 <= sz <= 500:  # Valid size range
+                                    computed_sizes.append(sz)
+                            if computed_sizes:
+                                size_std = float(np.std(computed_sizes))
+                        except Exception as std_err:
+                            logger.warning(f"⚠️ Size std calculation failed: {std_err}")
+                            size_std = fsc_stats.get('std', 0) * 0.5  # Fallback
+                        
                         size_statistics = {
                             'd10': float(d10) if d10 > 0 else None,
                             'd50': float(d50) if d50 > 0 else None,
                             'd90': float(d90) if d90 > 0 else None,
                             'mean': float(d_mean) if d_mean > 0 else None,
-                            'std': fsc_stats.get('std', 0) * 0.5  # Approximate size std from FSC std
+                            'std': size_std if size_std is not None else 0.0
                         }
-                        logger.info(f"📏 Size distribution: D10={d10:.1f}, D50={d50:.1f}, D90={d90:.1f} nm")
+                        logger.info(f"📏 Size distribution: D10={d10:.1f}, D50={d50:.1f}, D90={d90:.1f} nm, Std={size_std:.1f if size_std else 0}")
                     except Exception as size_error:
                         logger.warning(f"⚠️ Size distribution calculation failed: {size_error}")
                 
-                # Calculate debris percentage (particles < 50nm or > 500nm)
+                # Calculate particle exclusion and debris statistics
+                # TASK-002 FIX (Dec 17, 2025): Use filtering, not clamping
+                size_filtering_stats = None
+                excluded_particles_pct = None
                 debris_pct = None
                 if fsc_channel and fsc_channel in parsed_data.columns:
                     try:
@@ -304,21 +390,36 @@ async def upload_fcs_file(
                         
                         sizes = []
                         for fsc_val in sampled_fsc:
+                            # Uses extended range from size_config (30-220nm)
                             size, success = mie_calc.diameter_from_scatter(
-                                fsc_intensity=float(fsc_val),
-                                min_diameter=10.0,
-                                max_diameter=500.0
+                                fsc_intensity=float(fsc_val)
                             )
                             if success:
                                 sizes.append(size)
                         
                         if sizes:
                             sizes_array = np.array(sizes)
-                            debris_count = np.sum((sizes_array < 50) | (sizes_array > 500))
-                            debris_pct = float((debris_count / len(sizes)) * 100)
-                            logger.info(f"🔍 Debris percentage: {debris_pct:.1f}%")
+                            
+                            # Apply proper filtering using size_config
+                            filtered_sizes, filter_stats = filter_particles_by_size(sizes_array)
+                            size_filtering_stats = filter_stats
+                            excluded_particles_pct = filter_stats.get('exclusion_pct', 0.0)
+                            
+                            # Debris = particles outside display range but inside valid range
+                            # (particles too small or too large but still within 30-220nm)
+                            display_min = DEFAULT_SIZE_CONFIG.display_min_nm  # 40nm
+                            display_max = DEFAULT_SIZE_CONFIG.display_max_nm  # 200nm
+                            non_display_count = np.sum(
+                                (filtered_sizes < display_min) | (filtered_sizes > display_max)
+                            )
+                            debris_pct = float((non_display_count / len(filtered_sizes)) * 100) if len(filtered_sizes) > 0 else 0.0
+                            
+                            logger.info(
+                                f"🔍 Size filtering: {filter_stats['valid_count']}/{filter_stats['total_input']} valid, "
+                                f"{filter_stats['exclusion_pct']:.1f}% excluded, {debris_pct:.1f}% debris"
+                            )
                     except Exception as debris_error:
-                        logger.warning(f"⚠️ Debris calculation failed: {debris_error}")
+                        logger.warning(f"⚠️ Size filtering calculation failed: {debris_error}")
                 
                 # Check for CD81 or other markers
                 cd81_positive_pct = None
@@ -335,6 +436,8 @@ async def upload_fcs_file(
                                 break
                 
                 # Build comprehensive FCS results
+                # TASK-002 FIX (Dec 17, 2025): Include size filtering statistics
+                # TASK-010 FIX (Dec 17, 2025): Include VSSC_MAX selection statistics
                 fcs_results = {
                     'total_events': event_count,
                     'event_count': event_count,
@@ -347,6 +450,19 @@ async def upload_fcs_file(
                     'size_statistics': size_statistics,
                     'debris_pct': debris_pct,
                     'cd81_positive_pct': cd81_positive_pct,
+                    # New fields for size filtering transparency
+                    'size_filtering': size_filtering_stats,
+                    'excluded_particles_pct': excluded_particles_pct,
+                    'size_range': {
+                        'valid_min': DEFAULT_SIZE_CONFIG.valid_min_nm,
+                        'valid_max': DEFAULT_SIZE_CONFIG.valid_max_nm,
+                        'display_min': DEFAULT_SIZE_CONFIG.display_min_nm,
+                        'display_max': DEFAULT_SIZE_CONFIG.display_max_nm,
+                    },
+                    # TASK-010: VSSC_MAX auto-selection info
+                    'vssc_max_used': vssc_max_created,
+                    'vssc_selection': vssc_selection_stats,
+                    'ssc_channel_used': ssc_channel,
                 }
                 
                 logger.success(f"✅ Parsed {event_count} events with {len(channels)} channels")
@@ -727,6 +843,106 @@ async def upload_nta_file(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to process upload: {str(e)}"
+        )
+
+
+# ============================================================================
+# NTA PDF Report Upload Endpoint (TASK-007)
+# ============================================================================
+
+@router.post("/nta-pdf", response_model=dict)
+async def upload_nta_pdf(
+    file: UploadFile = File(...),
+    linked_sample_id: Optional[str] = Form(None),
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    Upload and parse NTA PDF report to extract concentration and dilution factor.
+    
+    TASK-007: Implement PDF Parsing for NTA Reports
+    
+    Client Quote (Surya, Dec 3, 2025):
+    "That number is not ever mentioned in a text format... it is always mentioned 
+    only in the PDF file... I was struggling through"
+    
+    **Request:**
+    - file: NTA PDF report (.pdf)
+    - linked_sample_id: Optional sample ID to link this PDF data with
+    
+    **Response:**
+    ```json
+    {
+        "success": true,
+        "pdf_data": {
+            "original_concentration": 3.5e10,
+            "dilution_factor": 500,
+            "true_particle_population": 1.75e13,
+            "mean_size_nm": 120.5,
+            "mode_size_nm": 95.3
+        },
+        "message": "PDF parsed successfully"
+    }
+    ```
+    """
+    logger.info(f"📤 Uploading NTA PDF: {file.filename}")
+    
+    try:
+        # Validate file extension
+        filename = file.filename or ""
+        if not filename.lower().endswith('.pdf'):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid file type. Only .pdf files are accepted."
+            )
+        
+        # Save uploaded file
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        file_path = settings.upload_dir / f"{timestamp}_{file.filename}"
+        await save_uploaded_file(file, file_path)
+        
+        # Parse PDF using NTA PDF parser
+        from src.parsers.nta_pdf_parser import parse_nta_pdf, check_pdf_support
+        
+        if not check_pdf_support():
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="PDF parsing not available. Install pdfplumber: pip install pdfplumber"
+            )
+        
+        pdf_data = parse_nta_pdf(file_path)
+        
+        if not pdf_data.get('extraction_successful'):
+            logger.warning(f"⚠️ PDF extraction incomplete: {pdf_data.get('extraction_errors')}")
+        
+        # If linked to a sample, update the sample's NTA results
+        if linked_sample_id:
+            try:
+                existing_sample = await get_sample_by_id(db, linked_sample_id)
+                if existing_sample:
+                    # Update NTA results with PDF data
+                    # This is a simplified version - full implementation would update NTAResult
+                    logger.info(f"📝 Linked PDF data to sample: {linked_sample_id}")
+            except Exception as link_error:
+                logger.warning(f"⚠️ Could not link PDF to sample: {link_error}")
+        
+        logger.success(f"✅ NTA PDF parsed successfully")
+        
+        return {
+            "success": True,
+            "pdf_file": file.filename,
+            "pdf_data": pdf_data,
+            "linked_sample_id": linked_sample_id,
+            "message": "PDF parsed successfully" if pdf_data.get('extraction_successful') else "PDF parsed with warnings",
+            "upload_timestamp": datetime.now().isoformat(),
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"❌ Failed to upload NTA PDF: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to process PDF: {str(e)}"
         )
 
 

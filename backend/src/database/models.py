@@ -111,6 +111,7 @@ class Sample(Base):
     nta_results = relationship("NTAResult", back_populates="sample", cascade="all, delete-orphan")
     qc_reports = relationship("QCReport", back_populates="sample", cascade="all, delete-orphan")
     processing_jobs = relationship("ProcessingJob", back_populates="sample", cascade="all, delete-orphan")
+    experimental_conditions = relationship("ExperimentalConditions", back_populates="sample", cascade="all, delete-orphan")
     
     # Indexes for common queries
     __table_args__ = (
@@ -340,6 +341,88 @@ class QCReport(Base):
     
     def __repr__(self) -> str:
         return f"<QCReport(id={self.id}, sample_id={self.sample_id}, status='{self.qc_status}')>"
+
+
+# ============================================================================
+# Experimental Conditions (TASK-009)
+# ============================================================================
+
+class ExperimentalConditions(Base):
+    """
+    Experimental conditions captured during sample processing.
+    
+    TASK-009: Store experimental metadata for reproducibility and AI analysis.
+    
+    Client Quote (Jagan, Nov 27, 2025):
+    "Capture important experimental metadata for your analysis.
+    This information helps ensure reproducibility and proper interpretation of results."
+    """
+    __tablename__ = "experimental_conditions"
+    
+    # Primary Key
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    
+    # Foreign Key - links to sample
+    sample_id = Column(Integer, ForeignKey("samples.id"), nullable=False, index=True)
+    
+    # Measurement Conditions
+    temperature_celsius = Column(Float, nullable=True)  # e.g., 22.5
+    ph = Column(Float, nullable=True)  # e.g., 7.4
+    
+    # Buffer and Media
+    substrate_buffer = Column(String(100), nullable=True)  # e.g., "PBS", "HEPES", "Custom"
+    custom_buffer = Column(String(255), nullable=True)  # For custom buffer specification
+    
+    # Sample Preparation
+    sample_volume_ul = Column(Float, nullable=True)  # Sample volume in microliters
+    dilution_factor = Column(Integer, nullable=True)  # e.g., 100, 500, 1000
+    
+    # Antibody Details
+    antibody_used = Column(String(100), nullable=True)  # e.g., "CD81", "CD9", "CD63"
+    antibody_concentration_ug = Column(Float, nullable=True)  # Concentration in µg
+    
+    # Incubation
+    incubation_time_min = Column(Float, nullable=True)  # Incubation time in minutes
+    
+    # Sample Type and Preparation Method
+    sample_type = Column(String(100), nullable=True)  # e.g., "SEC", "Centrifugation", "Ultracentrifugation"
+    filter_size_um = Column(Float, nullable=True)  # e.g., 0.22, 0.45
+    
+    # Operator and Notes
+    operator = Column(String(100), nullable=False)  # Required: who performed the experiment
+    notes = Column(Text, nullable=True)  # Free-text notes
+    
+    # Timestamps
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+    updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
+    
+    # Relationship
+    sample = relationship("Sample", back_populates="experimental_conditions")
+    
+    def __repr__(self) -> str:
+        return f"<ExperimentalConditions(id={self.id}, sample_id={self.sample_id}, operator='{self.operator}')>"
+    
+    def to_dict(self):
+        """Convert to dictionary for API response."""
+        return {
+            "id": self.id,
+            "sample_id": self.sample_id,
+            "temperature_celsius": self.temperature_celsius,
+            "ph": self.ph,
+            "substrate_buffer": self.substrate_buffer,
+            "custom_buffer": self.custom_buffer,
+            "sample_volume_ul": self.sample_volume_ul,
+            "dilution_factor": self.dilution_factor,
+            "antibody_used": self.antibody_used,
+            "antibody_concentration_ug": self.antibody_concentration_ug,
+            "incubation_time_min": self.incubation_time_min,
+            "sample_type": self.sample_type,
+            "filter_size_um": self.filter_size_um,
+            "operator": self.operator,
+            "notes": self.notes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
 
 
 # ============================================================================

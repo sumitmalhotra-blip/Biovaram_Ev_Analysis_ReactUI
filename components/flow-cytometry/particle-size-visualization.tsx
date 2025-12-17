@@ -86,10 +86,10 @@ export function ParticleSizeVisualization({
 
   return (
     <Card className="card-3d overflow-hidden">
-      <CardHeader className="pb-3 bg-gradient-to-r from-primary/5 to-accent/5">
+      <CardHeader className="pb-3 bg-linear-to-r from-primary/5 to-accent/5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-linear-to-br from-primary/20 to-accent/20 flex items-center justify-center">
               <Sparkles className="h-4 w-4 text-primary" />
             </div>
             <CardTitle className="text-base md:text-lg">Particle Size Distribution</CardTitle>
@@ -119,7 +119,7 @@ export function ParticleSizeVisualization({
           <div className="text-sm font-medium text-muted-foreground mb-3">Size Category Breakdown</div>
 
           {/* Visual Circles showing relative sizes */}
-          <div className="flex items-end justify-center gap-6 h-32 p-4 rounded-lg bg-gradient-to-b from-secondary/50 to-transparent border">
+          <div className="flex items-end justify-center gap-6 h-32 p-4 rounded-lg bg-linear-to-b from-secondary/50 to-transparent border">
             {categories.map((category, idx) => {
               const sizes = [32, 56, 80] // Small, Medium, Large visual sizes
               const size = sizes[idx]

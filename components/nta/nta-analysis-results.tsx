@@ -387,17 +387,13 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
           <CardContent>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Median Size:</span>
+                <span className="text-muted-foreground">Median Size (D50):</span>
                 <span className="font-mono font-medium">
                   {results.median_size_nm ? `${results.median_size_nm.toFixed(1)} nm` : "N/A"}
                 </span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Mean Size:</span>
-                <span className="font-mono font-medium">
-                  {results.mean_size_nm ? `${results.mean_size_nm.toFixed(1)} nm` : "N/A"}
-                </span>
-              </div>
+              {/* Note: Mean Size removed per client request (Surya, Dec 3, 2025) */}
+              {/* "Mean is basically not the real metric... median is what really existed in the data set" */}
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Size Range (D10-D90):</span>
                 <span className="font-mono font-medium">
@@ -420,7 +416,7 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Std Dev:</span>
                   <span className="font-mono font-medium">
-                    {results.size_statistics.std.toFixed(1)} nm
+                    ±{results.size_statistics.std.toFixed(1)} nm
                   </span>
                 </div>
               )}

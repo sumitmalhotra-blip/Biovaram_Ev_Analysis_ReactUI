@@ -40,6 +40,7 @@ export function useApi() {
     addProcessingJob,
     updateProcessingJob,
     apiConnected,
+    setActiveTab,
   } = useAnalysisStore()
 
   // =========================================================================
@@ -154,6 +155,81 @@ export function useApi() {
       }
     },
     [toast]
+  )
+
+  /**
+   * Open a sample in its respective analysis tab with loaded results
+   * This fetches the sample's analysis results and navigates to the appropriate tab
+   */
+  const openSampleInTab = useCallback(
+    async (sampleId: string, type: "fcs" | "nta") => {
+      if (apiClient.offline) {
+        toast({
+          variant: "destructive",
+          title: "Backend offline",
+          description: "Cannot load sample - backend server is not running",
+        })
+        return false
+      }
+
+      try {
+        if (type === "fcs") {
+          // Load FCS results
+          const response = await apiClient.getFCSResults(sampleId)
+          if (response && response.results.length > 0) {
+            // Set the most recent result
+            const latestResult = response.results[0]
+            setFCSSampleId(sampleId)
+            setFCSResults(latestResult)
+            setActiveTab("flow-cytometry")
+            toast({
+              title: "Sample loaded",
+              description: `FCS results for ${sampleId} loaded in Flow Cytometry tab`,
+            })
+            return true
+          } else {
+            toast({
+              variant: "destructive",
+              title: "No FCS results",
+              description: `No FCS analysis results found for ${sampleId}`,
+            })
+            return false
+          }
+        } else if (type === "nta") {
+          // Load NTA results
+          const response = await apiClient.getNTAResults(sampleId)
+          if (response && response.results.length > 0) {
+            // Set the most recent result
+            const latestResult = response.results[0]
+            setNTASampleId(sampleId)
+            setNTAResults(latestResult)
+            setActiveTab("nta")
+            toast({
+              title: "Sample loaded",
+              description: `NTA results for ${sampleId} loaded in NTA tab`,
+            })
+            return true
+          } else {
+            toast({
+              variant: "destructive",
+              title: "No NTA results",
+              description: `No NTA analysis results found for ${sampleId}`,
+            })
+            return false
+          }
+        }
+        return false
+      } catch (error) {
+        const message = getUserFriendlyErrorMessage(error)
+        toast({
+          variant: "destructive",
+          title: "Failed to load sample",
+          description: message,
+        })
+        return false
+      }
+    },
+    [toast, setFCSSampleId, setFCSResults, setNTASampleId, setNTAResults, setActiveTab]
   )
 
   const deleteSample = useCallback(
@@ -409,6 +485,60 @@ export function useApi() {
     ]
   )
 
+  // =========================================================================
+  // NTA PDF Upload (TASK-007)
+  // Surya (Dec 3): "That number is not ever mentioned in a text format... 
+  // it is always mentioned only in the PDF file"
+  // =========================================================================
+
+  const uploadNtaPdf = useCallback(
+    async (file: File, linkedSampleId?: string) => {
+      // Check if API is offline before attempting upload
+      if (apiClient.offline) {
+        toast({
+          variant: "destructive",
+          title: "Backend offline",
+          description: "Cannot upload PDF - backend server is not running",
+        })
+        return null
+      }
+
+      try {
+        const response = await apiClient.uploadNtaPdf(file, linkedSampleId)
+
+        if (response.success) {
+          const pdfData = response.pdf_data
+          
+          if (pdfData.extraction_successful) {
+            toast({
+              title: "✅ PDF parsed successfully",
+              description: pdfData.original_concentration 
+                ? `Original concentration: ${pdfData.original_concentration.toExponential(2)} particles/mL`
+                : "Extracted size statistics from PDF",
+            })
+          } else {
+            toast({
+              variant: "default",
+              title: "⚠️ PDF parsed with warnings",
+              description: `Some data could not be extracted: ${pdfData.extraction_errors?.join(", ")}`,
+            })
+          }
+
+          return response
+        }
+      } catch (error) {
+        const message = getUserFriendlyErrorMessage(error)
+        toast({
+          variant: "destructive",
+          title: "PDF upload failed",
+          description: message,
+        })
+        return null
+      }
+    },
+    [toast]
+  )
+
   const getNTAResults = useCallback(
     async (sampleId: string): Promise<NTAResult[] | null> => {
       if (apiClient.offline) return null
@@ -555,6 +685,7 @@ export function useApi() {
     fetchSamples,
     getSample,
     deleteSample,
+    openSampleInTab,
 
     // FCS
     uploadFCS,
@@ -562,7 +693,135 @@ export function useApi() {
 
     // NTA
     uploadNTA,
+    uploadNtaPdf,  // TASK-007: PDF parsing for concentration/dilution
     getNTAResults,
+
+    // Experimental Conditions (TASK-009)
+    // Parvesh (Dec 5): "We'd also want a way to be able to log conditions for the experiment"
+    saveExperimentalConditions: useCallback(
+      async (
+        sampleId: string,
+        conditions: {
+          operator: string;
+          temperature_celsius?: number;
+          ph?: number;
+          substrate_buffer?: string;
+          custom_buffer?: string;
+          sample_volume_ul?: number;
+          dilution_factor?: number;
+          antibody_used?: string;
+          antibody_concentration_ug?: number;
+          incubation_time_min?: number;
+          sample_type?: string;
+          filter_size_um?: number;
+          notes?: string;
+        }
+      ) => {
+        if (apiClient.offline) {
+          toast({
+            variant: "destructive",
+            title: "Backend offline",
+            description: "Cannot save conditions - backend server is not running",
+          })
+          return null
+        }
+
+        try {
+          const response = await apiClient.saveExperimentalConditions(sampleId, conditions)
+          
+          if (response.success) {
+            toast({
+              title: "✅ Conditions saved",
+              description: `Experimental conditions logged for ${sampleId}`,
+            })
+          }
+          
+          return response
+        } catch (error) {
+          const message = getUserFriendlyErrorMessage(error)
+          toast({
+            variant: "destructive",
+            title: "Failed to save conditions",
+            description: message,
+          })
+          return null
+        }
+      },
+      [toast]
+    ),
+
+    getExperimentalConditions: useCallback(
+      async (sampleId: string) => {
+        if (apiClient.offline) return null
+        
+        try {
+          return await apiClient.getExperimentalConditions(sampleId)
+        } catch (error) {
+          if (!isNetworkError(error)) {
+            const message = getUserFriendlyErrorMessage(error)
+            toast({
+              variant: "destructive",
+              title: "Failed to fetch conditions",
+              description: message,
+            })
+          }
+          return null
+        }
+      },
+      [toast]
+    ),
+
+    updateExperimentalConditions: useCallback(
+      async (
+        sampleId: string,
+        conditions: Partial<{
+          operator: string;
+          temperature_celsius: number;
+          ph: number;
+          substrate_buffer: string;
+          custom_buffer: string;
+          sample_volume_ul: number;
+          dilution_factor: number;
+          antibody_used: string;
+          antibody_concentration_ug: number;
+          incubation_time_min: number;
+          sample_type: string;
+          filter_size_um: number;
+          notes: string;
+        }>
+      ) => {
+        if (apiClient.offline) {
+          toast({
+            variant: "destructive",
+            title: "Backend offline",
+            description: "Cannot update conditions - backend server is not running",
+          })
+          return null
+        }
+
+        try {
+          const response = await apiClient.updateExperimentalConditions(sampleId, conditions)
+          
+          if (response.success) {
+            toast({
+              title: "✅ Conditions updated",
+              description: `Experimental conditions updated for ${sampleId}`,
+            })
+          }
+          
+          return response
+        } catch (error) {
+          const message = getUserFriendlyErrorMessage(error)
+          toast({
+            variant: "destructive",
+            title: "Failed to update conditions",
+            description: message,
+          })
+          return null
+        }
+      },
+      [toast]
+    ),
 
     // Batch
     uploadBatch,

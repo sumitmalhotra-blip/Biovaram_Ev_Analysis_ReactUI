@@ -41,6 +41,13 @@ import miepython
 from scipy.optimize import minimize_scalar, OptimizeResult
 from dataclasses import dataclass
 
+# Import size configuration for consistent range handling
+try:
+    from .size_config import DEFAULT_SIZE_CONFIG, SizeRangeConfig
+except ImportError:
+    # Fallback for direct execution
+    from size_config import DEFAULT_SIZE_CONFIG, SizeRangeConfig
+
 
 @dataclass
 class MieScatterResult:
@@ -273,8 +280,8 @@ class MieScatterCalculator:
     def diameter_from_scatter(
         self,
         fsc_intensity: float,
-        min_diameter: float = 30.0,
-        max_diameter: float = 200.0,
+        min_diameter: Optional[float] = None,
+        max_diameter: Optional[float] = None,
         tolerance: float = 1e-6
     ) -> Tuple[float, bool]:
         """
@@ -286,10 +293,14 @@ class MieScatterCalculator:
         implementation uses bounded scalar minimization (Brent's method) which is
         robust for non-smooth objectives.
         
+        IMPORTANT (Dec 17, 2025 - TASK-002 Fix):
+        The search range is now EXTENDED (30-220nm) to avoid edge clustering.
+        Particles outside valid range should be FILTERED, not clamped to boundaries.
+        
         Args:
             fsc_intensity: Measured forward scatter intensity (arbitrary units from flow cytometer)
-            min_diameter: Minimum diameter to search (nm). Default 30nm (small EV)
-            max_diameter: Maximum diameter to search (nm). Default 200nm (large EV)
+            min_diameter: Minimum diameter to search (nm). Uses SIZE_CONFIG if None.
+            max_diameter: Maximum diameter to search (nm). Uses SIZE_CONFIG if None.
             tolerance: Optimization tolerance (relative). Default 1e-6 (~0.0001 nm precision)
             
         Returns:
@@ -326,6 +337,11 @@ class MieScatterCalculator:
             - Time: ~0.1-1 ms per particle on modern CPU
             - For batch processing, consider using calibration curve
         """
+        # Use configuration defaults if not specified
+        if min_diameter is None:
+            min_diameter = DEFAULT_SIZE_CONFIG.search_min_nm
+        if max_diameter is None:
+            max_diameter = DEFAULT_SIZE_CONFIG.search_max_nm
         # Input validation
         if fsc_intensity <= 0:
             raise ValueError(f"FSC intensity must be positive, got {fsc_intensity}")

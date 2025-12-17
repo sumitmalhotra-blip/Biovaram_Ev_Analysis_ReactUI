@@ -2,11 +2,14 @@
 
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Cell } from "recharts"
 
+// Note: Mean removed from discrepancy metrics per client request (Surya, Dec 3, 2025)
+// "Mean is basically not the real metric... median is something that really existed in the data set"
+// Focus on D10, D50 (Median), D90, and Std Dev for comparison
 const data = [
   { metric: "D10", discrepancy: 3.2 },
-  { metric: "D50", discrepancy: 6.1 },
+  { metric: "D50 (Median)", discrepancy: 6.1 },
   { metric: "D90", discrepancy: 1.8 },
-  { metric: "Mean", discrepancy: 5.0 },
+  { metric: "Std Dev", discrepancy: 5.3 },
 ]
 
 const THRESHOLD = 15

@@ -18,7 +18,7 @@ export function TabNavigation() {
   const { activeTab, setActiveTab } = useAnalysisStore()
 
   return (
-    <nav className="h-12 border-b border-border/50 bg-card/50 backdrop-blur-sm flex items-center px-2 md:px-4 gap-1 overflow-x-auto shrink-0 scrollbar-none">
+    <nav className="h-12 border-b border-border/50 bg-card flex items-center px-2 md:px-4 gap-1 overflow-x-auto shrink-0 scrollbar-none">
       {tabs.map((tab) => {
         const Icon = tab.icon
         return (

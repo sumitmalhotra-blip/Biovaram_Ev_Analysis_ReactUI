@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { 
   Pin, Maximize2, MapPin, Ruler, Microscope, BarChart3, TableIcon, 
-  Upload, FileText, Loader2, AlertCircle, RotateCcw, Download, Clock, Beaker
+  Upload, FileText, Loader2, AlertCircle, RotateCcw, Download, Clock, Beaker, FileType
 } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -25,16 +25,18 @@ import { cn } from "@/lib/utils"
 
 export function NTATab() {
   const { ntaAnalysis, apiConnected, apiSamples, resetNTAAnalysis, setNTAExperimentalConditions } = useAnalysisStore()
-  const { uploadNTA, checkHealth } = useApi()
+  const { uploadNTA, uploadNtaPdf, checkHealth } = useApi()
   const { pinChart } = useAnalysisStore()
   const { toast } = useToast()
 
   // Upload form state
   const [isDragging, setIsDragging] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [selectedPdfFile, setSelectedPdfFile] = useState<File | null>(null)  // TASK-007: PDF file
   const [treatment, setTreatment] = useState("")
   const [temperature, setTemperature] = useState("")
   const [operator, setOperator] = useState("")
+  const [pdfUploading, setPdfUploading] = useState(false)  // TASK-007: PDF upload state
   
   // Experimental conditions dialog state
   const [showConditionsDialog, setShowConditionsDialog] = useState(false)
@@ -338,6 +340,78 @@ export function NTATab() {
                     </>
                   )}
                 </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* TASK-007: PDF Report Upload for Concentration/Dilution */}
+        <Card className="card-3d">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-orange-500/10">
+                <FileType className="h-4 w-4 text-orange-500" />
+              </div>
+              <CardTitle className="text-base md:text-lg">Upload PDF Report (Optional)</CardTitle>
+              <Badge variant="outline" className="ml-auto text-xs">
+                ZetaView PDF
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Upload the ZetaView PDF report to extract original concentration and dilution factor. 
+              This data is not available in the text file.
+            </p>
+            
+            <div className="flex items-center gap-4">
+              <Input
+                type="file"
+                accept=".pdf"
+                className="flex-1"
+                onChange={(e) => setSelectedPdfFile(e.target.files?.[0] || null)}
+                disabled={!apiConnected || pdfUploading}
+              />
+              <Button
+                variant="outline"
+                disabled={!selectedPdfFile || !apiConnected || pdfUploading}
+                onClick={async () => {
+                  if (!selectedPdfFile) return
+                  setPdfUploading(true)
+                  try {
+                    const result = await uploadNtaPdf(selectedPdfFile, ntaAnalysis.sampleId || undefined)
+                    if (result?.pdf_data) {
+                      toast({
+                        title: "PDF Data Extracted",
+                        description: result.pdf_data.original_concentration
+                          ? `Concentration: ${result.pdf_data.original_concentration.toExponential(2)} particles/mL, Dilution: ${result.pdf_data.dilution_factor}x`
+                          : "Some data extracted from PDF",
+                      })
+                    }
+                  } finally {
+                    setPdfUploading(false)
+                    setSelectedPdfFile(null)
+                  }
+                }}
+              >
+                {pdfUploading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    <FileType className="h-4 w-4 mr-2" />
+                    Parse PDF
+                  </>
+                )}
+              </Button>
+            </div>
+            
+            {selectedPdfFile && (
+              <div className="flex items-center gap-2 p-2 bg-secondary/30 rounded-lg text-sm">
+                <FileText className="h-4 w-4 text-orange-500" />
+                <span className="truncate">{selectedPdfFile.name}</span>
+                <span className="text-muted-foreground">
+                  ({(selectedPdfFile.size / 1024).toFixed(1)} KB)
+                </span>
               </div>
             )}
           </CardContent>
