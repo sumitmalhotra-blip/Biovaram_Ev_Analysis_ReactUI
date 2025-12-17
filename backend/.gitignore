@@ -44,7 +44,8 @@ ENV/
 # AWS credentials
 *.pem
 credentials
-config
+# Note: 'config' folder is tracked for channel_config.json
+# config
 
 # Data files (do not commit raw data)
 *.fcs

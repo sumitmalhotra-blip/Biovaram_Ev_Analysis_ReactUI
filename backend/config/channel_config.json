@@ -1,0 +1,270 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "FCS Parser Configuration for BioVaram EV Analysis Platform",
+  "_documentation": {
+    "purpose": "Configure channel mappings for different flow cytometry instruments",
+    "how_to_use": [
+      "1. Identify your instrument type from the list below",
+      "2. If your instrument isn't listed, add it under 'instruments'",
+      "3. Set 'active_instrument' to your instrument name",
+      "4. The FSC/SSC channels will be automatically detected"
+    ]
+  },
+  "active_instrument": "custom",
+  "instruments": {
+    "apogee_26ch": {
+      "description": "Apogee Micro Flow Cytometer with 26 channels (generic naming)",
+      "channel_count": 26,
+      "channel_mappings": {
+        "fsc": {
+          "channel_names": [
+            "Channel_3",
+            "LALS",
+            "LALS-A",
+            "LALS-H"
+          ],
+          "description": "Forward Scatter / Large Angle Light Scatter (LALS)",
+          "notes": "Apogee uses LALS for forward scatter equivalent"
+        },
+        "ssc": {
+          "channel_names": [
+            "Channel_4",
+            "SALS",
+            "SALS-A",
+            "SALS-H"
+          ],
+          "description": "Side Scatter / Small Angle Light Scatter (SALS)",
+          "notes": "Apogee uses SALS for side scatter equivalent"
+        },
+        "vfsc": {
+          "channel_names": [
+            "Channel_5",
+            "VFSC",
+            "VFSC-A"
+          ],
+          "description": "Violet Forward Scatter (for small particle sizing)",
+          "notes": "Most accurate for EV/exosome sizing on Apogee"
+        },
+        "vssc": {
+          "channel_names": [
+            "Channel_6",
+            "VSSC",
+            "VSSC-A",
+            "VSSC1-A"
+          ],
+          "description": "Violet Side Scatter",
+          "notes": "Better resolution for small particles"
+        }
+      },
+      "preferred_scatter_channels": {
+        "for_size_analysis": {
+          "fsc": "Channel_5",
+          "ssc": "Channel_6",
+          "notes": "VFSC/VSSC recommended for EV/exosome sizing due to better small particle resolution"
+        },
+        "for_scatter_plot": {
+          "fsc": "Channel_3",
+          "ssc": "Channel_4",
+          "notes": "Standard LALS/SALS for general scatter plotting"
+        }
+      },
+      "fluorescence_channels": {
+        "FITC": "Channel_7",
+        "PE": "Channel_8",
+        "APC": "Channel_9"
+      }
+    },
+    "apogee_standard": {
+      "description": "Apogee Micro Flow Cytometer with named channels",
+      "channel_mappings": {
+        "fsc": {
+          "channel_names": [
+            "LALS",
+            "LALS-A",
+            "LALS-H",
+            "FSC-A",
+            "FSC-H"
+          ],
+          "description": "Forward Scatter"
+        },
+        "ssc": {
+          "channel_names": [
+            "SALS",
+            "SALS-A",
+            "SALS-H",
+            "SSC-A",
+            "SSC-H"
+          ],
+          "description": "Side Scatter"
+        },
+        "vfsc": {
+          "channel_names": [
+            "VFSC",
+            "VFSC-A",
+            "Violet FSC"
+          ],
+          "description": "Violet Forward Scatter"
+        },
+        "vssc": {
+          "channel_names": [
+            "VSSC",
+            "VSSC-A",
+            "VSSC1-A",
+            "Violet SSC"
+          ],
+          "description": "Violet Side Scatter"
+        }
+      },
+      "preferred_scatter_channels": {
+        "for_size_analysis": {
+          "fsc": "VFSC-A",
+          "ssc": "VSSC1-A"
+        },
+        "for_scatter_plot": {
+          "fsc": "LALS-A",
+          "ssc": "SALS-A"
+        }
+      }
+    },
+    "bd_fortessa": {
+      "description": "BD LSR Fortessa",
+      "channel_mappings": {
+        "fsc": {
+          "channel_names": [
+            "FSC-A",
+            "FSC-H",
+            "FSC-W"
+          ],
+          "description": "Forward Scatter"
+        },
+        "ssc": {
+          "channel_names": [
+            "SSC-A",
+            "SSC-H",
+            "SSC-W"
+          ],
+          "description": "Side Scatter"
+        }
+      },
+      "preferred_scatter_channels": {
+        "for_size_analysis": {
+          "fsc": "FSC-A",
+          "ssc": "SSC-A"
+        },
+        "for_scatter_plot": {
+          "fsc": "FSC-A",
+          "ssc": "SSC-A"
+        }
+      }
+    },
+    "ze5": {
+      "description": "Bio-Rad ZE5 Cell Analyzer",
+      "channel_mappings": {
+        "fsc": {
+          "channel_names": [
+            "VFSC-A",
+            "VFSC-H",
+            "FSC-A"
+          ],
+          "description": "Forward Scatter (Violet preferred for EVs)"
+        },
+        "ssc": {
+          "channel_names": [
+            "VSSC1-A",
+            "VSSC-A",
+            "SSC-A"
+          ],
+          "description": "Side Scatter (Violet preferred for EVs)"
+        }
+      },
+      "preferred_scatter_channels": {
+        "for_size_analysis": {
+          "fsc": "VFSC-A",
+          "ssc": "VSSC1-A"
+        },
+        "for_scatter_plot": {
+          "fsc": "FSC-A",
+          "ssc": "SSC-A"
+        }
+      }
+    },
+    "custom": {
+      "description": "Custom instrument - configure your own channel mappings",
+      "channel_mappings": {
+        "fsc": {
+          "channel_names": [
+            "Channel_3",
+            "FSC-A",
+            "FSC-H",
+            "Channel_1"
+          ],
+          "description": "Forward Scatter - add your channel names here"
+        },
+        "ssc": {
+          "channel_names": [
+            "Channel_4",
+            "SSC-A",
+            "SSC-H",
+            "Channel_2"
+          ],
+          "description": "Side Scatter - add your channel names here"
+        }
+      },
+      "preferred_scatter_channels": {
+        "for_size_analysis": {
+          "fsc": "Channel_3",
+          "ssc": "Channel_4"
+        },
+        "for_scatter_plot": {
+          "fsc": "Channel_3",
+          "ssc": "Channel_4"
+        }
+      }
+    }
+  },
+  "baseline_keywords": [
+    "ISO",
+    "Isotype",
+    "isotype",
+    "iso",
+    "control",
+    "Control",
+    "blank",
+    "Blank",
+    "PBS",
+    "buffer",
+    "Buffer",
+    "water",
+    "Water"
+  ],
+  "qc_thresholds": {
+    "min_events": 1000,
+    "max_cv_percent": 50,
+    "min_median_fsc": 100,
+    "max_relative_error_percent": 30
+  },
+  "_channel_identification_guide": {
+    "for_apogee_26ch_instruments": {
+      "description": "If your FCS files have Channel_1, Channel_2, etc., use this guide to identify channels",
+      "typical_mapping": {
+        "Channel_1": "Time",
+        "Channel_2": "Event Count or Threshold",
+        "Channel_3": "LALS (Large Angle Light Scatter) - equivalent to FSC",
+        "Channel_4": "SALS (Small Angle Light Scatter) - equivalent to SSC",
+        "Channel_5": "VFSC (Violet Forward Scatter) - BEST for EV sizing",
+        "Channel_6": "VSSC (Violet Side Scatter)",
+        "Channel_7": "FITC/Green",
+        "Channel_8": "PE/Orange",
+        "Channel_9+": "Additional fluorescence channels"
+      },
+      "how_to_verify": [
+        "1. Run the analyze_channels.py script to see statistics",
+        "2. LALS/FSC typically has HIGH values (10,000-1,000,000+)",
+        "3. VFSC has MODERATE values (1,000-100,000)",
+        "4. Fluorescence channels have VARIABLE values depending on staining",
+        "5. Time channel increases linearly",
+        "6. Check your Apogee software export settings"
+      ]
+    }
+  }
+}
