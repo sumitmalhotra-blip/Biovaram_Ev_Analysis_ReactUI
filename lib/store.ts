@@ -82,6 +82,8 @@ export interface ExperimentalConditions {
   ph?: number
   incubation_time_min?: number
   antibody_details?: string
+  antibody_concentration_ug?: number
+  dilution_factor?: number
   operator: string
   notes?: string
 }
@@ -121,6 +123,42 @@ export interface FCSAnalysisState {
   sizeRanges: SizeRange[]
 }
 
+// Scatter data point for charts
+export interface ScatterDataPoint {
+  x: number
+  y: number
+  index?: number
+  isAnomaly?: boolean
+  diameter?: number
+}
+
+// Secondary FCS analysis state for comparison/overlay
+export interface SecondaryFCSAnalysisState {
+  file: File | null
+  sampleId: string | null
+  results: FCSResult | null
+  anomalyData: AnomalyDetectionResult | null
+  isAnalyzing: boolean
+  error: string | null
+  scatterData: ScatterDataPoint[]  // Scatter data for overlay charts
+  loadingScatter: boolean
+}
+
+// Overlay configuration for comparing two files
+export interface OverlayConfig {
+  enabled: boolean
+  showBothHistograms: boolean
+  showOverlaidScatter: boolean
+  showOverlaidTheory: boolean       // NEW: Theory vs Measured overlay
+  showOverlaidDiameter: boolean     // NEW: Diameter vs SSC overlay
+  primaryColor: string
+  secondaryColor: string
+  primaryLabel: string
+  secondaryLabel: string
+  primaryOpacity: number            // NEW: Opacity for primary data
+  secondaryOpacity: number          // NEW: Opacity for secondary data
+}
+
 // NTA Analysis State
 export interface NTAAnalysisState {
   file: File | null
@@ -129,6 +167,15 @@ export interface NTAAnalysisState {
   isAnalyzing: boolean
   error: string | null
   experimentalConditions: ExperimentalConditions | null
+}
+
+// Secondary NTA Analysis State (for overlay comparison)
+export interface SecondaryNTAAnalysisState {
+  file: File | null
+  sampleId: string | null
+  results: NTAResult | null
+  isAnalyzing: boolean
+  error: string | null
 }
 
 // FCS Analysis Settings (matches Streamlit app.py)
@@ -196,6 +243,95 @@ export interface NTAAnalysisSettings {
   correctionFactor: number
 }
 
+// ============================================
+// GATING SYSTEM TYPES (T-009: Population Gating)
+// ============================================
+
+// Gate selection tool types
+export type GateToolType = "none" | "rectangle" | "polygon" | "ellipse" | "lasso"
+
+// Rectangle gate coordinates
+export interface RectangleGate {
+  type: "rectangle"
+  x1: number  // top-left x (in data coordinates)
+  y1: number  // top-left y
+  x2: number  // bottom-right x
+  y2: number  // bottom-right y
+}
+
+// Polygon gate coordinates
+export interface PolygonGate {
+  type: "polygon"
+  points: Array<{ x: number; y: number }>  // Array of vertices
+}
+
+// Ellipse gate coordinates
+export interface EllipseGate {
+  type: "ellipse"
+  cx: number  // center x
+  cy: number  // center y
+  rx: number  // radius x
+  ry: number  // radius y
+  rotation?: number  // rotation in degrees
+}
+
+// Union type for all gate shapes
+export type GateShape = RectangleGate | PolygonGate | EllipseGate
+
+// Individual gate definition
+export interface Gate {
+  id: string
+  name: string
+  color: string
+  shape: GateShape
+  createdAt: Date
+  isActive: boolean  // Whether this gate is currently selected/highlighted
+  parentGateId?: string  // For nested/hierarchical gates
+}
+
+// Statistics for gated population
+export interface GatedStatistics {
+  gateId: string
+  totalEvents: number
+  selectedEvents: number
+  percentage: number
+  fscMean?: number
+  fscMedian?: number
+  fscStd?: number
+  sscMean?: number
+  sscMedian?: number
+  sscStd?: number
+  diameterD10?: number
+  diameterD50?: number
+  diameterD90?: number
+  diameterMean?: number
+  diameterStd?: number
+}
+
+// Gating state for a sample
+export interface GatingState {
+  activeTool: GateToolType
+  gates: Gate[]
+  activeGateId: string | null  // Currently selected gate
+  isDrawing: boolean  // Whether user is currently drawing a gate
+  drawingPoints: Array<{ x: number; y: number }>  // Temporary points during drawing
+  selectedIndices: number[]  // Indices of data points inside active gate(s)
+  statistics: GatedStatistics | null  // Stats for current selection
+}
+
+// Initial gating state
+export const initialGatingState: GatingState = {
+  activeTool: "none",
+  gates: [],
+  activeGateId: null,
+  isDrawing: false,
+  drawingPoints: [],
+  selectedIndices: [],
+  statistics: null,
+}
+
+// ============================================
+
 export interface AnalysisState {
   // UI State
   activeTab: TabType
@@ -241,6 +377,23 @@ export interface AnalysisState {
   setFCSSizeRanges: (sizeRanges: SizeRange[]) => void
   resetFCSAnalysis: () => void
 
+  // Secondary FCS Analysis State (for comparison/overlay)
+  secondaryFcsAnalysis: SecondaryFCSAnalysisState
+  setSecondaryFCSFile: (file: File | null) => void
+  setSecondaryFCSSampleId: (sampleId: string | null) => void
+  setSecondaryFCSResults: (results: FCSResult | null) => void
+  setSecondaryFCSAnomalyData: (anomalyData: AnomalyDetectionResult | null) => void
+  setSecondaryFCSAnalyzing: (analyzing: boolean) => void
+  setSecondaryFCSError: (error: string | null) => void
+  setSecondaryFCSScatterData: (scatterData: ScatterDataPoint[]) => void  // NEW
+  setSecondaryFCSLoadingScatter: (loading: boolean) => void              // NEW
+  resetSecondaryFCSAnalysis: () => void
+
+  // Overlay Configuration
+  overlayConfig: OverlayConfig
+  setOverlayConfig: (config: Partial<OverlayConfig>) => void
+  toggleOverlay: () => void
+
   // NTA Analysis State
   ntaAnalysis: NTAAnalysisState
   setNTAFile: (file: File | null) => void
@@ -250,6 +403,19 @@ export interface AnalysisState {
   setNTAError: (error: string | null) => void
   setNTAExperimentalConditions: (conditions: ExperimentalConditions | null) => void
   resetNTAAnalysis: () => void
+
+  // Secondary NTA Analysis State (for overlay comparison)
+  secondaryNtaAnalysis: SecondaryNTAAnalysisState
+  setSecondaryNTAFile: (file: File | null) => void
+  setSecondaryNTASampleId: (sampleId: string | null) => void
+  setSecondaryNTAResults: (results: NTAResult | null) => void
+  setSecondaryNTAAnalyzing: (analyzing: boolean) => void
+  setSecondaryNTAError: (error: string | null) => void
+  resetSecondaryNTAAnalysis: () => void
+  
+  // NTA Overlay Configuration
+  ntaOverlayEnabled: boolean
+  setNtaOverlayEnabled: (enabled: boolean) => void
 
   // Processing Jobs
   processingJobs: ProcessingJob[]
@@ -284,11 +450,28 @@ export interface AnalysisState {
 
   // Analysis Settings
   fcsAnalysisSettings: FCSAnalysisSettings | null
-  setFcsAnalysisSettings: (settings: FCSAnalysisSettings) => void
+  setFcsAnalysisSettings: (settings: Partial<FCSAnalysisSettings>) => void
   ntaAnalysisSettings: NTAAnalysisSettings | null
   setNtaAnalysisSettings: (settings: NTAAnalysisSettings) => void
   crossComparisonSettings: CrossComparisonSettings
   setCrossComparisonSettings: (settings: CrossComparisonSettings) => void
+
+  // ============================================
+  // GATING STATE & ACTIONS (T-009)
+  // ============================================
+  gatingState: GatingState
+  setGateActiveTool: (tool: GateToolType) => void
+  addGate: (gate: Gate) => void
+  removeGate: (gateId: string) => void
+  updateGate: (gateId: string, updates: Partial<Gate>) => void
+  setActiveGate: (gateId: string | null) => void
+  setGateDrawing: (isDrawing: boolean) => void
+  addDrawingPoint: (point: { x: number; y: number }) => void
+  clearDrawingPoints: () => void
+  setSelectedIndices: (indices: number[]) => void
+  setGatedStatistics: (stats: GatedStatistics | null) => void
+  clearAllGates: () => void
+  resetGatingState: () => void
 }
 
 const initialFCSAnalysis: FCSAnalysisState = {
@@ -306,6 +489,31 @@ const initialFCSAnalysis: FCSAnalysisState = {
   ],
 }
 
+const initialSecondaryFCSAnalysis: SecondaryFCSAnalysisState = {
+  file: null,
+  sampleId: null,
+  results: null,
+  anomalyData: null,
+  isAnalyzing: false,
+  error: null,
+  scatterData: [],        // NEW: Empty scatter data
+  loadingScatter: false,  // NEW: Loading state
+}
+
+const initialOverlayConfig: OverlayConfig = {
+  enabled: false,
+  showBothHistograms: true,
+  showOverlaidScatter: true,
+  showOverlaidTheory: true,      // NEW
+  showOverlaidDiameter: true,    // NEW
+  primaryColor: "#7c3aed",       // Purple
+  secondaryColor: "#f97316",     // Orange
+  primaryLabel: "Primary",
+  secondaryLabel: "Comparison",
+  primaryOpacity: 0.7,           // NEW
+  secondaryOpacity: 0.5,         // NEW
+}
+
 const initialNTAAnalysis: NTAAnalysisState = {
   file: null,
   sampleId: null,
@@ -313,6 +521,14 @@ const initialNTAAnalysis: NTAAnalysisState = {
   isAnalyzing: false,
   error: null,
   experimentalConditions: null,
+}
+
+const initialSecondaryNTAAnalysis: SecondaryNTAAnalysisState = {
+  file: null,
+  sampleId: null,
+  results: null,
+  isAnalyzing: false,
+  error: null,
 }
 
 export const useAnalysisStore = create<AnalysisState>((set) => ({
@@ -396,6 +612,53 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
     })),
   resetFCSAnalysis: () => set({ fcsAnalysis: initialFCSAnalysis }),
 
+  // Secondary FCS Analysis (for comparison/overlay)
+  secondaryFcsAnalysis: initialSecondaryFCSAnalysis,
+  setSecondaryFCSFile: (file) =>
+    set((state) => ({
+      secondaryFcsAnalysis: { ...state.secondaryFcsAnalysis, file },
+    })),
+  setSecondaryFCSSampleId: (sampleId) =>
+    set((state) => ({
+      secondaryFcsAnalysis: { ...state.secondaryFcsAnalysis, sampleId },
+    })),
+  setSecondaryFCSResults: (results) =>
+    set((state) => ({
+      secondaryFcsAnalysis: { ...state.secondaryFcsAnalysis, results },
+    })),
+  setSecondaryFCSAnomalyData: (anomalyData) =>
+    set((state) => ({
+      secondaryFcsAnalysis: { ...state.secondaryFcsAnalysis, anomalyData },
+    })),
+  setSecondaryFCSAnalyzing: (analyzing) =>
+    set((state) => ({
+      secondaryFcsAnalysis: { ...state.secondaryFcsAnalysis, isAnalyzing: analyzing },
+    })),
+  setSecondaryFCSError: (error) =>
+    set((state) => ({
+      secondaryFcsAnalysis: { ...state.secondaryFcsAnalysis, error },
+    })),
+  setSecondaryFCSScatterData: (scatterData) =>
+    set((state) => ({
+      secondaryFcsAnalysis: { ...state.secondaryFcsAnalysis, scatterData },
+    })),
+  setSecondaryFCSLoadingScatter: (loading) =>
+    set((state) => ({
+      secondaryFcsAnalysis: { ...state.secondaryFcsAnalysis, loadingScatter: loading },
+    })),
+  resetSecondaryFCSAnalysis: () => set({ secondaryFcsAnalysis: initialSecondaryFCSAnalysis }),
+
+  // Overlay Configuration
+  overlayConfig: initialOverlayConfig,
+  setOverlayConfig: (config) =>
+    set((state) => ({
+      overlayConfig: { ...state.overlayConfig, ...config },
+    })),
+  toggleOverlay: () =>
+    set((state) => ({
+      overlayConfig: { ...state.overlayConfig, enabled: !state.overlayConfig.enabled },
+    })),
+
   // NTA Analysis
   ntaAnalysis: initialNTAAnalysis,
   setNTAFile: (file) =>
@@ -423,6 +686,34 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
       ntaAnalysis: { ...state.ntaAnalysis, experimentalConditions: conditions },
     })),
   resetNTAAnalysis: () => set({ ntaAnalysis: initialNTAAnalysis }),
+
+  // Secondary NTA Analysis (for overlay comparison)
+  secondaryNtaAnalysis: initialSecondaryNTAAnalysis,
+  setSecondaryNTAFile: (file) =>
+    set((state) => ({
+      secondaryNtaAnalysis: { ...state.secondaryNtaAnalysis, file },
+    })),
+  setSecondaryNTASampleId: (sampleId) =>
+    set((state) => ({
+      secondaryNtaAnalysis: { ...state.secondaryNtaAnalysis, sampleId },
+    })),
+  setSecondaryNTAResults: (results) =>
+    set((state) => ({
+      secondaryNtaAnalysis: { ...state.secondaryNtaAnalysis, results },
+    })),
+  setSecondaryNTAAnalyzing: (analyzing) =>
+    set((state) => ({
+      secondaryNtaAnalysis: { ...state.secondaryNtaAnalysis, isAnalyzing: analyzing },
+    })),
+  setSecondaryNTAError: (error) =>
+    set((state) => ({
+      secondaryNtaAnalysis: { ...state.secondaryNtaAnalysis, error },
+    })),
+  resetSecondaryNTAAnalysis: () => set({ secondaryNtaAnalysis: initialSecondaryNTAAnalysis }),
+  
+  // NTA Overlay
+  ntaOverlayEnabled: false,
+  setNtaOverlayEnabled: (enabled) => set({ ntaOverlayEnabled: enabled }),
 
   // Processing Jobs
   processingJobs: [],
@@ -490,7 +781,11 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
 
   // Analysis Settings
   fcsAnalysisSettings: null,
-  setFcsAnalysisSettings: (settings) => set({ fcsAnalysisSettings: settings }),
+  setFcsAnalysisSettings: (settings) => set((state) => ({ 
+    fcsAnalysisSettings: state.fcsAnalysisSettings 
+      ? { ...state.fcsAnalysisSettings, ...settings }
+      : settings as FCSAnalysisSettings 
+  })),
   ntaAnalysisSettings: null,
   setNtaAnalysisSettings: (settings) => set({ ntaAnalysisSettings: settings }),
   crossComparisonSettings: {
@@ -503,4 +798,89 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
     maxSizeFilter: 500,
   },
   setCrossComparisonSettings: (settings) => set({ crossComparisonSettings: settings }),
+
+  // ============================================
+  // GATING STATE & ACTIONS (T-009)
+  // ============================================
+  gatingState: initialGatingState,
+  
+  setGateActiveTool: (tool) =>
+    set((state) => ({
+      gatingState: { ...state.gatingState, activeTool: tool },
+    })),
+    
+  addGate: (gate) =>
+    set((state) => ({
+      gatingState: {
+        ...state.gatingState,
+        gates: [...state.gatingState.gates, gate],
+        activeGateId: gate.id,
+      },
+    })),
+    
+  removeGate: (gateId) =>
+    set((state) => ({
+      gatingState: {
+        ...state.gatingState,
+        gates: state.gatingState.gates.filter((g) => g.id !== gateId),
+        activeGateId: state.gatingState.activeGateId === gateId ? null : state.gatingState.activeGateId,
+      },
+    })),
+    
+  updateGate: (gateId, updates) =>
+    set((state) => ({
+      gatingState: {
+        ...state.gatingState,
+        gates: state.gatingState.gates.map((g) =>
+          g.id === gateId ? { ...g, ...updates } : g
+        ),
+      },
+    })),
+    
+  setActiveGate: (gateId) =>
+    set((state) => ({
+      gatingState: { ...state.gatingState, activeGateId: gateId },
+    })),
+    
+  setGateDrawing: (isDrawing) =>
+    set((state) => ({
+      gatingState: { ...state.gatingState, isDrawing },
+    })),
+    
+  addDrawingPoint: (point) =>
+    set((state) => ({
+      gatingState: {
+        ...state.gatingState,
+        drawingPoints: [...state.gatingState.drawingPoints, point],
+      },
+    })),
+    
+  clearDrawingPoints: () =>
+    set((state) => ({
+      gatingState: { ...state.gatingState, drawingPoints: [] },
+    })),
+    
+  setSelectedIndices: (indices) =>
+    set((state) => ({
+      gatingState: { ...state.gatingState, selectedIndices: indices },
+    })),
+    
+  setGatedStatistics: (stats) =>
+    set((state) => ({
+      gatingState: { ...state.gatingState, statistics: stats },
+    })),
+    
+  clearAllGates: () =>
+    set((state) => ({
+      gatingState: {
+        ...state.gatingState,
+        gates: [],
+        activeGateId: null,
+        selectedIndices: [],
+        statistics: null,
+      },
+    })),
+    
+  resetGatingState: () =>
+    set({ gatingState: initialGatingState }),
 }))

@@ -37,8 +37,8 @@ interface SampleDetailsModalProps {
   onOpenChange: (open: boolean) => void
   sampleId: string | null
   onFetchSample: (sampleId: string) => Promise<Sample | null>
-  onFetchFCSResults?: (sampleId: string) => Promise<{ sample_id: string; results: FCSResult[] } | null>
-  onFetchNTAResults?: (sampleId: string) => Promise<{ sample_id: string; results: NTAResult[] } | null>
+  onFetchFCSResults?: (sampleId: string) => Promise<FCSResult[] | { sample_id: string; results: FCSResult[] } | null>
+  onFetchNTAResults?: (sampleId: string) => Promise<NTAResult[] | { sample_id: string; results: NTAResult[] } | null>
   onDelete?: (sampleId: string) => void
   onExport?: (sampleId: string) => void
   onOpenInTab?: (sampleId: string, type: "fcs" | "nta") => void
@@ -82,13 +82,21 @@ export function SampleDetailsModal({
         // Fetch FCS results if available
         if (onFetchFCSResults && sampleData.files?.fcs) {
           const fcsData = await onFetchFCSResults(sampleId)
-          if (fcsData) setFcsResults(fcsData.results)
+          if (fcsData) {
+            // Handle both array and object with results property
+            const results = Array.isArray(fcsData) ? fcsData : fcsData.results
+            setFcsResults(results)
+          }
         }
 
         // Fetch NTA results if available
         if (onFetchNTAResults && sampleData.files?.nta) {
           const ntaData = await onFetchNTAResults(sampleId)
-          if (ntaData) setNtaResults(ntaData.results)
+          if (ntaData) {
+            // Handle both array and object with results property
+            const results = Array.isArray(ntaData) ? ntaData : ntaData.results
+            setNtaResults(results)
+          }
         }
       } else {
         setError("Failed to load sample details")

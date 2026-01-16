@@ -46,9 +46,9 @@ alembic>=1.13.0
 # ============================================
 # DATABASE (PostgreSQL - Optional)
 # ============================================
-# Uncomment for PostgreSQL support:
-# asyncpg>=0.29.0
-# psycopg2-binary>=2.9.9
+# Required for PostgreSQL support:
+asyncpg>=0.29.0
+psycopg2-binary>=2.9.9
 
 # ============================================
 # PHYSICS / SCIENTIFIC COMPUTING
@@ -81,6 +81,12 @@ loguru>=0.7.2
 requests>=2.31.0
 tqdm>=4.65.0
 colorama>=0.4.6
+
+# ============================================
+# AUTHENTICATION
+# ============================================
+bcrypt>=4.0.0
+email-validator>=2.0.0
 
 # ============================================
 # STREAMLIT UI (Optional - legacy frontend)

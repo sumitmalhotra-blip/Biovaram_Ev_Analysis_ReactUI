@@ -51,6 +51,8 @@ const DEFAULT_SETTINGS: FCSAnalysisSettings = {
   mediumRI: 1.33,
   fscRange: [1, 65535],
   sscRange: [1, 65535],
+  fscAngleRange: [1, 15],
+  sscAngleRange: [85, 95],
   diameterRange: [30, 200],
   diameterPoints: 180,
   sizeRanges: [
@@ -66,6 +68,7 @@ const DEFAULT_SETTINGS: FCSAnalysisSettings = {
   iqrFactor: 1.5,
   highlightAnomalies: true,
   useInteractivePlots: true,
+  histogramBins: 50,
 }
 
 // Common laser wavelengths

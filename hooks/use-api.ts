@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef } from "react"
+import { useSession } from "next-auth/react"
 import { apiClient, NetworkError, type Sample, type FCSResult, type NTAResult } from "@/lib/api-client"
 import { useAnalysisStore } from "@/lib/store"
 import { useToast } from "@/hooks/use-toast"
@@ -16,6 +17,7 @@ const HEALTH_CHECK_INTERVAL = 30000 // 30 seconds
 
 export function useApi() {
   const { toast } = useToast()
+  const { data: session } = useSession()
   const healthCheckRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const {
@@ -32,6 +34,12 @@ export function useApi() {
     setFCSResults,
     setFCSAnalyzing,
     setFCSError,
+    setSecondaryFCSFile,
+    setSecondaryFCSSampleId,
+    setSecondaryFCSResults,
+    setSecondaryFCSAnalyzing,
+    setSecondaryFCSError,
+    setOverlayConfig,
     setNTAFile,
     setNTASampleId,
     setNTAResults,
@@ -88,6 +96,9 @@ export function useApi() {
   // Samples
   // =========================================================================
 
+  // Get user ID from session for filtering samples by owner
+  const userId = session?.user?.id ? Number(session.user.id) : undefined
+
   const fetchSamples = useCallback(
     async (params?: { treatment?: string; qc_status?: string; processing_status?: string }) => {
       // Don't fetch if we know the API is offline
@@ -99,8 +110,9 @@ export function useApi() {
       setSamplesError(null)
 
       try {
+        // Include user_id to only fetch samples owned by the current user
         const response = await retryWithBackoff(
-          () => apiClient.listSamples(params),
+          () => apiClient.listSamples({ ...params, user_id: userId }),
           {
             maxAttempts: 3,
             onRetry: (error, attempt) => {
@@ -130,7 +142,7 @@ export function useApi() {
         setSamplesLoading(false)
       }
     },
-    [setApiSamples, setSamplesError, setSamplesLoading, toast]
+    [setApiSamples, setSamplesError, setSamplesLoading, toast, userId]
   )
 
   const getSample = useCallback(
@@ -159,10 +171,17 @@ export function useApi() {
 
   /**
    * Open a sample in its respective analysis tab with loaded results
-   * This fetches the sample's analysis results and navigates to the appropriate tab
+   * T-003: Previous Analysis Review - Load saved analysis data when clicking a sample
+   * 
+   * Flow:
+   * 1. Get sample details to verify file exists
+   * 2. Load saved analysis results from database
+   * 3. If results exist, populate the analysis state
+   * 4. If no results but file exists, set sampleId so scatter data loads from file
+   * 5. Navigate to the appropriate tab
    */
   const openSampleInTab = useCallback(
-    async (sampleId: string, type: "fcs" | "nta") => {
+    async (sampleId: string, type: "fcs" | "nta"): Promise<boolean> => {
       if (apiClient.offline) {
         toast({
           variant: "destructive",
@@ -173,9 +192,32 @@ export function useApi() {
       }
 
       try {
+        // First, get sample details to verify the file exists
+        const sample = await apiClient.getSample(sampleId)
+        
+        if (!sample) {
+          toast({
+            variant: "destructive",
+            title: "Sample not found",
+            description: `Could not find sample: ${sampleId}`,
+          })
+          return false
+        }
+
         if (type === "fcs") {
-          // Load FCS results
+          // Check if FCS file exists
+          if (!sample.files?.fcs) {
+            toast({
+              variant: "destructive",
+              title: "No FCS file",
+              description: `Sample ${sampleId} does not have an FCS file`,
+            })
+            return false
+          }
+
+          // Try to load saved FCS results
           const response = await apiClient.getFCSResults(sampleId)
+          
           if (response && response.results.length > 0) {
             // Set the most recent result
             const latestResult = response.results[0]
@@ -183,21 +225,40 @@ export function useApi() {
             setFCSResults(latestResult)
             setActiveTab("flow-cytometry")
             toast({
-              title: "Sample loaded",
-              description: `FCS results for ${sampleId} loaded in Flow Cytometry tab`,
+              title: "Analysis loaded",
+              description: `FCS analysis for ${sampleId} loaded successfully`,
             })
             return true
           } else {
+            // No saved results, but file exists - set sampleId so scatter data can load
+            setFCSSampleId(sampleId)
+            // Create a minimal result object to trigger scatter data loading
+            setFCSResults({
+              id: 0,
+              total_events: 0,
+              sample_id: sampleId,
+            })
+            setActiveTab("flow-cytometry")
+            toast({
+              title: "Sample loaded",
+              description: `Loading FCS data from file for ${sampleId}...`,
+            })
+            return true
+          }
+        } else if (type === "nta") {
+          // Check if NTA file exists
+          if (!sample.files?.nta) {
             toast({
               variant: "destructive",
-              title: "No FCS results",
-              description: `No FCS analysis results found for ${sampleId}`,
+              title: "No NTA file",
+              description: `Sample ${sampleId} does not have an NTA file`,
             })
             return false
           }
-        } else if (type === "nta") {
-          // Load NTA results
+
+          // Try to load saved NTA results
           const response = await apiClient.getNTAResults(sampleId)
+          
           if (response && response.results.length > 0) {
             // Set the most recent result
             const latestResult = response.results[0]
@@ -205,17 +266,22 @@ export function useApi() {
             setNTAResults(latestResult)
             setActiveTab("nta")
             toast({
-              title: "Sample loaded",
-              description: `NTA results for ${sampleId} loaded in NTA tab`,
+              title: "Analysis loaded",
+              description: `NTA analysis for ${sampleId} loaded successfully`,
             })
             return true
           } else {
-            toast({
-              variant: "destructive",
-              title: "No NTA results",
-              description: `No NTA analysis results found for ${sampleId}`,
+            // No saved results, but file exists - set sampleId so data can load
+            setNTASampleId(sampleId)
+            setNTAResults({
+              id: 0,
             })
-            return false
+            setActiveTab("nta")
+            toast({
+              title: "Sample loaded",
+              description: `Loading NTA data from file for ${sampleId}...`,
+            })
+            return true
           }
         }
         return false
@@ -293,8 +359,11 @@ export function useApi() {
       setFCSError(null)
 
       try {
+        // Include user_id in metadata for ownership
+        const uploadMetadata = { ...metadata, user_id: userId }
+        
         const response = await retryWithBackoff(
-          () => apiClient.uploadFCS(file, metadata),
+          () => apiClient.uploadFCS(file, uploadMetadata),
           {
             maxAttempts: 2,
             initialDelay: 2000,
@@ -363,6 +432,109 @@ export function useApi() {
       addProcessingJob,
       fetchSamples,
       toast,
+      userId,
+    ]
+  )
+
+  // Upload secondary FCS file for comparison/overlay
+  const uploadSecondaryFCS = useCallback(
+    async (
+      file: File,
+      metadata?: {
+        treatment?: string
+        concentration_ug?: number
+        preparation_method?: string
+        operator?: string
+        notes?: string
+      }
+    ) => {
+      if (apiClient.offline) {
+        toast({
+          variant: "destructive",
+          title: "Backend offline",
+          description: "Cannot upload file - backend server is not running",
+        })
+        return null
+      }
+
+      setSecondaryFCSFile(file)
+      setSecondaryFCSAnalyzing(true)
+      setSecondaryFCSError(null)
+
+      try {
+        // Include user_id in metadata for ownership
+        const uploadMetadata = { ...metadata, user_id: userId }
+        
+        const response = await retryWithBackoff(
+          () => apiClient.uploadFCS(file, uploadMetadata),
+          {
+            maxAttempts: 2,
+            initialDelay: 2000,
+            shouldRetry: (error) => {
+              const category = categorizeError(error)
+              return category === "server" || category === "timeout"
+            },
+            onRetry: (error, attempt) => {
+              toast({
+                title: "Upload failed, retrying...",
+                description: `Attempt ${attempt} of 2`,
+              })
+            },
+          }
+        )
+
+        if (response.success) {
+          setSecondaryFCSSampleId(response.sample_id)
+
+          if (response.fcs_results) {
+            setSecondaryFCSResults(response.fcs_results)
+          }
+
+          // Add to processing jobs
+          addProcessingJob({
+            id: response.job_id + "_secondary",
+            job_type: "fcs_parse",
+            status: response.processing_status,
+            sample_id: response.id,
+          })
+
+          // Refresh samples list
+          fetchSamples()
+
+          // Auto-enable overlay mode when secondary file is uploaded
+          setOverlayConfig({ enabled: true })
+
+          toast({
+            title: "✅ Comparison file uploaded",
+            description: `${file.name} uploaded for comparison. Sample ID: ${response.sample_id}`,
+          })
+
+          return response
+        }
+      } catch (error) {
+        const message = getUserFriendlyErrorMessage(error)
+        setSecondaryFCSError(message)
+        toast({
+          variant: "destructive",
+          title: "Upload failed",
+          description: message,
+        })
+        return null
+      } finally {
+        setSecondaryFCSAnalyzing(false)
+      }
+    },
+    [
+      setSecondaryFCSFile,
+      setSecondaryFCSAnalyzing,
+      setSecondaryFCSError,
+      setSecondaryFCSSampleId,
+      setSecondaryFCSResults,
+      setOverlayConfig,
+      addProcessingJob,
+      fetchSamples,
+      toast,
+      userId,
     ]
   )
 
@@ -417,8 +589,11 @@ export function useApi() {
       setNTAError(null)
 
       try {
+        // Include user_id in metadata for ownership
+        const uploadMetadata = { ...metadata, user_id: userId }
+        
         const response = await retryWithBackoff(
-          () => apiClient.uploadNTA(file, metadata),
+          () => apiClient.uploadNTA(file, uploadMetadata),
           {
             maxAttempts: 2,
             initialDelay: 2000,
@@ -482,6 +657,7 @@ export function useApi() {
       addProcessingJob,
       fetchSamples,
       toast,
+      userId,
     ]
   )
 
@@ -689,6 +865,7 @@ export function useApi() {
 
     // FCS
     uploadFCS,
+    uploadSecondaryFCS,  // T-002: Secondary file upload for comparison/overlay
     getFCSResults,
 
     // NTA
@@ -852,6 +1029,61 @@ export function useApi() {
       [toast]
     ),
 
+    // Auto Axis Selection (CRMIT-002)
+    getRecommendedAxes: useCallback(
+      async (
+        sampleId: string,
+        options?: {
+          nRecommendations?: number
+          includeScatter?: boolean
+          includeFluorescence?: boolean
+        }
+      ) => {
+        if (apiClient.offline) return null
+        try {
+          return await retryWithBackoff(
+            () => apiClient.getRecommendedAxes(sampleId, options),
+            { maxAttempts: 2 }
+          )
+        } catch (error) {
+          const message = getUserFriendlyErrorMessage(error)
+          toast({
+            variant: "destructive",
+            title: "Failed to get axis recommendations",
+            description: message,
+          })
+          return null
+        }
+      },
+      [toast]
+    ),
+
+    getScatterDataWithAxes: useCallback(
+      async (
+        sampleId: string,
+        xChannel: string,
+        yChannel: string,
+        maxPoints: number = 5000
+      ) => {
+        if (apiClient.offline) return null
+        try {
+          return await retryWithBackoff(
+            () => apiClient.getScatterDataWithAxes(sampleId, xChannel, yChannel, maxPoints),
+            { maxAttempts: 2 }
+          )
+        } catch (error) {
+          const message = getUserFriendlyErrorMessage(error)
+          toast({
+            variant: "destructive",
+            title: "Failed to fetch scatter data",
+            description: message,
+          })
+          return null
+        }
+      },
+      [toast]
+    ),
+
     getSizeBins: useCallback(
       async (sampleId: string) => {
         if (apiClient.offline) return null
@@ -872,6 +1104,104 @@ export function useApi() {
       [toast]
     ),
 
+    /**
+     * Analyze gated (selected) population from scatter plot
+     * T-009: Population Gating & Selection Analysis
+     */
+    analyzeGatedPopulation: useCallback(
+      async (
+        sampleId: string,
+        gateConfig: {
+          gate_name: string;
+          gate_type: "rectangle" | "polygon" | "ellipse";
+          gate_coordinates: {
+            x1?: number;
+            y1?: number;
+            x2?: number;
+            y2?: number;
+            points?: Array<{ x: number; y: number }>;
+            cx?: number;
+            cy?: number;
+            rx?: number;
+            ry?: number;
+            rotation?: number;
+          };
+          x_channel: string;
+          y_channel: string;
+          include_diameter_stats?: boolean;
+        }
+      ) => {
+        if (apiClient.offline) {
+          toast({
+            variant: "destructive",
+            title: "Backend offline",
+            description: "Cannot run gated analysis - backend server is not running",
+          })
+          return null
+        }
+
+        try {
+          const result = await retryWithBackoff(
+            () => apiClient.analyzeGatedPopulation(sampleId, gateConfig),
+            { maxAttempts: 2 }
+          )
+          
+          if (result.gated_events === 0) {
+            toast({
+              variant: "default",
+              title: "No events in gate",
+              description: "The selected region contains no events",
+            })
+          } else {
+            toast({
+              title: `✅ Gate Analysis Complete`,
+              description: `${result.gated_events.toLocaleString()} events (${result.gated_percentage.toFixed(1)}%) in "${gateConfig.gate_name}"`,
+            })
+          }
+          
+          return result
+        } catch (error) {
+          const message = getUserFriendlyErrorMessage(error)
+          toast({
+            variant: "destructive",
+            title: "Gated analysis failed",
+            description: message,
+          })
+          return null
+        }
+      },
+      [toast]
+    ),
+
+    // Anomaly Detection for any sample (including secondary)
+    detectAnomalies: useCallback(
+      async (
+        sampleId: string,
+        options?: {
+          method?: "zscore" | "iqr" | "both"
+          zscore_threshold?: number
+          iqr_factor?: number
+        }
+      ) => {
+        if (apiClient.offline) return null
+        try {
+          return await retryWithBackoff(
+            () => apiClient.detectAnomalies(sampleId, options),
+            { maxAttempts: 2 }
+          )
+        } catch (error) {
+          const message = getUserFriendlyErrorMessage(error)
+          toast({
+            variant: "destructive",
+            title: "Failed to run anomaly detection",
+            description: message,
+          })
+          return null
+        }
+      },
+      [toast]
+    ),
+
     // Re-analyze with new settings
     reanalyzeWithSettings: useCallback(
       async (
@@ -884,6 +1214,8 @@ export function useApi() {
           wavelength_nm?: number
           n_particle?: number
           n_medium?: number
+          fsc_angle_range?: [number, number]
+          ssc_angle_range?: [number, number]
           size_ranges?: Array<{ name: string; min: number; max: number }>
         }
       ) => {
@@ -905,6 +1237,8 @@ export function useApi() {
             wavelength_nm: settings.wavelength_nm,
             n_particle: settings.n_particle,
             n_medium: settings.n_medium,
+            fsc_angle_range: settings.fsc_angle_range,
+            ssc_angle_range: settings.ssc_angle_range,
             anomaly_detection: settings.anomaly_detection,
             anomaly_method: settings.anomaly_method,
             zscore_threshold: settings.zscore_threshold,
@@ -1036,6 +1370,443 @@ export function useApi() {
           toast({
             variant: "destructive",
             title: "Distribution comparison failed",
+            description: message,
+          })
+          return null
+        }
+      },
+      [toast]
+    ),
+
+    // =========================================================================
+    // Alerts API (CRMIT-003)
+    // =========================================================================
+
+    getAlerts: useCallback(
+      async (options?: {
+        userId?: number
+        sampleId?: number
+        severity?: "info" | "warning" | "critical" | "error"
+        alertType?: string
+        isAcknowledged?: boolean
+        source?: string
+        limit?: number
+        offset?: number
+      }) => {
+        if (apiClient.offline) return null
+        try {
+          return await retryWithBackoff(() => apiClient.getAlerts(options), {
+            maxAttempts: 2,
+          })
+        } catch (error) {
+          const message = getUserFriendlyErrorMessage(error)
+          toast({
+            variant: "destructive",
+            title: "Failed to fetch alerts",
+            description: message,
+          })
+          return null
+        }
+      },
+      [toast]
+    ),
+
+    getAlertCounts: useCallback(
+      async (userId?: number) => {
+        if (apiClient.offline) return null
+        try {
+          return await retryWithBackoff(() => apiClient.getAlertCounts(userId), {
+            maxAttempts: 2,
+          })
+        } catch (error) {
+          // Silent fail for counts - they're non-critical
+          console.error("Failed to fetch alert counts:", error)
+          return null
+        }
+      },
+      []
+    ),
+
+    acknowledgeAlert: useCallback(
+      async (
+        alertId: number,
+        options?: {
+          acknowledgedBy?: number
+          notes?: string
+        }
+      ) => {
+        if (apiClient.offline) {
+          toast({
+            variant: "destructive",
+            title: "Backend offline",
+            description: "Cannot acknowledge alert - backend server is not running",
+          })
+          return null
+        }
+
+        try {
+          const response = await apiClient.acknowledgeAlert(alertId, options)
+          toast({
+            title: "✅ Alert acknowledged",
+            description: "The alert has been marked as reviewed",
+          })
+          return response
+        } catch (error) {
+          const message = getUserFriendlyErrorMessage(error)
+          toast({
+            variant: "destructive",
+            title: "Failed to acknowledge alert",
+            description: message,
+          })
+          return null
+        }
+      },
+      [toast]
+    ),
+
+    acknowledgeMultipleAlerts: useCallback(
+      async (
+        alertIds: number[],
+        options?: {
+          acknowledgedBy?: number
+          notes?: string
+        }
+      ) => {
+        if (apiClient.offline) {
+          toast({
+            variant: "destructive",
+            title: "Backend offline",
+            description: "Cannot acknowledge alerts - backend server is not running",
+          })
+          return null
+        }
+
+        try {
+          const response = await apiClient.acknowledgeMultipleAlerts(alertIds, options)
+          toast({
+            title: "✅ Alerts acknowledged",
+            description: `${response.acknowledged_count} alerts have been marked as reviewed`,
+          })
+          return response
+        } catch (error) {
+          const message = getUserFriendlyErrorMessage(error)
+          toast({
+            variant: "destructive",
+            title: "Failed to acknowledge alerts",
+            description: message,
+          })
+          return null
+        }
+      },
+      [toast]
+    ),
+
+    deleteAlert: useCallback(
+      async (alertId: number) => {
+        if (apiClient.offline) {
+          toast({
+            variant: "destructive",
+            title: "Backend offline",
+            description: "Cannot delete alert - backend server is not running",
+          })
+          return null
+        }
+
+        try {
+          const response = await apiClient.deleteAlert(alertId)
+          toast({
+            title: "✅ Alert deleted",
+            description: "The alert has been removed",
+          })
+          return response
+        } catch (error) {
+          const message = getUserFriendlyErrorMessage(error)
+          toast({
+            variant: "destructive",
+            title: "Failed to delete alert",
+            description: message,
+          })
+          return null
+        }
+      },
+      [toast]
+    ),
+
+    // =========================================================================
+    // Population Shift Detection (CRMIT-004)
+    // =========================================================================
+
+    /**
+     * Detect population shift between two samples
+     */
+    detectPopulationShift: useCallback(
+      async (options: {
+        sample_id_a: string;
+        sample_id_b: string;
+        metric?: string;
+        data_source?: "fcs" | "nta";
+        tests?: Array<"ks" | "emd" | "mean" | "variance">;
+        alpha?: number;
+      }) => {
+        if (apiClient.offline) {
+          toast({
+            variant: "destructive",
+            title: "Backend offline",
+            description: "Cannot run population shift detection - backend server is not running",
+          })
+          return null
+        }
+
+        try {
+          const response = await apiClient.detectPopulationShift(options)
+          
+          if (response.overall_shift_detected) {
+            toast({
+              variant: "default",
+              title: `⚠️ Population Shift Detected`,
+              description: `${response.overall_severity.toUpperCase()} shift between samples. ${response.tests.filter(t => t.significant).length}/${response.tests.length} tests significant.`,
+            })
+          } else {
+            toast({
+              title: "✅ No Shift Detected",
+              description: "Populations appear stable between samples",
+            })
+          }
+          
+          return response
+        } catch (error) {
+          const message = getUserFriendlyErrorMessage(error)
+          toast({
+            variant: "destructive",
+            title: "Population shift analysis failed",
+            description: message,
+          })
+          return null
+        }
+      },
+      [toast]
+    ),
+
+    /**
+     * Compare multiple samples against a baseline
+     */
+    compareToBaseline: useCallback(
+      async (options: {
+        baseline_sample_id: string;
+        sample_ids: string[];
+        metric?: string;
+        data_source?: "fcs" | "nta";
+        tests?: Array<"ks" | "emd" | "mean" | "variance">;
+        alpha?: number;
+      }) => {
+        if (apiClient.offline) {
+          toast({
+            variant: "destructive",
+            title: "Backend offline",
+            description: "Cannot run baseline comparison - backend server is not running",
+          })
+          return null
+        }
+
+        try {
+          const response = await apiClient.compareToBaseline(options)
+          
+          const shiftedCount = response.comparisons.filter(c => c.overall_shift_detected).length
+          if (shiftedCount > 0) {
+            toast({
+              variant: "default",
+              title: `⚠️ Baseline Deviations Found`,
+              description: `${shiftedCount}/${response.comparisons.length} samples differ from baseline`,
+            })
+          } else {
+            toast({
+              title: "✅ All Samples Match Baseline",
+              description: "No significant deviations from baseline detected",
+            })
+          }
+          
+          return response
+        } catch (error) {
+          const message = getUserFriendlyErrorMessage(error)
+          toast({
+            variant: "destructive",
+            title: "Baseline comparison failed",
+            description: message,
+          })
+          return null
+        }
+      },
+      [toast]
+    ),
+
+    /**
+     * Temporal/sequential population shift analysis
+     */
+    temporalShiftAnalysis: useCallback(
+      async (options: {
+        sample_ids: string[];
+        metric?: string;
+        data_source?: "fcs" | "nta";
+        tests?: Array<"ks" | "emd" | "mean" | "variance">;
+        alpha?: number;
+      }) => {
+        if (apiClient.offline) {
+          toast({
+            variant: "destructive",
+            title: "Backend offline",
+            description: "Cannot run temporal analysis - backend server is not running",
+          })
+          return null
+        }
+
+        try {
+          const response = await apiClient.temporalShiftAnalysis(options)
+          
+          if (response.any_significant_shift) {
+            const driftPoints = response.comparisons.filter(c => c.overall_shift_detected).length
+            toast({
+              variant: "default",
+              title: `⚠️ Temporal Drift Detected`,
+              description: `${driftPoints} transition point(s) show significant shift`,
+            })
+          } else {
+            toast({
+              title: "✅ No Temporal Drift",
+              description: "Population stable across all time points",
+            })
+          }
+          
+          return response
+        } catch (error) {
+          const message = getUserFriendlyErrorMessage(error)
+          toast({
+            variant: "destructive",
+            title: "Temporal analysis failed",
+            description: message,
+          })
+          return null
+        }
+      },
+      [toast]
+    ),
+
+    // ========================================================================
+    // CRMIT-007: Temporal Analysis Hooks
+    // ========================================================================
+
+    /**
+     * Analyze temporal trends (trend, stability, drift) for samples
+     */
+    analyzeTemporalTrends: useCallback(
+      async (options: {
+        sample_ids: string[];
+        metric?: string;
+        data_source?: "fcs" | "nta";
+        alpha?: number;
+        include_correlations?: boolean;
+      }) => {
+        if (apiClient.offline) {
+          toast({
+            variant: "destructive",
+            title: "Backend offline",
+            description: "Cannot run temporal analysis - backend server is not running",
+          })
+          return null
+        }
+
+        try {
+          const response = await apiClient.analyzeTemporalTrends(options)
+          
+          // Show toast based on results
+          const { stability, drift, trend } = response
+          
+          if (drift.severity !== "none" && drift.is_significant) {
+            toast({
+              variant: drift.severity === "critical" || drift.severity === "significant" 
+                ? "destructive" 
+                : "default",
+              title: `⚠️ Drift Detected (${drift.severity})`,
+              description: drift.interpretation,
+            })
+          } else if (stability.level === "poor" || stability.level === "unstable") {
+            toast({
+              variant: "default",
+              title: `📊 ${stability.level === "unstable" ? "Unstable" : "Variable"} Measurements`,
+              description: `CV = ${stability.cv.toFixed(1)}% - ${stability.interpretation}`,
+            })
+          } else if (trend.is_significant) {
+            toast({
+              title: `📈 Trend Detected`,
+              description: trend.interpretation,
+            })
+          } else {
+            toast({
+              title: "✅ Stable Time Series",
+              description: response.summary,
+            })
+          }
+          
+          return response
+        } catch (error) {
+          const message = getUserFriendlyErrorMessage(error)
+          toast({
+            variant: "destructive",
+            title: "Temporal analysis failed",
+            description: message,
+          })
+          return null
+        }
+      },
+      [toast]
+    ),
+
+    /**
+     * Analyze multiple metrics over time
+     */
+    analyzeMultiMetricTemporal: useCallback(
+      async (options: {
+        sample_ids: string[];
+        metrics?: string[];
+        data_source?: "fcs" | "nta";
+        alpha?: number;
+      }) => {
+        if (apiClient.offline) {
+          toast({
+            variant: "destructive",
+            title: "Backend offline",
+            description: "Cannot run temporal analysis - backend server is not running",
+          })
+          return null
+        }
+
+        try {
+          const response = await apiClient.analyzeMultiMetricTemporal(options)
+          
+          // Show summary toast
+          const { overall_stability, overall_drift } = response
+          const driftingCount = overall_drift.total_drifting_metrics
+          
+          if (driftingCount > 0) {
+            toast({
+              variant: overall_drift.max_severity === "critical" || overall_drift.max_severity === "significant"
+                ? "destructive"
+                : "default",
+              title: `⚠️ ${driftingCount} Metric(s) Show Drift`,
+              description: `Max severity: ${overall_drift.max_severity}`,
+            })
+          } else {
+            toast({
+              title: `✅ Temporal Analysis Complete`,
+              description: `${response.metrics_analyzed.length} metrics analyzed - Overall stability: ${overall_stability.level}`,
+            })
+          }
+          
+          return response
+        } catch (error) {
+          const message = getUserFriendlyErrorMessage(error)
+          toast({
+            variant: "destructive",
+            title: "Multi-metric temporal analysis failed",
             description: message,
           })
           return null

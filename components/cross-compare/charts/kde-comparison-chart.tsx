@@ -18,8 +18,8 @@ import { cn } from "@/lib/utils"
 import { TrendingUp } from "lucide-react"
 
 interface KDEComparisonChartProps {
-  fcsData?: { size: number; count: number }[]
-  ntaData?: { size: number; count: number }[]
+  fcsData?: { size: number; count?: number; concentration?: number }[]
+  ntaData?: { size: number; count?: number; concentration?: number }[]
   className?: string
   showLegend?: boolean
   bandwidth?: number
@@ -72,14 +72,20 @@ function silvermanBandwidth(data: number[]): number {
   return 1.06 * std * Math.pow(n, -0.2)
 }
 
-// Generate demo data if none provided
+// Deterministic pseudo-random based on seed (avoids hydration mismatch)
+function seededRandom(seed: number): number {
+  const x = Math.sin(seed * 9999) * 10000
+  return x - Math.floor(x)
+}
+
+// Generate demo data if none provided - using deterministic values
 function generateDemoData(center: number, spread: number, count: number): number[] {
   const data: number[] = []
   for (let i = 0; i < count; i++) {
-    // Normal distribution with some skew
-    const u1 = Math.random()
-    const u2 = Math.random()
-    const normal = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2)
+    // Normal distribution approximation using seeded random
+    const u1 = seededRandom(i * 2) || 0.5
+    const u2 = seededRandom(i * 2 + 1)
+    const normal = Math.sqrt(-2 * Math.log(Math.max(0.001, u1))) * Math.cos(2 * Math.PI * u2)
     const value = center + normal * spread
     if (value > 0) data.push(value)
   }

@@ -29,16 +29,28 @@ const suggestedQuestions = [
 ]
 
 export function ResearchChatTab() {
-  const { addSample, addPinnedChart } = useAnalysisStore()
+  const { addSample, pinChart } = useAnalysisStore()
   const { toast } = useToast()
   const [uploadedFiles, setUploadedFiles] = useState<Array<{ name: string; type: string; size: number }>>([])
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [localInput, setLocalInput] = useState('')
 
-  const { messages, sendMessage, isLoading, append, setMessages } = useChat({
+  const { messages, sendMessage, status, setMessages } = useChat({
     transport: new DefaultChatTransport({ api: "/api/research/chat" }),
   })
+
+  // Derive isLoading from status
+  const isLoading = status === 'streaming' || status === 'submitted'
+  
+  // Helper to send user message - sendMessage expects the message content as a string
+  const sendUserMessage = (content: string) => {
+    if (content.trim()) {
+      // Use type assertion through unknown to handle AI SDK type variations
+      void (sendMessage as unknown as (msg: string) => Promise<void>)(content)
+    }
+  }
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -69,10 +81,7 @@ export function ResearchChatTab() {
       })
 
       // Send message about uploaded file
-      append({
-        role: "user",
-        content: `I've uploaded a file: ${file.name}. It contains ${fileInfo.type.toUpperCase()} data. Please analyze it and provide insights about the particle distribution, concentration, and any anomalies.`,
-      })
+      sendUserMessage(`I've uploaded a file: ${file.name}. It contains ${fileInfo.type.toUpperCase()} data. Please analyze it and provide insights about the particle distribution, concentration, and any anomalies.`)
     })
 
     if (fileInputRef.current) {
@@ -81,7 +90,7 @@ export function ResearchChatTab() {
   }
 
   const handleSuggestedQuestion = (question: string) => {
-    append({ role: "user", content: question })
+    sendUserMessage(question)
   }
 
   const handleResetTab = () => {
@@ -318,10 +327,10 @@ export function ResearchChatTab() {
             disabled={isLoading}
             onKeyPress={(e) => {
               if (e.key === "Enter" && !isLoading) {
-                const input = e.currentTarget
-                if (input.value.trim()) {
-                  append({ role: "user", content: input.value })
-                  input.value = ""
+                const inputEl = e.currentTarget
+                if (inputEl.value.trim()) {
+                  sendUserMessage(inputEl.value)
+                  inputEl.value = ""
                 }
               }
             }}
@@ -331,10 +340,10 @@ export function ResearchChatTab() {
             size="icon"
             className="h-8 w-8 rounded-lg shrink-0"
             onClick={(e) => {
-              const input = e.currentTarget.parentElement?.querySelector("input") as HTMLInputElement
-              if (input?.value.trim() && !isLoading) {
-                append({ role: "user", content: input.value })
-                input.value = ""
+              const inputEl = e.currentTarget.parentElement?.querySelector("input") as HTMLInputElement
+              if (inputEl?.value.trim() && !isLoading) {
+                sendUserMessage(inputEl.value)
+                inputEl.value = ""
               }
             }}
           >

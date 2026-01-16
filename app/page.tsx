@@ -1,17 +1,30 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, Suspense, lazy } from "react"
 import { Header } from "@/components/header"
 import { TabNavigation } from "@/components/tab-navigation"
 import { Sidebar } from "@/components/sidebar"
-import { DashboardTab } from "@/components/dashboard/dashboard-tab"
-import { FlowCytometryTab } from "@/components/flow-cytometry/flow-cytometry-tab"
-import { NTATab } from "@/components/nta/nta-tab"
-import { CrossCompareTab } from "@/components/cross-compare/cross-compare-tab"
-import { ResearchChatTab } from "@/components/research-chat/research-chat-tab"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { useAnalysisStore } from "@/lib/store"
 import { Toaster } from "@/components/ui/toaster"
+import { Loader2 } from "lucide-react"
+
+// PERFORMANCE: Lazy load heavy tab components
+const DashboardTab = lazy(() => import("@/components/dashboard/dashboard-tab").then(m => ({ default: m.DashboardTab })))
+const FlowCytometryTab = lazy(() => import("@/components/flow-cytometry/flow-cytometry-tab").then(m => ({ default: m.FlowCytometryTab })))
+const NTATab = lazy(() => import("@/components/nta/nta-tab").then(m => ({ default: m.NTATab })))
+const CrossCompareTab = lazy(() => import("@/components/cross-compare/cross-compare-tab").then(m => ({ default: m.CrossCompareTab })))
+const ResearchChatTab = lazy(() => import("@/components/research-chat/research-chat-tab").then(m => ({ default: m.ResearchChatTab })))
+
+// Loading fallback component
+function TabLoading() {
+  return (
+    <div className="flex items-center justify-center h-64">
+      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <span className="ml-2 text-muted-foreground">Loading...</span>
+    </div>
+  )
+}
 
 export default function Home() {
   const { activeTab, isDarkMode } = useAnalysisStore()
@@ -37,11 +50,14 @@ export default function Home() {
 
           <main className="flex-1 overflow-y-auto overflow-x-hidden">
             <ErrorBoundary>
-              {activeTab === "dashboard" && <DashboardTab />}
-              {activeTab === "flow-cytometry" && <FlowCytometryTab />}
-              {activeTab === "nta" && <NTATab />}
-              {activeTab === "cross-compare" && <CrossCompareTab />}
-              {activeTab === "research-chat" && <ResearchChatTab />}
+              {/* PERFORMANCE: Wrap lazy-loaded components in Suspense */}
+              <Suspense fallback={<TabLoading />}>
+                {activeTab === "dashboard" && <DashboardTab />}
+                {activeTab === "flow-cytometry" && <FlowCytometryTab />}
+                {activeTab === "nta" && <NTATab />}
+                {activeTab === "cross-compare" && <CrossCompareTab />}
+                {activeTab === "research-chat" && <ResearchChatTab />}
+              </Suspense>
             </ErrorBoundary>
           </main>
         </div>

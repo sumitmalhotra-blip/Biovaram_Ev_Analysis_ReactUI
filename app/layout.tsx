@@ -1,11 +1,17 @@
 import type React from "react"
 import type { Metadata, Viewport } from "next"
-import { Inter, Geist_Mono } from "next/font/google"
+import { Inter } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
+import { SessionProvider } from "@/components/session-provider"
 import "./globals.css"
 
-const _inter = Inter({ subsets: ["latin"] })
-const _geistMono = Geist_Mono({ subsets: ["latin"] })
+// PERFORMANCE: Optimize font loading with display swap and subset
+const inter = Inter({ 
+  subsets: ["latin"],
+  display: "swap",
+  preload: true,
+  variable: "--font-inter",
+})
 
 export const metadata: Metadata = {
   title: "BioVaram EV Analysis Platform",
@@ -33,9 +39,18 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className="dark">
-      <body className="font-sans antialiased">
-        {children}
+    <html lang="en" className={`dark ${inter.variable}`}>
+      <head>
+        {/* PERFORMANCE: Preconnect to external origins */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        {/* PERFORMANCE: DNS prefetch for API */}
+        <link rel="dns-prefetch" href="//localhost:8000" />
+      </head>
+      <body className={`${inter.className} antialiased`}>
+        <SessionProvider>
+          {children}
+        </SessionProvider>
         <Analytics />
       </body>
     </html>

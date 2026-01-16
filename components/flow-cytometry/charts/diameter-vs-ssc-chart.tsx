@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import {
   ComposedChart,
   Scatter,
@@ -15,9 +15,10 @@ import {
   ReferenceLine,
 } from "recharts"
 import { Badge } from "@/components/ui/badge"
-import { Info } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Info, Eye, EyeOff, Layers } from "lucide-react"
 import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { CHART_COLORS } from "@/lib/store"
+import { CHART_COLORS, useAnalysisStore } from "@/lib/store"
 
 export interface DiameterDataPoint {
   diameter: number
@@ -35,6 +36,9 @@ interface DiameterVsSSCChartProps {
   height?: number
   refractiveIndex?: number
   wavelength?: number
+  // Overlay support
+  secondaryData?: DiameterDataPoint[]
+  secondaryAnomalousIndices?: number[]
 }
 
 // Generate Mie theory curve for reference
@@ -110,25 +114,51 @@ export function DiameterVsSSCChart({
   height = 400,
   refractiveIndex = 1.38,
   wavelength = 488,
+  secondaryData,
+  secondaryAnomalousIndices = [],
 }: DiameterVsSSCChartProps) {
+  const { overlayConfig, fcsAnalysis, secondaryFcsAnalysis } = useAnalysisStore()
+  
+  // Overlay visibility toggles
+  const [showPrimary, setShowPrimary] = useState(true)
+  const [showSecondary, setShowSecondary] = useState(true)
+  
+  // Check if overlay is active - allow demo data generation when enabled
+  const hasRealSecondaryData = (secondaryData?.length || 0) > 0
+  const hasOverlay = overlayConfig.enabled && secondaryFcsAnalysis.results && overlayConfig.showOverlaidDiameter
+  
   // Generate Mie theory reference curve
   const mieTheoryCurve = useMemo(
     () => generateMieTheoryCurve(20, 500, 50, refractiveIndex, wavelength),
     [refractiveIndex, wavelength]
   )
 
+  // PERFORMANCE FIX: Limit max points for display
+  const MAX_DISPLAY_POINTS = 1500
+
   // Process data to separate normal and anomalous points
+  // Deterministic pseudo-random for SSR compatibility
+  const seededRandom = (seed: number): number => {
+    const x = Math.sin(seed * 9999) * 10000
+    return x - Math.floor(x)
+  }
+
   const { normalData, anomalyData, stats } = useMemo(() => {
     if (!data || data.length === 0) {
       // Generate demonstration data based on Mie theory with noise
+      // PERFORMANCE FIX: Reduced from 800 to 300 points
       const normal: Array<{ diameter: number; ssc: number; z: number; index: number }> = []
       const anomalies: Array<{ diameter: number; ssc: number; z: number; index: number }> = []
 
-      for (let i = 0; i < 800; i++) {
+      for (let i = 0; i < 300; i++) {
         // Generate diameter with log-normal distribution centered around 120nm
+        // Use deterministic seeded random for SSR compatibility
         const logMean = Math.log(120)
         const logStd = 0.5
-        const diameter = Math.exp(logMean + logStd * (Math.random() + Math.random() + Math.random() - 1.5))
+        const r1 = seededRandom(i * 4)
+        const r2 = seededRandom(i * 4 + 1)
+        const r3 = seededRandom(i * 4 + 2)
+        const diameter = Math.exp(logMean + logStd * (r1 + r2 + r3 - 1.5))
         
         // Calculate expected SSC from Mie theory
         const r = diameter / 2
@@ -148,8 +178,8 @@ export function DiameterVsSSCChart({
         const contrastFactor = Math.pow((refractiveIndex / 1.335) ** 2 - 1, 2) / Math.pow((refractiveIndex / 1.335) ** 2 + 2, 2) * 10
         expectedSSC *= contrastFactor
         
-        // Add measurement noise
-        const noise = 1 + (Math.random() - 0.5) * 0.6
+        // Add measurement noise using deterministic random
+        const noise = 1 + (seededRandom(i * 4 + 3) - 0.5) * 0.6
         const ssc = Math.max(10, expectedSSC * noise)
         
         const point = {
@@ -160,7 +190,7 @@ export function DiameterVsSSCChart({
         }
         
         // Classify as anomaly if deviation from theory is too large
-        if (Math.random() > 0.97 || noise > 1.4 || noise < 0.6) {
+        if (seededRandom(i * 4 + 4) > 0.97 || noise > 1.4 || noise < 0.6) {
           anomalies.push({ ...point, z: 60 })
         } else {
           normal.push(point)
@@ -180,13 +210,20 @@ export function DiameterVsSSCChart({
       }
     }
 
+    // PERFORMANCE FIX: Sample data if too large - use deterministic sampling
+    let processedData = data
+    if (data.length > MAX_DISPLAY_POINTS) {
+      const step = Math.ceil(data.length / MAX_DISPLAY_POINTS)
+      processedData = data.filter((_, i) => i % step === 0)
+    }
+
     // Process real data
     const anomalySet = new Set(anomalousIndices)
     const normal: Array<{ diameter: number; ssc: number; z: number; index: number }> = []
     const anomalies: Array<{ diameter: number; ssc: number; z: number; index: number }> = []
     const allDiameters: number[] = []
 
-    data.forEach((point, idx) => {
+    processedData.forEach((point, idx) => {
       const pointIndex = point.index ?? idx
       allDiameters.push(point.diameter)
       
@@ -217,12 +254,151 @@ export function DiameterVsSSCChart({
     }
   }, [data, anomalousIndices, highlightAnomalies, refractiveIndex, wavelength])
 
+  // Process secondary data for overlay - generate demo if no real data
+  const { secondaryNormalData, secondaryAnomalyData, secondaryStats } = useMemo(() => {
+    if (!hasOverlay) {
+      return { 
+        secondaryNormalData: [], 
+        secondaryAnomalyData: [], 
+        secondaryStats: { count: 0, minDiameter: 0, maxDiameter: 0, medianDiameter: 0 } 
+      }
+    }
+
+    // If we have real secondary data, use it
+    if (hasRealSecondaryData && secondaryData && secondaryData.length > 0) {
+      // PERFORMANCE FIX: Sample secondary data if too large - use deterministic sampling
+      let processedData = secondaryData
+      if (secondaryData.length > MAX_DISPLAY_POINTS) {
+        const step = Math.ceil(secondaryData.length / MAX_DISPLAY_POINTS)
+        processedData = secondaryData.filter((_, i) => i % step === 0)
+      }
+
+      const anomalySet = new Set(secondaryAnomalousIndices)
+      const normal: Array<{ diameter: number; ssc: number; z: number; index: number }> = []
+      const anomalies: Array<{ diameter: number; ssc: number; z: number; index: number }> = []
+      const allDiameters: number[] = []
+
+      processedData.forEach((point, idx) => {
+        const pointIndex = point.index ?? idx
+        allDiameters.push(point.diameter)
+        
+        const dataPoint = {
+          diameter: point.diameter,
+          ssc: point.ssc,
+          z: 20,
+          index: pointIndex,
+        }
+
+        if (highlightAnomalies && (point.isAnomaly || anomalySet.has(pointIndex))) {
+          anomalies.push({ ...dataPoint, z: 50 })
+        } else {
+          normal.push(dataPoint)
+        }
+      })
+
+      const sortedDiameters = [...allDiameters].sort((a, b) => a - b)
+      return {
+        secondaryNormalData: normal,
+        secondaryAnomalyData: anomalies,
+        secondaryStats: {
+          count: secondaryData.length,
+          minDiameter: allDiameters.length ? Math.min(...allDiameters) : 0,
+          maxDiameter: allDiameters.length ? Math.max(...allDiameters) : 0,
+          medianDiameter: sortedDiameters.length ? sortedDiameters[Math.floor(sortedDiameters.length / 2)] : 0,
+        },
+      }
+    }
+    
+    // Generate demo secondary data with shifted distribution
+    const normal: Array<{ diameter: number; ssc: number; z: number; index: number }> = []
+    const anomalies: Array<{ diameter: number; ssc: number; z: number; index: number }> = []
+    const allDiameters: number[] = []
+    
+    for (let i = 0; i < 300; i++) {
+      // Use different seed offset and slightly shifted distribution for comparison
+      const logMean = Math.log(140)  // Shifted from 120nm
+      const logStd = 0.45
+      const r1 = seededRandom(i * 6 + 200)
+      const r2 = seededRandom(i * 6 + 201)
+      const r3 = seededRandom(i * 6 + 202)
+      
+      // Box-Muller for log-normal
+      const u1 = Math.max(0.0001, r1)
+      const u2 = r2
+      const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2)
+      const diameter = Math.exp(logMean + logStd * z)
+      
+      if (diameter >= 20 && diameter <= 500) {
+        // Use Mie theory approximation for expected SSC
+        const sizeParam = (Math.PI * diameter) / wavelength
+        const mieSSC = Math.pow(sizeParam, 4) * Math.pow(refractiveIndex - 1.33, 2) * 2e5
+        const sscNoise = 1 + (r3 - 0.5) * 0.5  // Different noise pattern
+        const ssc = mieSSC * sscNoise
+        
+        allDiameters.push(diameter)
+        const point = { 
+          diameter: Math.round(diameter * 10) / 10, 
+          ssc, 
+          z: 20, 
+          index: i + 10000 
+        }
+        
+        if (seededRandom(i * 6 + 203) > 0.96) {
+          anomalies.push({ ...point, z: 50 })
+        } else {
+          normal.push(point)
+        }
+      }
+    }
+    
+    const sortedDiameters = [...allDiameters].sort((a, b) => a - b)
+    return {
+      secondaryNormalData: normal,
+      secondaryAnomalyData: anomalies,
+      secondaryStats: {
+        count: normal.length + anomalies.length,
+        minDiameter: allDiameters.length ? Math.min(...allDiameters) : 0,
+        maxDiameter: allDiameters.length ? Math.max(...allDiameters) : 0,
+        medianDiameter: sortedDiameters.length ? sortedDiameters[Math.floor(sortedDiameters.length / 2)] : 0,
+      },
+    }
+  }, [hasOverlay, hasRealSecondaryData, secondaryData, secondaryAnomalousIndices, highlightAnomalies, refractiveIndex, wavelength])
+
   const totalPoints = normalData.length + anomalyData.length
+  const totalSecondaryPoints = secondaryNormalData.length + secondaryAnomalyData.length
   const anomalyPercentage = totalPoints > 0 ? ((anomalyData.length / totalPoints) * 100).toFixed(2) : "0.00"
 
   return (
     <div className="space-y-3">
-      {/* Header with stats */}
+      {/* Header with overlay controls */}
+      {hasOverlay && (
+        <div className="flex items-center gap-2 mb-2">
+          <Badge variant="secondary" className="gap-1">
+            <Layers className="h-3 w-3" />
+            Overlay
+          </Badge>
+          <Button
+            variant={showPrimary ? "default" : "outline"}
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => setShowPrimary(!showPrimary)}
+          >
+            {showPrimary ? <Eye className="h-3 w-3 mr-1" /> : <EyeOff className="h-3 w-3 mr-1" />}
+            Primary
+          </Button>
+          <Button
+            variant={showSecondary ? "secondary" : "outline"}
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => setShowSecondary(!showSecondary)}
+          >
+            {showSecondary ? <Eye className="h-3 w-3 mr-1" /> : <EyeOff className="h-3 w-3 mr-1" />}
+            Comparison
+          </Button>
+        </div>
+      )}
+      
+      {/* Stats Header */}
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
         <div className="flex items-center gap-3">
           <span>Events: {totalPoints.toLocaleString()}</span>
@@ -236,6 +412,16 @@ export function DiameterVsSSCChart({
               <Badge variant="destructive" className="h-5 px-1.5 text-xs">
                 {anomalyData.length} anomalies ({anomalyPercentage}%)
               </Badge>
+            </>
+          )}
+          {/* Overlay stats */}
+          {hasOverlay && totalSecondaryPoints > 0 && (
+            <>
+              <span>|</span>
+              <span style={{ color: overlayConfig.secondaryColor }}>
+                Comparison: {totalSecondaryPoints.toLocaleString()} 
+                (Median: {secondaryStats.medianDiameter?.toFixed(1)} nm)
+              </span>
             </>
           )}
         </div>
@@ -304,7 +490,9 @@ export function DiameterVsSSCChart({
                 border: "1px solid #334155",
                 borderRadius: "8px",
                 fontSize: "12px",
+                color: "#f8fafc",
               }}
+              labelStyle={{ color: "#94a3b8" }}
               formatter={(value: number, name: string) => {
                 if (name === "mieSSC") return [value.toFixed(1), "Mie Theory SSC"]
                 return [value.toFixed(1), name === "ssc" ? "SSC-A" : name]
@@ -354,23 +542,47 @@ export function DiameterVsSSCChart({
               />
             )}
 
-            {/* Normal events scatter - TASK-018: Purple for normal */}
-            <Scatter
-              name="Normal Events"
-              data={normalData}
-              fill={CHART_COLORS.primary}
-              fillOpacity={0.5}
-              shape="circle"
-            />
+            {/* Primary normal events scatter */}
+            {showPrimary && (
+              <Scatter
+                name={hasOverlay ? (fcsAnalysis.file?.name?.slice(0, 20) || "Primary") : "Normal Events"}
+                data={normalData}
+                fill={hasOverlay ? overlayConfig.primaryColor : CHART_COLORS.primary}
+                fillOpacity={hasOverlay ? overlayConfig.primaryOpacity : 0.5}
+                shape="circle"
+              />
+            )}
 
-            {/* Anomalous events scatter - TASK-018: Red for anomalies */}
-            {anomalyData.length > 0 && highlightAnomalies && (
+            {/* Primary anomalous events scatter */}
+            {showPrimary && anomalyData.length > 0 && highlightAnomalies && (
               <Scatter
                 name="Anomalous Events"
                 data={anomalyData}
                 fill={CHART_COLORS.anomaly}
                 fillOpacity={0.8}
                 shape="diamond"
+              />
+            )}
+            
+            {/* Secondary normal events scatter for overlay */}
+            {hasOverlay && showSecondary && secondaryNormalData.length > 0 && (
+              <Scatter
+                name={secondaryFcsAnalysis.file?.name?.slice(0, 20) || "Comparison"}
+                data={secondaryNormalData}
+                fill={overlayConfig.secondaryColor}
+                fillOpacity={overlayConfig.secondaryOpacity}
+                shape="circle"
+              />
+            )}
+            
+            {/* Secondary anomalous events scatter for overlay */}
+            {hasOverlay && showSecondary && secondaryAnomalyData.length > 0 && highlightAnomalies && (
+              <Scatter
+                name="Comparison Anomalies"
+                data={secondaryAnomalyData}
+                fill="#f97316"
+                fillOpacity={0.7}
+                shape="square"
               />
             )}
           </ComposedChart>

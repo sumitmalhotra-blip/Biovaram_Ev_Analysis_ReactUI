@@ -21,7 +21,7 @@ from datetime import datetime
 import sys
 import numpy as np
 
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, status
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, status, Header
 from fastapi.responses import JSONResponse  # noqa: F401
 from sqlalchemy.ext.asyncio import AsyncSession  # type: ignore[import-not-found]
 from loguru import logger
@@ -37,7 +37,9 @@ from src.database.crud import (
     create_nta_result,
     create_processing_job,
     update_job_status,
+    create_alert,
 )
+from src.database.models import AlertType, AlertSeverity
 # Import professional parsers
 from src.parsers.fcs_parser import FCSParser
 from src.parsers.nta_parser import NTAParser
@@ -51,6 +53,373 @@ from src.physics.size_config import (
 
 settings = get_settings()
 router = APIRouter()
+
+
+# ============================================================================
+# Alert Thresholds Configuration (CRMIT-003)
+# ============================================================================
+
+# Quality control alert thresholds
+ALERT_THRESHOLDS = {
+    "high_debris_pct": 20.0,           # Alert if debris > 20%
+    "critical_debris_pct": 35.0,       # Critical if debris > 35%
+    "low_event_count": 1000,           # Alert if events < 1000
+    "critical_low_events": 500,        # Critical if events < 500
+    "high_exclusion_pct": 30.0,        # Alert if exclusion > 30%
+    "critical_exclusion_pct": 50.0,    # Critical if exclusion > 50%
+    "unusual_size_cv": 100.0,          # Alert if size CV > 100%
+    "abnormal_fsc_median": 100000,     # Alert if FSC median > 100k (unusual)
+}
+
+
+async def generate_analysis_alerts(
+    db: AsyncSession,
+    sample_id: int,
+    sample_name: str,
+    user_id: Optional[int],
+    fcs_results: dict,
+    source: str = "FCS Analysis"
+) -> list[dict]:
+    """
+    Generate alerts based on FCS analysis results.
+    
+    CRMIT-003: Alert System with Timestamps
+    
+    Checks for:
+    - High debris percentage
+    - Low event counts
+    - High particle exclusion rates
+    - Unusual size distributions
+    
+    Args:
+        db: Database session
+        sample_id: Database sample ID
+        sample_name: Display name for the sample
+        user_id: User who uploaded the sample
+        fcs_results: Parsed FCS analysis results
+        source: Alert source identifier
+        
+    Returns:
+        List of created alert dictionaries
+    """
+    alerts_created = []
+    
+    # Extract relevant metrics
+    debris_pct = fcs_results.get('debris_pct')
+    total_events = fcs_results.get('total_events', 0)
+    excluded_pct = fcs_results.get('excluded_particles_pct')
+    size_stats = fcs_results.get('size_statistics', {})
+    size_cv = None
+    if size_stats:
+        mean_size = size_stats.get('mean', 0)
+        std_size = size_stats.get('std', 0)
+        if mean_size and mean_size > 0:
+            size_cv = (std_size / mean_size) * 100
+    
+    # Check debris percentage
+    if debris_pct is not None:
+        if debris_pct >= ALERT_THRESHOLDS["critical_debris_pct"]:
+            alert = await create_alert(
+                db=db,
+                sample_id=sample_id,
+                user_id=user_id,
+                alert_type=AlertType.HIGH_DEBRIS,
+                severity=AlertSeverity.CRITICAL,
+                title="Critical: Very High Debris Percentage",
+                message=f"Debris percentage ({debris_pct:.1f}%) exceeds critical threshold ({ALERT_THRESHOLDS['critical_debris_pct']}%). "
+                        "Sample quality may be severely compromised. Consider re-processing or excluding from analysis.",
+                source=source,
+                sample_name=sample_name,
+                metadata={
+                    "debris_pct": debris_pct,
+                    "threshold": ALERT_THRESHOLDS["critical_debris_pct"],
+                    "recommendation": "Review sample preparation and consider re-running"
+                }
+            )
+            alerts_created.append({"id": alert.id, "severity": "critical", "type": "high_debris"})
+            logger.warning(f"🚨 Critical debris alert created for {sample_name}: {debris_pct:.1f}%")
+            
+        elif debris_pct >= ALERT_THRESHOLDS["high_debris_pct"]:
+            alert = await create_alert(
+                db=db,
+                sample_id=sample_id,
+                user_id=user_id,
+                alert_type=AlertType.HIGH_DEBRIS,
+                severity=AlertSeverity.WARNING,
+                title="Warning: High Debris Percentage",
+                message=f"Debris percentage ({debris_pct:.1f}%) exceeds warning threshold ({ALERT_THRESHOLDS['high_debris_pct']}%). "
+                        "This may affect analysis accuracy.",
+                source=source,
+                sample_name=sample_name,
+                metadata={
+                    "debris_pct": debris_pct,
+                    "threshold": ALERT_THRESHOLDS["high_debris_pct"],
+                    "recommendation": "Review results carefully"
+                }
+            )
+            alerts_created.append({"id": alert.id, "severity": "warning", "type": "high_debris"})
+            logger.info(f"⚠️ High debris alert created for {sample_name}: {debris_pct:.1f}%")
+    
+    # Check event count
+    if total_events > 0:
+        if total_events < ALERT_THRESHOLDS["critical_low_events"]:
+            alert = await create_alert(
+                db=db,
+                sample_id=sample_id,
+                user_id=user_id,
+                alert_type=AlertType.LOW_EVENT_COUNT,
+                severity=AlertSeverity.CRITICAL,
+                title="Critical: Very Low Event Count",
+                message=f"Event count ({total_events:,}) is critically low (below {ALERT_THRESHOLDS['critical_low_events']:,}). "
+                        "Statistical analysis may be unreliable. Consider acquiring more data.",
+                source=source,
+                sample_name=sample_name,
+                metadata={
+                    "event_count": total_events,
+                    "threshold": ALERT_THRESHOLDS["critical_low_events"],
+                    "recommendation": "Re-acquire sample with longer acquisition time"
+                }
+            )
+            alerts_created.append({"id": alert.id, "severity": "critical", "type": "low_event_count"})
+            logger.warning(f"🚨 Critical low event alert for {sample_name}: {total_events:,} events")
+            
+        elif total_events < ALERT_THRESHOLDS["low_event_count"]:
+            alert = await create_alert(
+                db=db,
+                sample_id=sample_id,
+                user_id=user_id,
+                alert_type=AlertType.LOW_EVENT_COUNT,
+                severity=AlertSeverity.WARNING,
+                title="Warning: Low Event Count",
+                message=f"Event count ({total_events:,}) is below recommended minimum ({ALERT_THRESHOLDS['low_event_count']:,}). "
+                        "Consider whether statistical power is sufficient for your analysis.",
+                source=source,
+                sample_name=sample_name,
+                metadata={
+                    "event_count": total_events,
+                    "threshold": ALERT_THRESHOLDS["low_event_count"],
+                    "recommendation": "Review if sufficient for intended analysis"
+                }
+            )
+            alerts_created.append({"id": alert.id, "severity": "warning", "type": "low_event_count"})
+            logger.info(f"⚠️ Low event alert for {sample_name}: {total_events:,} events")
+    
+    # Check particle exclusion rate
+    if excluded_pct is not None:
+        if excluded_pct >= ALERT_THRESHOLDS["critical_exclusion_pct"]:
+            alert = await create_alert(
+                db=db,
+                sample_id=sample_id,
+                user_id=user_id,
+                alert_type=AlertType.QUALITY_WARNING,
+                severity=AlertSeverity.ERROR,
+                title="Error: Excessive Particle Exclusion",
+                message=f"Particle exclusion rate ({excluded_pct:.1f}%) is excessive (above {ALERT_THRESHOLDS['critical_exclusion_pct']}%). "
+                        "Most particles are outside the valid size range. Check instrument calibration or sample preparation.",
+                source=source,
+                sample_name=sample_name,
+                metadata={
+                    "exclusion_pct": excluded_pct,
+                    "threshold": ALERT_THRESHOLDS["critical_exclusion_pct"],
+                    "recommendation": "Check calibration and sample preparation"
+                }
+            )
+            alerts_created.append({"id": alert.id, "severity": "error", "type": "quality_warning"})
+            logger.error(f"❌ Excessive exclusion alert for {sample_name}: {excluded_pct:.1f}%")
+            
+        elif excluded_pct >= ALERT_THRESHOLDS["high_exclusion_pct"]:
+            alert = await create_alert(
+                db=db,
+                sample_id=sample_id,
+                user_id=user_id,
+                alert_type=AlertType.QUALITY_WARNING,
+                severity=AlertSeverity.WARNING,
+                title="Warning: High Particle Exclusion Rate",
+                message=f"Particle exclusion rate ({excluded_pct:.1f}%) is elevated (above {ALERT_THRESHOLDS['high_exclusion_pct']}%). "
+                        "A significant portion of particles are outside the analysis range.",
+                source=source,
+                sample_name=sample_name,
+                metadata={
+                    "exclusion_pct": excluded_pct,
+                    "threshold": ALERT_THRESHOLDS["high_exclusion_pct"],
+                    "recommendation": "Review size distribution and filtering settings"
+                }
+            )
+            alerts_created.append({"id": alert.id, "severity": "warning", "type": "quality_warning"})
+            logger.info(f"⚠️ High exclusion alert for {sample_name}: {excluded_pct:.1f}%")
+    
+    # Check for unusual size distribution (high CV)
+    if size_cv is not None and size_cv > ALERT_THRESHOLDS["unusual_size_cv"]:
+        alert = await create_alert(
+            db=db,
+            sample_id=sample_id,
+            user_id=user_id,
+            alert_type=AlertType.SIZE_DISTRIBUTION_UNUSUAL,
+            severity=AlertSeverity.INFO,
+            title="Info: Highly Variable Size Distribution",
+            message=f"Size distribution coefficient of variation ({size_cv:.1f}%) indicates high heterogeneity. "
+                    "This may be expected for mixed populations but should be noted.",
+            source=source,
+            sample_name=sample_name,
+            metadata={
+                "size_cv_pct": size_cv,
+                "mean_size_nm": size_stats.get('mean'),
+                "std_size_nm": size_stats.get('std'),
+                "threshold": ALERT_THRESHOLDS["unusual_size_cv"]
+            }
+        )
+        alerts_created.append({"id": alert.id, "severity": "info", "type": "size_distribution_unusual"})
+        logger.info(f"ℹ️ Size variability alert for {sample_name}: CV={size_cv:.1f}%")
+    
+    return alerts_created
+
+
+async def generate_nta_alerts(
+    db: AsyncSession,
+    sample_id: int,
+    sample_name: str,
+    user_id: Optional[int],
+    nta_results: dict,
+    source: str = "NTA Analysis"
+) -> list[dict]:
+    """
+    Generate alerts based on NTA analysis results.
+    
+    CRMIT-003: Alert System with Timestamps
+    
+    Checks for:
+    - Low particle concentration
+    - Unusual size distributions
+    - Temperature variations
+    
+    Args:
+        db: Database session
+        sample_id: Database sample ID
+        sample_name: Display name for the sample
+        user_id: User who uploaded the sample
+        nta_results: Parsed NTA analysis results
+        source: Alert source identifier
+        
+    Returns:
+        List of created alert dictionaries
+    """
+    alerts_created = []
+    
+    # NTA-specific thresholds
+    NTA_THRESHOLDS = {
+        "low_concentration": 1e6,           # Alert if < 1e6 particles/mL
+        "critical_low_concentration": 1e5,  # Critical if < 1e5 particles/mL
+        "high_polydispersity": 50.0,        # Alert if span > 50%
+        "unusual_temp_min": 20.0,           # Alert if temp < 20°C
+        "unusual_temp_max": 30.0,           # Alert if temp > 30°C
+    }
+    
+    # Extract relevant metrics
+    concentration = nta_results.get('concentration_particles_ml')
+    d10 = nta_results.get('d10_nm')
+    d50 = nta_results.get('d50_nm')
+    d90 = nta_results.get('d90_nm')
+    temperature = nta_results.get('temperature_celsius')
+    
+    # Calculate polydispersity (span = (d90-d10)/d50 * 100)
+    polydispersity = None
+    if d10 and d50 and d90 and d50 > 0:
+        polydispersity = ((d90 - d10) / d50) * 100
+    
+    # Check concentration
+    if concentration is not None:
+        if concentration < NTA_THRESHOLDS["critical_low_concentration"]:
+            alert = await create_alert(
+                db=db,
+                sample_id=sample_id,
+                user_id=user_id,
+                alert_type=AlertType.LOW_EVENT_COUNT,
+                severity=AlertSeverity.CRITICAL,
+                title="Critical: Very Low Particle Concentration",
+                message=f"Particle concentration ({concentration:.2e} particles/mL) is critically low. "
+                        "NTA measurements may be unreliable at this concentration.",
+                source=source,
+                sample_name=sample_name,
+                metadata={
+                    "concentration_particles_ml": concentration,
+                    "threshold": NTA_THRESHOLDS["critical_low_concentration"],
+                    "recommendation": "Concentrate sample or check dilution factor"
+                }
+            )
+            alerts_created.append({"id": alert.id, "severity": "critical", "type": "low_event_count"})
+            logger.warning(f"🚨 Critical low concentration alert for {sample_name}: {concentration:.2e}")
+            
+        elif concentration < NTA_THRESHOLDS["low_concentration"]:
+            alert = await create_alert(
+                db=db,
+                sample_id=sample_id,
+                user_id=user_id,
+                alert_type=AlertType.LOW_EVENT_COUNT,
+                severity=AlertSeverity.WARNING,
+                title="Warning: Low Particle Concentration",
+                message=f"Particle concentration ({concentration:.2e} particles/mL) is below optimal range. "
+                        "Consider whether measurement precision is sufficient.",
+                source=source,
+                sample_name=sample_name,
+                metadata={
+                    "concentration_particles_ml": concentration,
+                    "threshold": NTA_THRESHOLDS["low_concentration"],
+                    "recommendation": "Review dilution factor"
+                }
+            )
+            alerts_created.append({"id": alert.id, "severity": "warning", "type": "low_event_count"})
+            logger.info(f"⚠️ Low concentration alert for {sample_name}: {concentration:.2e}")
+    
+    # Check polydispersity
+    if polydispersity is not None and polydispersity > NTA_THRESHOLDS["high_polydispersity"]:
+        alert = await create_alert(
+            db=db,
+            sample_id=sample_id,
+            user_id=user_id,
+            alert_type=AlertType.SIZE_DISTRIBUTION_UNUSUAL,
+            severity=AlertSeverity.INFO,
+            title="Info: High Polydispersity",
+            message=f"Sample polydispersity (span: {polydispersity:.1f}%) indicates a heterogeneous size distribution. "
+                    "This may be expected but should be considered in interpretation.",
+            source=source,
+            sample_name=sample_name,
+            metadata={
+                "polydispersity_pct": polydispersity,
+                "d10_nm": d10,
+                "d50_nm": d50,
+                "d90_nm": d90,
+                "threshold": NTA_THRESHOLDS["high_polydispersity"]
+            }
+        )
+        alerts_created.append({"id": alert.id, "severity": "info", "type": "size_distribution_unusual"})
+        logger.info(f"ℹ️ Polydispersity alert for {sample_name}: span={polydispersity:.1f}%")
+    
+    # Check temperature
+    if temperature is not None:
+        if temperature < NTA_THRESHOLDS["unusual_temp_min"] or temperature > NTA_THRESHOLDS["unusual_temp_max"]:
+            alert = await create_alert(
+                db=db,
+                sample_id=sample_id,
+                user_id=user_id,
+                alert_type=AlertType.CALIBRATION_NEEDED,
+                severity=AlertSeverity.WARNING,
+                title="Warning: Unusual Measurement Temperature",
+                message=f"Measurement temperature ({temperature:.1f}°C) is outside normal range "
+                        f"({NTA_THRESHOLDS['unusual_temp_min']}-{NTA_THRESHOLDS['unusual_temp_max']}°C). "
+                        "This may affect viscosity calculations and size accuracy.",
+                source=source,
+                sample_name=sample_name,
+                metadata={
+                    "temperature_celsius": temperature,
+                    "normal_min": NTA_THRESHOLDS["unusual_temp_min"],
+                    "normal_max": NTA_THRESHOLDS["unusual_temp_max"],
+                    "recommendation": "Ensure temperature equilibration before measurement"
+                }
+            )
+            alerts_created.append({"id": alert.id, "severity": "warning", "type": "calibration_needed"})
+            logger.info(f"⚠️ Temperature alert for {sample_name}: {temperature:.1f}°C")
+    
+    return alerts_created
 
 
 # ============================================================================
@@ -140,6 +509,7 @@ async def upload_fcs_file(
     preparation_method: Optional[str] = Form(None),
     operator: Optional[str] = Form(None),
     notes: Optional[str] = Form(None),
+    user_id: Optional[int] = Form(None),
     db: AsyncSession = Depends(get_session)
 ):
     """
@@ -337,42 +707,47 @@ async def upload_fcs_file(
                         logger.warning(f"⚠️ Mie calculation failed: {mie_error}")
                 
                 # Calculate size distribution percentiles using Mie theory
+                # FIXED: Use batch calculation on actual FSC values, then compute percentiles from sizes
                 size_statistics = None
                 computed_sizes = None  # Will store actual sizes for std calculation
-                if fsc_channel and fsc_stats:
+                if fsc_channel and fsc_channel in parsed_data.columns:
                     try:
                         mie_calc = MieScatterCalculator(wavelength_nm=488.0, n_particle=1.40, n_medium=1.33)
                         
-                        # Calculate sizes for percentiles
-                        d10, _ = mie_calc.diameter_from_scatter(fsc_stats.get('q10', 0))
-                        d50, _ = mie_calc.diameter_from_scatter(fsc_stats.get('q50', 0))
-                        d90, _ = mie_calc.diameter_from_scatter(fsc_stats.get('q90', 0))
-                        d_mean, _ = mie_calc.diameter_from_scatter(fsc_stats.get('mean', 0))
+                        # Sample FSC values and convert to sizes using fast batch method
+                        sample_size = min(10000, len(parsed_data))
+                        fsc_values = parsed_data[fsc_channel].values
+                        # Filter out non-positive values
+                        positive_fsc = fsc_values[fsc_values > 0]
+                        if len(positive_fsc) > sample_size:
+                            # Random sample
+                            np.random.seed(42)
+                            positive_fsc = np.random.choice(positive_fsc, size=sample_size, replace=False)
                         
-                        # Calculate actual size std by computing sizes for a sample of events
-                        size_std = None
-                        try:
-                            sample_size = min(5000, len(parsed_data))
-                            sampled_fsc = parsed_data[fsc_channel].sample(n=sample_size, random_state=42)
-                            computed_sizes = []
-                            for fsc_val in sampled_fsc:
-                                sz, success = mie_calc.diameter_from_scatter(float(fsc_val))
-                                if success and 30 <= sz <= 500:  # Valid size range
-                                    computed_sizes.append(sz)
-                            if computed_sizes:
-                                size_std = float(np.std(computed_sizes))
-                        except Exception as std_err:
-                            logger.warning(f"⚠️ Size std calculation failed: {std_err}")
-                            size_std = fsc_stats.get('std', 0) * 0.5  # Fallback
+                        # Use fast vectorized batch calculation (100x faster than loop)
+                        computed_sizes, success_mask = mie_calc.diameters_from_scatter_batch(
+                            positive_fsc, min_diameter=30.0, max_diameter=500.0
+                        )
+                        valid_sizes = computed_sizes[success_mask & (computed_sizes >= 30) & (computed_sizes <= 500)]
                         
-                        size_statistics = {
-                            'd10': float(d10) if d10 > 0 else None,
-                            'd50': float(d50) if d50 > 0 else None,
-                            'd90': float(d90) if d90 > 0 else None,
-                            'mean': float(d_mean) if d_mean > 0 else None,
-                            'std': size_std if size_std is not None else 0.0
-                        }
-                        logger.info(f"📏 Size distribution: D10={d10:.1f}, D50={d50:.1f}, D90={d90:.1f} nm, Std={size_std:.1f if size_std else 0}")
+                        if len(valid_sizes) > 10:
+                            # Calculate percentiles from actual computed sizes
+                            d10 = float(np.percentile(valid_sizes, 10))
+                            d50 = float(np.percentile(valid_sizes, 50))
+                            d90 = float(np.percentile(valid_sizes, 90))
+                            d_mean = float(np.mean(valid_sizes))
+                            size_std = float(np.std(valid_sizes))
+                            
+                            size_statistics = {
+                                'd10': d10,
+                                'd50': d50,
+                                'd90': d90,
+                                'mean': d_mean,
+                                'std': size_std
+                            }
+                            logger.info(f"📏 Size distribution: D10={d10:.1f}, D50={d50:.1f}, D90={d90:.1f} nm, Std={size_std:.1f} (from {len(valid_sizes)} valid sizes)")
+                        else:
+                            logger.warning(f"⚠️ Not enough valid sizes for distribution: {len(valid_sizes)} valid out of {len(computed_sizes)}")
                     except Exception as size_error:
                         logger.warning(f"⚠️ Size distribution calculation failed: {size_error}")
                 
@@ -384,21 +759,18 @@ async def upload_fcs_file(
                 if fsc_channel and fsc_channel in parsed_data.columns:
                     try:
                         mie_calc = MieScatterCalculator(wavelength_nm=488.0, n_particle=1.40, n_medium=1.33)
-                        # Calculate size for each event (sample 10000 events for speed)
+                        # Use FAST batch calculation (sample 10000 events)
                         sample_size = min(10000, len(parsed_data))
-                        sampled_fsc = parsed_data[fsc_channel].sample(n=sample_size, random_state=42)
+                        sampled_fsc = parsed_data[fsc_channel].sample(n=sample_size, random_state=42).values
                         
-                        sizes = []
-                        for fsc_val in sampled_fsc:
-                            # Uses extended range from size_config (30-220nm)
-                            size, success = mie_calc.diameter_from_scatter(
-                                fsc_intensity=float(fsc_val)
-                            )
-                            if success:
-                                sizes.append(size)
+                        # Vectorized batch calculation (100x faster than loop)
+                        sizes, success_mask = mie_calc.diameters_from_scatter_batch(
+                            sampled_fsc, min_diameter=30.0, max_diameter=500.0
+                        )
+                        valid_sizes = sizes[success_mask]
                         
-                        if sizes:
-                            sizes_array = np.array(sizes)
+                        if len(valid_sizes) > 0:
+                            sizes_array = valid_sizes
                             
                             # Apply proper filtering using size_config
                             filtered_sizes, filter_stats = filter_particles_by_size(sizes_array)
@@ -508,7 +880,7 @@ async def upload_fcs_file(
                 parts = sample_id.rsplit('_', 1)
                 biological_sample_id = parts[0] if len(parts) > 1 else sample_id
                 
-                # Create new sample record
+                # Create new sample record with user ownership
                 db_sample = await create_sample(
                     db=db,
                     sample_id=sample_id,
@@ -519,8 +891,9 @@ async def upload_fcs_file(
                     preparation_method=preparation_method,
                     operator=operator,
                     notes=notes,
+                    user_id=user_id,
                 )
-                logger.info(f"✨ Created new sample: {sample_id}")
+                logger.info(f"✨ Created new sample: {sample_id} (user_id: {user_id})")
             
             # Create processing job
             if db_sample:
@@ -555,6 +928,22 @@ async def upload_fcs_file(
                     )
                     logger.success(f"💾 Saved FCS results to database")
                     
+                    # CRMIT-003: Generate quality alerts based on analysis results
+                    try:
+                        alerts = await generate_analysis_alerts(
+                            db=db,
+                            sample_id=db_sample.id,  # type: ignore[arg-type]
+                            sample_name=sample_id,
+                            user_id=user_id,
+                            fcs_results=fcs_results,
+                            source="FCS Analysis"
+                        )
+                        if alerts:
+                            logger.info(f"🔔 Generated {len(alerts)} quality alerts for {sample_id}")
+                    except Exception as alert_error:
+                        logger.warning(f"⚠️ Alert generation failed: {alert_error}")
+                        # Don't fail the upload due to alert generation issues
+                    
         except Exception as db_error:
             logger.warning(f"⚠️ Database operation failed: {db_error}")
             logger.warning("   Continuing with file-based response...")
@@ -585,6 +974,9 @@ async def upload_fcs_file(
         
         # Add parsed FCS results if available
         if fcs_results:
+            # Add ID to fcs_results for frontend compatibility
+            fcs_results['id'] = db_id
+            fcs_results['sample_id'] = sample_id
             response_data["fcs_results"] = fcs_results
         
         return response_data
@@ -610,6 +1002,7 @@ async def upload_nta_file(
     temperature_celsius: Optional[float] = Form(None),
     operator: Optional[str] = Form(None),
     notes: Optional[str] = Form(None),
+    user_id: Optional[int] = Form(None),
     db: AsyncSession = Depends(get_session)
 ):
     """
@@ -760,7 +1153,7 @@ async def upload_nta_file(
                 )
                 logger.info(f"📝 Updated existing sample with NTA: {sample_id}")
             else:
-                # Create new sample record
+                # Create new sample record with user ownership
                 db_sample = await create_sample(
                     db=db,
                     sample_id=sample_id,
@@ -768,8 +1161,9 @@ async def upload_nta_file(
                     treatment=treatment,
                     operator=operator,
                     notes=notes,
+                    user_id=user_id,
                 )
-                logger.info(f"✨ Created new sample: {sample_id}")
+                logger.info(f"✨ Created new sample: {sample_id} (user_id: {user_id})")
             
             # Create processing job
             if db_sample:
@@ -802,6 +1196,22 @@ async def upload_nta_file(
                         result_data=nta_results,
                     )
                     logger.success(f"💾 Saved NTA results to database")
+                    
+                    # CRMIT-003: Generate quality alerts based on NTA analysis results
+                    try:
+                        alerts = await generate_nta_alerts(
+                            db=db,
+                            sample_id=db_sample.id,  # type: ignore[arg-type]
+                            sample_name=sample_id,
+                            user_id=user_id,
+                            nta_results=nta_results,
+                            source="NTA Analysis"
+                        )
+                        if alerts:
+                            logger.info(f"🔔 Generated {len(alerts)} quality alerts for NTA: {sample_id}")
+                    except Exception as alert_error:
+                        logger.warning(f"⚠️ NTA alert generation failed: {alert_error}")
+                        # Don't fail the upload due to alert generation issues
                 
         except Exception as db_error:
             logger.warning(f"⚠️ Database operation failed: {db_error}")

@@ -97,6 +97,7 @@ export function MiniChart({ type, data, config }: MiniChartProps) {
     border: "1px solid #334155",
     borderRadius: "6px",
     fontSize: "12px",
+    color: "#f8fafc",
   }
 
   return (

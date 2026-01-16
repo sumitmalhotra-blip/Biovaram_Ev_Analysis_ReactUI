@@ -4,9 +4,28 @@ import { useMemo } from "react"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts"
 import { CHART_COLORS } from "@/lib/store"
 
-interface SizeDistribution {
-  bins: number[]
-  counts: number[]
+// Support both array format and bins/counts format
+type SizeDistributionArray = Array<{ size: number; count?: number; concentration?: number }>
+type SizeDistributionBins = { bins: number[]; counts: number[] }
+type SizeDistribution = SizeDistributionBins | SizeDistributionArray
+
+// Normalize SizeDistribution to bins/counts format
+function normalizeDistribution(data: SizeDistribution): SizeDistributionBins | null {
+  if (!data) return null
+  
+  // If it's already in bins/counts format
+  if ('bins' in data && 'counts' in data) {
+    return data as SizeDistributionBins
+  }
+  
+  // If it's in array format, convert it
+  if (Array.isArray(data)) {
+    const bins = data.map(d => d.size)
+    const counts = data.map(d => d.count ?? d.concentration ?? 0)
+    return { bins, counts }
+  }
+  
+  return null
 }
 
 interface OverlayHistogramChartProps {
@@ -22,11 +41,16 @@ const generateDefaultData = () => {
     const fcs = Math.max(0, 2000 * Math.exp(-Math.pow((size - 127) / 55, 2)))
     // NTA distribution (slightly shifted)
     const nta = Math.max(0, 1500 * Math.exp(-Math.pow((size - 140) / 50, 2)))
+    
+    // Use deterministic variation based on index to avoid hydration mismatch
+    const index = size / 20
+    const variation1 = 0.9 + ((Math.sin(index * 7) + 1) / 2) * 0.2
+    const variation2 = 0.9 + ((Math.sin(index * 11 + 3) + 1) / 2) * 0.2
 
     data.push({
       size,
-      fcs: Math.round(fcs * (0.9 + Math.random() * 0.2)),
-      nta: Math.round(nta * (0.9 + Math.random() * 0.2)),
+      fcs: Math.round(fcs * variation1),
+      nta: Math.round(nta * variation2),
     })
   }
   return data
@@ -34,38 +58,42 @@ const generateDefaultData = () => {
 
 export function OverlayHistogramChart({ fcsData, ntaData }: OverlayHistogramChartProps) {
   const chartData = useMemo(() => {
+    // Normalize both datasets
+    const normalizedFcs = fcsData ? normalizeDistribution(fcsData) : null
+    const normalizedNta = ntaData ? normalizeDistribution(ntaData) : null
+    
     // If both datasets exist, merge them
-    if (fcsData && ntaData) {
-      const allBins = new Set([...fcsData.bins, ...ntaData.bins])
+    if (normalizedFcs && normalizedNta) {
+      const allBins = new Set([...normalizedFcs.bins, ...normalizedNta.bins])
       const sortedBins = Array.from(allBins).sort((a, b) => a - b)
       
-      return sortedBins.map(bin => {
-        const fcsIndex = fcsData.bins.indexOf(bin)
-        const ntaIndex = ntaData.bins.indexOf(bin)
+      return sortedBins.map((bin: number) => {
+        const fcsIndex = normalizedFcs.bins.indexOf(bin)
+        const ntaIndex = normalizedNta.bins.indexOf(bin)
         
         return {
           size: bin,
-          fcs: fcsIndex >= 0 ? fcsData.counts[fcsIndex] : 0,
-          nta: ntaIndex >= 0 ? ntaData.counts[ntaIndex] : 0,
+          fcs: fcsIndex >= 0 ? normalizedFcs.counts[fcsIndex] : 0,
+          nta: ntaIndex >= 0 ? normalizedNta.counts[ntaIndex] : 0,
         }
       })
     }
     
     // If only FCS data exists
-    if (fcsData) {
-      return fcsData.bins.map((bin, i) => ({
+    if (normalizedFcs) {
+      return normalizedFcs.bins.map((bin: number, i: number) => ({
         size: bin,
-        fcs: fcsData.counts[i],
+        fcs: normalizedFcs.counts[i],
         nta: 0,
       }))
     }
     
     // If only NTA data exists
-    if (ntaData) {
-      return ntaData.bins.map((bin, i) => ({
+    if (normalizedNta) {
+      return normalizedNta.bins.map((bin: number, i: number) => ({
         size: bin,
         fcs: 0,
-        nta: ntaData.counts[i],
+        nta: normalizedNta.counts[i],
       }))
     }
     
@@ -95,7 +123,9 @@ export function OverlayHistogramChart({ fcsData, ntaData }: OverlayHistogramChar
               border: "1px solid #334155",
               borderRadius: "8px",
               fontSize: "12px",
+              color: "#f8fafc",
             }}
+            labelStyle={{ color: "#94a3b8" }}
             labelFormatter={(value) => `${value} nm`}
           />
           <Legend wrapperStyle={{ fontSize: "12px" }} />

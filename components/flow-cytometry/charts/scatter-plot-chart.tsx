@@ -32,18 +32,24 @@ export function ScatterPlotChart({
   showLegend = true,
   height = 320,
 }: ScatterPlotChartProps) {
+  // Deterministic pseudo-random for SSR compatibility
+  const seededRandom = (seed: number): number => {
+    const x = Math.sin(seed * 9999) * 10000
+    return x - Math.floor(x)
+  }
+
   // Process data to separate normal and anomalous points
   const { normalData, anomalyData } = useMemo(() => {
     if (!data || data.length === 0) {
-      // Generate sample data for demo
+      // Generate sample data for demo using deterministic random
       const normal = []
       const anomalies = []
 
       for (let i = 0; i < 500; i++) {
-        const x = Math.random() * 1000 + 100
-        const y = x * (0.8 + Math.random() * 0.4) + Math.random() * 200
+        const x = seededRandom(i * 3) * 1000 + 100
+        const y = x * (0.8 + seededRandom(i * 3 + 1) * 0.4) + seededRandom(i * 3 + 2) * 200
 
-        if (Math.random() > 0.95) {
+        if (seededRandom(i * 3 + 3) > 0.95) {
           anomalies.push({ x, y, z: 50, index: i })
         } else {
           normal.push({ x, y, z: 20, index: i })
@@ -126,7 +132,9 @@ export function ScatterPlotChart({
                 border: "1px solid #334155",
                 borderRadius: "8px",
                 fontSize: "12px",
+                color: "#f8fafc",
               }}
+              labelStyle={{ color: "#94a3b8" }}
               formatter={(value: number) => value.toFixed(1)}
               labelFormatter={(label) => `Event Index: ${label}`}
             />

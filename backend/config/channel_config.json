@@ -193,31 +193,37 @@
       "channel_mappings": {
         "fsc": {
           "channel_names": [
-            "Channel_3",
+            "VFSC-A",
+            "VFSC-H",
             "FSC-A",
             "FSC-H",
+            "Channel_3",
             "Channel_1"
           ],
-          "description": "Forward Scatter - add your channel names here"
+          "description": "Forward Scatter - VFSC (Violet FSC) preferred for EVs"
         },
         "ssc": {
           "channel_names": [
-            "Channel_4",
+            "VSSC1-A",
+            "VSSC1-H",
+            "VSSC2-A",
+            "VSSC2-H",
             "SSC-A",
             "SSC-H",
+            "Channel_4",
             "Channel_2"
           ],
-          "description": "Side Scatter - add your channel names here"
+          "description": "Side Scatter - VSSC (Violet SSC) preferred for EVs"
         }
       },
       "preferred_scatter_channels": {
         "for_size_analysis": {
-          "fsc": "Channel_3",
-          "ssc": "Channel_4"
+          "fsc": "VFSC-A",
+          "ssc": "VSSC1-A"
         },
         "for_scatter_plot": {
-          "fsc": "Channel_3",
-          "ssc": "Channel_4"
+          "fsc": "VFSC-A",
+          "ssc": "VSSC1-A"
         }
       }
     }

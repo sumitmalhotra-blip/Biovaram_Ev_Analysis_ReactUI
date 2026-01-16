@@ -22,7 +22,7 @@ export function ChartSkeleton({ className }: { className?: string }) {
             <Skeleton
               key={i}
               className="flex-1"
-              style={{ height: `${Math.random() * 80 + 20}%` }}
+              style={{ height: `${((Math.sin(i * 0.7) + 1) / 2) * 80 + 20}%` }}
             />
           ))}
         </div>
@@ -197,14 +197,14 @@ export function ScatterPlotSkeleton({ className }: { className?: string }) {
         {/* Scatter plot area */}
         <div className="aspect-square max-h-[400px] bg-secondary/20 rounded-lg flex items-center justify-center">
           <div className="relative w-full h-full p-4">
-            {/* Random scatter points */}
+            {/* Deterministic scatter points for SSR compatibility */}
             {Array.from({ length: 50 }).map((_, i) => (
               <Skeleton
                 key={i}
                 className="absolute h-2 w-2 rounded-full"
                 style={{
-                  left: `${Math.random() * 90 + 5}%`,
-                  top: `${Math.random() * 90 + 5}%`,
+                  left: `${((Math.sin(i * 1.3) + 1) / 2) * 85 + 7}%`,
+                  top: `${((Math.cos(i * 1.7) + 1) / 2) * 85 + 7}%`,
                 }}
               />
             ))}

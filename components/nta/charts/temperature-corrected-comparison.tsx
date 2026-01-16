@@ -55,10 +55,15 @@ function generateDistributionData(
       ? Math.max(0, 3000 * Math.exp(-Math.pow((size - correctedCenterSize) / correctedSpread, 2)))
       : rawCount
     
+    // Use deterministic variation based on index to avoid hydration mismatch
+    const index = size / 5
+    const variation1 = 0.95 + ((Math.sin(index * 7) + 1) / 2) * 0.1
+    const variation2 = 0.95 + ((Math.sin(index * 11 + 3) + 1) / 2) * 0.1
+    
     data.push({
       size,
-      rawCount: Math.round(rawCount * (0.95 + Math.random() * 0.1)),
-      correctedCount: Math.round(correctedCount * (0.95 + Math.random() * 0.1)),
+      rawCount: Math.round(rawCount * variation1),
+      correctedCount: Math.round(correctedCount * variation2),
       correctedSize: applyCorrection ? size * correctionFactor : undefined,
     })
   }
@@ -230,7 +235,9 @@ export function TemperatureCorrectedComparison({ data: results }: TemperatureCor
                       border: "1px solid #334155",
                       borderRadius: "8px",
                       fontSize: "11px",
+                      color: "#f8fafc",
                     }}
+                    labelStyle={{ color: "#94a3b8" }}
                     labelFormatter={(value) => `${value} nm`}
                     formatter={(value: number) => [value, "Raw Count"]}
                   />
@@ -291,7 +298,9 @@ export function TemperatureCorrectedComparison({ data: results }: TemperatureCor
                       border: "1px solid #334155",
                       borderRadius: "8px",
                       fontSize: "11px",
+                      color: "#f8fafc",
                     }}
+                    labelStyle={{ color: "#94a3b8" }}
                     labelFormatter={(value) => `${value} nm`}
                     formatter={(value: number) => [value, "Corrected Count"]}
                   />
@@ -352,7 +361,9 @@ export function TemperatureCorrectedComparison({ data: results }: TemperatureCor
                     border: "1px solid #334155",
                     borderRadius: "8px",
                     fontSize: "12px",
+                    color: "#f8fafc",
                   }}
+                  labelStyle={{ color: "#94a3b8" }}
                   labelFormatter={(value) => `${value} nm`}
                 />
                 <Legend 

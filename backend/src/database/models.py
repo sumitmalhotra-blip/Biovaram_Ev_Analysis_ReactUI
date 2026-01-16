@@ -60,6 +60,74 @@ class InstrumentType(str, enum.Enum):
     WESTERN_BLOT = "western_blot"
 
 
+class UserRole(str, enum.Enum):
+    """User role for access control."""
+    USER = "user"
+    RESEARCHER = "researcher"
+    ADMIN = "admin"
+
+
+class AlertSeverity(str, enum.Enum):
+    """Alert severity levels (CRMIT-003)."""
+    INFO = "info"           # Informational, no action required
+    WARNING = "warning"     # Potential issue, review recommended
+    CRITICAL = "critical"   # Significant issue, action required
+    ERROR = "error"         # System error during processing
+
+
+class AlertType(str, enum.Enum):
+    """Alert type categories (CRMIT-003)."""
+    ANOMALY_DETECTED = "anomaly_detected"           # Anomalous data points found
+    QUALITY_WARNING = "quality_warning"             # QC threshold exceeded
+    POPULATION_SHIFT = "population_shift"           # Significant change from baseline
+    SIZE_DISTRIBUTION_UNUSUAL = "size_distribution_unusual"  # Abnormal size patterns
+    HIGH_DEBRIS = "high_debris"                     # High debris percentage
+    LOW_EVENT_COUNT = "low_event_count"             # Insufficient events for analysis
+    PROCESSING_ERROR = "processing_error"           # Error during analysis
+    CALIBRATION_NEEDED = "calibration_needed"       # Instrument calibration recommended
+
+
+# ============================================================================
+# User Model (T-004: Authentication)
+# ============================================================================
+
+class User(Base):
+    """
+    User accounts for authentication and authorization.
+    
+    Stores user credentials and profile information.
+    Links to samples and analyses for data ownership.
+    """
+    __tablename__ = "users"
+    
+    # Primary Key
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    
+    # Authentication
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)
+    
+    # Profile
+    name = Column(String(255), nullable=False)
+    role = Column(String(20), nullable=False, default="user")
+    organization = Column(String(255), nullable=True)
+    
+    # Status
+    is_active = Column(Boolean, nullable=False, default=True)
+    email_verified = Column(Boolean, nullable=False, default=False)
+    
+    # Timestamps
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+    updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
+    last_login = Column(DateTime, nullable=True)
+    
+    # Relationships
+    samples = relationship("Sample", back_populates="owner", foreign_keys="Sample.user_id")
+    
+    def __repr__(self) -> str:
+        return f"<User(id={self.id}, email='{self.email}', role='{self.role}')>"
+
+
 # ============================================================================
 # Sample Models
 # ============================================================================
@@ -76,6 +144,9 @@ class Sample(Base):
     
     # Primary Key
     id = Column(Integer, primary_key=True, autoincrement=True)
+    
+    # User ownership (T-004: Authentication)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     
     # Sample Identification
     sample_id = Column(String(255), unique=True, nullable=False, index=True)
@@ -107,6 +178,7 @@ class Sample(Base):
     notes = Column(Text, nullable=True)
     
     # Relationships
+    owner = relationship("User", back_populates="samples", foreign_keys=[user_id])
     fcs_results = relationship("FCSResult", back_populates="sample", cascade="all, delete-orphan")
     nta_results = relationship("NTAResult", back_populates="sample", cascade="all, delete-orphan")
     qc_reports = relationship("QCReport", back_populates="sample", cascade="all, delete-orphan")
@@ -117,11 +189,11 @@ class Sample(Base):
     __table_args__ = (
         Index('idx_sample_treatment_date', 'treatment', 'experiment_date'),
         Index('idx_sample_status', 'processing_status', 'qc_status'),
+        Index('idx_sample_user', 'user_id'),
     )
     
     def __repr__(self) -> str:
         return f"<Sample(id={self.id}, sample_id='{self.sample_id}', treatment='{self.treatment}')>"
-
 
 # ============================================================================
 # FCS Results
@@ -426,40 +498,89 @@ class ExperimentalConditions(Base):
 
 
 # ============================================================================
-# User Management (Future)
+# Alert System (CRMIT-003)
 # ============================================================================
 
-class User(Base):
+class Alert(Base):
     """
-    User accounts for authentication and authorization.
+    Alert system for flagging anomalies and issues with timestamps.
     
-    Future feature - not implemented yet.
+    CRMIT-003 Requirement: Flag anomalies with timestamps for tracking
+    and review. Supports multiple severity levels and alert types.
+    
+    Features:
+    - Auto-generated during analysis when anomalies detected
+    - User acknowledgment tracking
+    - Timestamps for when alert was created and acknowledged
+    - Links to sample and optional user ownership
+    - Metadata for context (affected channels, thresholds, etc.)
     """
-    __tablename__ = "users"
+    __tablename__ = "alerts"
     
     # Primary Key
     id = Column(Integer, primary_key=True, autoincrement=True)
     
-    # Authentication
-    username = Column(String(100), unique=True, nullable=False, index=True)
-    email = Column(String(255), unique=True, nullable=False, index=True)
-    hashed_password = Column(String(255), nullable=False)
+    # Foreign Keys
+    sample_id = Column(Integer, ForeignKey("samples.id"), nullable=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     
-    # Profile
-    full_name = Column(String(255), nullable=True)
-    organization = Column(String(255), nullable=True)
-    role = Column(String(50), nullable=False, default="user")  # "admin", "user", "viewer"
+    # Alert Classification
+    alert_type = Column(String(50), nullable=False, index=True)  # AlertType enum value
+    severity = Column(String(20), nullable=False, index=True)    # AlertSeverity enum value
+    
+    # Alert Content
+    title = Column(String(255), nullable=False)
+    message = Column(Text, nullable=False)
+    
+    # Context & Metadata
+    source = Column(String(50), nullable=False)  # "fcs_analysis", "nta_analysis", "qc_check", etc.
+    sample_name = Column(String(255), nullable=True)  # Denormalized for quick display
+    
+    # Additional data (flexible JSON storage)
+    # Examples: {"anomaly_count": 150, "threshold": 3.0, "affected_channels": ["FSC-A", "SSC-A"]}
+    alert_data = Column(JSON, nullable=True)  # Named to avoid SQLAlchemy reserved 'metadata'
     
     # Status
-    is_active = Column(Boolean, nullable=False, default=True)
-    is_verified = Column(Boolean, nullable=False, default=False)
+    is_acknowledged = Column(Boolean, nullable=False, default=False, index=True)
+    acknowledged_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    acknowledged_at = Column(DateTime, nullable=True)
+    acknowledgment_notes = Column(Text, nullable=True)
     
     # Timestamps
-    created_at = Column(DateTime, nullable=False, server_default=func.now())
-    last_login = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, server_default=func.now(), index=True)
+    updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
+    
+    # Indexes for efficient queries
+    __table_args__ = (
+        Index('idx_alert_severity_created', 'severity', 'created_at'),
+        Index('idx_alert_user_ack', 'user_id', 'is_acknowledged'),
+        Index('idx_alert_sample_type', 'sample_id', 'alert_type'),
+        Index('idx_alert_source', 'source', 'created_at'),
+    )
     
     def __repr__(self) -> str:
-        return f"<User(id={self.id}, username='{self.username}', role='{self.role}')>"
+        return f"<Alert(id={self.id}, type='{self.alert_type}', severity='{self.severity}', sample_id={self.sample_id})>"
+    
+    def to_dict(self) -> dict:
+        """Convert to dictionary for API response."""
+        return {
+            "id": self.id,
+            "sample_id": self.sample_id,
+            "user_id": self.user_id,
+            "alert_type": self.alert_type,
+            "severity": self.severity,
+            "title": self.title,
+            "message": self.message,
+            "source": self.source,
+            "sample_name": self.sample_name,
+            "metadata": self.alert_data,  # Return as 'metadata' for API compatibility
+            "is_acknowledged": self.is_acknowledged,
+            "acknowledged_by": self.acknowledged_by,
+            "acknowledged_at": self.acknowledged_at.isoformat() if self.acknowledged_at else None,
+            "acknowledgment_notes": self.acknowledgment_notes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
 
 
 # ============================================================================

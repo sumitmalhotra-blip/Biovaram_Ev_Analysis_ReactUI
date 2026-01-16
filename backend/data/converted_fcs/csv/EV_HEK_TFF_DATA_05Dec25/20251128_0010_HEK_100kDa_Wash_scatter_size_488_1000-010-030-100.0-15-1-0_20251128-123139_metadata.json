@@ -1,0 +1,33 @@
+{
+  "filename": "20251128_0010_HEK_100kDa_Wash_scatter_size_488_1000-010-030-100.0-15-1-0_20251128-123139.fcs",
+  "filepath": "C:\\Users\\ASUS\\Downloads\\ev-analysis-platform\\backend\\nanoFACS\\EV_HEK_TFF_DATA_05Dec25\\20251128_0010_HEK_100kDa_Wash_scatter_size_488_1000-010-030-100.0-15-1-0_20251128-123139.fcs",
+  "num_events": 443,
+  "num_channels": 23,
+  "channels": [
+    "TrackID",
+    "Frame",
+    "LocationX",
+    "LocationY",
+    "BoundingBoxX1",
+    "BoundingBoxY1",
+    "BoundingBoxX2",
+    "BoundingBoxY2",
+    "Position",
+    "Cycle",
+    "Area",
+    "Perimeter",
+    "Solidity",
+    "AspectRatio",
+    "MeanIntensity",
+    "MaxIntensity",
+    "MinIntensity",
+    "ConvexArea",
+    "Intensity/Area",
+    "TraceLength",
+    "Size",
+    "V_nmsec-1",
+    "Cluster"
+  ],
+  "file_size_bytes": 43468,
+  "parsed_at": "2025-12-23T14:49:55.816174"
+}

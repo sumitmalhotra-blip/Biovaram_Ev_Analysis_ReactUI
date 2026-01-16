@@ -18,6 +18,7 @@ import { CorrelationScatterChart } from "./charts/correlation-scatter-chart"
 import { StatisticalComparisonTable } from "./statistical-comparison-table"
 import { StatisticalTestsCard } from "./statistical-tests-card"
 import { MethodComparisonSummary } from "./method-comparison-summary"
+import * as XLSX from 'xlsx'
 
 export function CrossCompareTab() {
   const { pinChart, apiSamples, fcsAnalysis, ntaAnalysis, apiConnected } = useAnalysisStore()
@@ -82,8 +83,8 @@ export function CrossCompareTab() {
           setFcsResults(fcsAnalysis.results)
         } else {
           promises.push(
-            apiClient.getFCSResults(parseInt(selectedFcsSample)).then(res => {
-              if (res.data) setFcsResults(res.data)
+            apiClient.getFCSResults(selectedFcsSample).then(res => {
+              if (res.results?.[0]) setFcsResults(res.results[0])
             })
           )
         }
@@ -96,8 +97,8 @@ export function CrossCompareTab() {
           setNtaResults(ntaAnalysis.results)
         } else {
           promises.push(
-            apiClient.getNTAResults(parseInt(selectedNtaSample)).then(res => {
-              if (res.data) setNtaResults(res.data)
+            apiClient.getNTAResults(selectedNtaSample).then(res => {
+              if (res.results?.[0]) setNtaResults(res.results[0])
             })
           )
         }
@@ -149,12 +150,278 @@ export function CrossCompareTab() {
   }
 
   // Export comparison report
-  const handleExport = (format: string) => {
-    toast({
-      title: "Export Started",
-      description: `Exporting comparison report as ${format}...`,
-    })
-    // TODO: Implement actual export logic with comparison data
+  const handleExport = async (format: string) => {
+    const timestamp = new Date().toISOString().split('T')[0]
+    const fcsSampleName = selectedFcsSample || 'FCS_Sample'
+    const ntaSampleName = selectedNtaSample || 'NTA_Sample'
+    
+    // Calculate comparison data
+    const comparisonData = {
+      fcs: {
+        sampleId: fcsSampleName,
+        totalEvents: fcsResults?.total_events,
+        d10: fcsResults?.size_statistics?.d10 || fcsStats.d10,
+        d50: fcsResults?.size_statistics?.d50 || fcsStats.d50,
+        d90: fcsResults?.size_statistics?.d90 || fcsStats.d90,
+        mean: fcsResults?.size_statistics?.mean || fcsStats.mean,
+        std: fcsResults?.size_statistics?.std || fcsStats.std,
+        fscMean: fcsResults?.fsc_mean,
+        sscMean: fcsResults?.ssc_mean,
+      },
+      nta: {
+        sampleId: ntaSampleName,
+        totalParticles: ntaResults?.total_particles,
+        d10: ntaResults?.d10_nm || ntaStats.d10,
+        d50: ntaResults?.d50_nm || ntaStats.d50,
+        d90: ntaResults?.d90_nm || ntaStats.d90,
+        mean: ntaResults?.mean_size_nm || ntaStats.mean,
+        concentration: ntaResults?.concentration_particles_ml,
+        temperature: ntaResults?.temperature_celsius,
+      },
+    }
+    
+    try {
+      switch (format) {
+        case "CSV": {
+          const csvContent = [
+            "# Cross-Compare Analysis Report",
+            `# Export Date: ${new Date().toISOString()}`,
+            `# FCS Sample: ${fcsSampleName}`,
+            `# NTA Sample: ${ntaSampleName}`,
+            "#",
+            "Metric,FCS Value,NTA Value,Difference,% Difference",
+            `D10 (nm),${comparisonData.fcs.d10?.toFixed(2) || 'N/A'},${comparisonData.nta.d10?.toFixed(2) || 'N/A'},${(comparisonData.nta.d10 && comparisonData.fcs.d10) ? (comparisonData.nta.d10 - comparisonData.fcs.d10).toFixed(2) : 'N/A'},${(comparisonData.nta.d10 && comparisonData.fcs.d10) ? ((comparisonData.nta.d10 - comparisonData.fcs.d10) / comparisonData.fcs.d10 * 100).toFixed(2) + '%' : 'N/A'}`,
+            `D50 (nm),${comparisonData.fcs.d50?.toFixed(2) || 'N/A'},${comparisonData.nta.d50?.toFixed(2) || 'N/A'},${(comparisonData.nta.d50 && comparisonData.fcs.d50) ? (comparisonData.nta.d50 - comparisonData.fcs.d50).toFixed(2) : 'N/A'},${(comparisonData.nta.d50 && comparisonData.fcs.d50) ? ((comparisonData.nta.d50 - comparisonData.fcs.d50) / comparisonData.fcs.d50 * 100).toFixed(2) + '%' : 'N/A'}`,
+            `D90 (nm),${comparisonData.fcs.d90?.toFixed(2) || 'N/A'},${comparisonData.nta.d90?.toFixed(2) || 'N/A'},${(comparisonData.nta.d90 && comparisonData.fcs.d90) ? (comparisonData.nta.d90 - comparisonData.fcs.d90).toFixed(2) : 'N/A'},${(comparisonData.nta.d90 && comparisonData.fcs.d90) ? ((comparisonData.nta.d90 - comparisonData.fcs.d90) / comparisonData.fcs.d90 * 100).toFixed(2) + '%' : 'N/A'}`,
+            `Mean (nm),${comparisonData.fcs.mean?.toFixed(2) || 'N/A'},${comparisonData.nta.mean?.toFixed(2) || 'N/A'},${(comparisonData.nta.mean && comparisonData.fcs.mean) ? (comparisonData.nta.mean - comparisonData.fcs.mean).toFixed(2) : 'N/A'},${(comparisonData.nta.mean && comparisonData.fcs.mean) ? ((comparisonData.nta.mean - comparisonData.fcs.mean) / comparisonData.fcs.mean * 100).toFixed(2) + '%' : 'N/A'}`,
+          ].join('\n')
+          
+          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+          const url = URL.createObjectURL(blob)
+          const link = document.createElement('a')
+          link.href = url
+          link.download = `CrossCompare_${fcsSampleName}_vs_${ntaSampleName}_${timestamp}.csv`
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
+          URL.revokeObjectURL(url)
+          
+          toast({
+            title: "✅ Export Complete",
+            description: "CSV comparison report downloaded successfully",
+          })
+          break
+        }
+        
+        case "Excel": {
+          const workbook = XLSX.utils.book_new()
+          
+          // Summary Sheet
+          const summaryData = [
+            ['BioVaram EV Analysis Platform - Cross-Compare Report'],
+            [''],
+            ['Export Date', new Date().toLocaleString()],
+            ['FCS Sample', fcsSampleName],
+            ['NTA Sample', ntaSampleName],
+            [''],
+            ['Size Comparison'],
+            ['Metric', 'FCS', 'NTA', 'Difference', '% Difference'],
+            ['D10 (nm)', comparisonData.fcs.d10?.toFixed(2) || 'N/A', comparisonData.nta.d10?.toFixed(2) || 'N/A', 
+              (comparisonData.nta.d10 && comparisonData.fcs.d10) ? (comparisonData.nta.d10 - comparisonData.fcs.d10).toFixed(2) : 'N/A',
+              (comparisonData.nta.d10 && comparisonData.fcs.d10) ? ((comparisonData.nta.d10 - comparisonData.fcs.d10) / comparisonData.fcs.d10 * 100).toFixed(2) + '%' : 'N/A'],
+            ['D50 (nm)', comparisonData.fcs.d50?.toFixed(2) || 'N/A', comparisonData.nta.d50?.toFixed(2) || 'N/A',
+              (comparisonData.nta.d50 && comparisonData.fcs.d50) ? (comparisonData.nta.d50 - comparisonData.fcs.d50).toFixed(2) : 'N/A',
+              (comparisonData.nta.d50 && comparisonData.fcs.d50) ? ((comparisonData.nta.d50 - comparisonData.fcs.d50) / comparisonData.fcs.d50 * 100).toFixed(2) + '%' : 'N/A'],
+            ['D90 (nm)', comparisonData.fcs.d90?.toFixed(2) || 'N/A', comparisonData.nta.d90?.toFixed(2) || 'N/A',
+              (comparisonData.nta.d90 && comparisonData.fcs.d90) ? (comparisonData.nta.d90 - comparisonData.fcs.d90).toFixed(2) : 'N/A',
+              (comparisonData.nta.d90 && comparisonData.fcs.d90) ? ((comparisonData.nta.d90 - comparisonData.fcs.d90) / comparisonData.fcs.d90 * 100).toFixed(2) + '%' : 'N/A'],
+            ['Mean (nm)', comparisonData.fcs.mean?.toFixed(2) || 'N/A', comparisonData.nta.mean?.toFixed(2) || 'N/A',
+              (comparisonData.nta.mean && comparisonData.fcs.mean) ? (comparisonData.nta.mean - comparisonData.fcs.mean).toFixed(2) : 'N/A',
+              (comparisonData.nta.mean && comparisonData.fcs.mean) ? ((comparisonData.nta.mean - comparisonData.fcs.mean) / comparisonData.fcs.mean * 100).toFixed(2) + '%' : 'N/A'],
+            [''],
+            ['FCS Details'],
+            ['Total Events', String(comparisonData.fcs.totalEvents || 'N/A')],
+            ['FSC Mean', comparisonData.fcs.fscMean?.toFixed(2) || 'N/A'],
+            ['SSC Mean', comparisonData.fcs.sscMean?.toFixed(2) || 'N/A'],
+            [''],
+            ['NTA Details'],
+            ['Total Particles', String(comparisonData.nta.totalParticles || 'N/A')],
+            ['Concentration (p/mL)', comparisonData.nta.concentration?.toExponential(2) || 'N/A'],
+            ['Temperature (°C)', comparisonData.nta.temperature?.toFixed(1) || 'N/A'],
+          ]
+          
+          const summarySheet = XLSX.utils.aoa_to_sheet(summaryData)
+          summarySheet['!cols'] = [{ wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }]
+          XLSX.utils.book_append_sheet(workbook, summarySheet, 'Comparison')
+          
+          XLSX.writeFile(workbook, `CrossCompare_${fcsSampleName}_vs_${ntaSampleName}_${timestamp}.xlsx`)
+          
+          toast({
+            title: "✅ Excel Export Complete",
+            description: "Excel comparison report downloaded successfully",
+          })
+          break
+        }
+        
+        case "JSON": {
+          const jsonContent = JSON.stringify({
+            export_timestamp: new Date().toISOString(),
+            platform: "BioVaram EV Analysis Platform",
+            comparison_type: "FCS vs NTA",
+            fcs_sample: {
+              sample_id: fcsSampleName,
+              total_events: comparisonData.fcs.totalEvents,
+              size_statistics: {
+                d10: comparisonData.fcs.d10,
+                d50: comparisonData.fcs.d50,
+                d90: comparisonData.fcs.d90,
+                mean: comparisonData.fcs.mean,
+                std: comparisonData.fcs.std,
+              },
+              scatter_statistics: {
+                fsc_mean: comparisonData.fcs.fscMean,
+                ssc_mean: comparisonData.fcs.sscMean,
+              },
+            },
+            nta_sample: {
+              sample_id: ntaSampleName,
+              total_particles: comparisonData.nta.totalParticles,
+              size_statistics: {
+                d10: comparisonData.nta.d10,
+                d50: comparisonData.nta.d50,
+                d90: comparisonData.nta.d90,
+                mean: comparisonData.nta.mean,
+              },
+              concentration_particles_ml: comparisonData.nta.concentration,
+              temperature_celsius: comparisonData.nta.temperature,
+            },
+            size_comparison: {
+              d10_difference_nm: (comparisonData.nta.d10 && comparisonData.fcs.d10) ? comparisonData.nta.d10 - comparisonData.fcs.d10 : null,
+              d50_difference_nm: (comparisonData.nta.d50 && comparisonData.fcs.d50) ? comparisonData.nta.d50 - comparisonData.fcs.d50 : null,
+              d90_difference_nm: (comparisonData.nta.d90 && comparisonData.fcs.d90) ? comparisonData.nta.d90 - comparisonData.fcs.d90 : null,
+              mean_difference_nm: (comparisonData.nta.mean && comparisonData.fcs.mean) ? comparisonData.nta.mean - comparisonData.fcs.mean : null,
+            },
+          }, null, 2)
+          
+          const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8;' })
+          const url = URL.createObjectURL(blob)
+          const link = document.createElement('a')
+          link.href = url
+          link.download = `CrossCompare_${fcsSampleName}_vs_${ntaSampleName}_${timestamp}.json`
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
+          URL.revokeObjectURL(url)
+          
+          toast({
+            title: "✅ JSON Export Complete",
+            description: "JSON comparison report downloaded successfully",
+          })
+          break
+        }
+        
+        case "PDF": {
+          toast({
+            title: "Generating PDF...",
+            description: "Please wait while we create your report",
+          })
+          
+          const { default: jsPDF } = await import('jspdf')
+          const { default: autoTable } = await import('jspdf-autotable')
+          
+          const doc = new jsPDF()
+          const pageWidth = doc.internal.pageSize.getWidth()
+          
+          // Header
+          doc.setFontSize(20)
+          doc.setTextColor(139, 92, 246)
+          doc.text('BioVaram', 14, 20)
+          
+          doc.setFontSize(12)
+          doc.setTextColor(100)
+          doc.text('Cross-Compare Analysis Report', 14, 28)
+          
+          doc.setDrawColor(139, 92, 246)
+          doc.setLineWidth(0.5)
+          doc.line(14, 32, pageWidth - 14, 32)
+          
+          // Sample Information
+          doc.setFontSize(14)
+          doc.setTextColor(0)
+          doc.text('Samples Compared', 14, 42)
+          
+          autoTable(doc, {
+            startY: 46,
+            head: [['Method', 'Sample ID']],
+            body: [
+              ['FCS (Flow Cytometry)', fcsSampleName],
+              ['NTA (Nanoparticle Tracking)', ntaSampleName],
+            ],
+            theme: 'striped',
+            headStyles: { fillColor: [139, 92, 246] },
+            margin: { left: 14, right: 14 },
+          })
+          
+          // Size Comparison
+          const sizeStartY = (doc as any).lastAutoTable.finalY + 10
+          doc.setFontSize(14)
+          doc.text('Size Statistics Comparison', 14, sizeStartY)
+          
+          autoTable(doc, {
+            startY: sizeStartY + 4,
+            head: [['Metric', 'FCS', 'NTA', 'Difference']],
+            body: [
+              ['D10 (nm)', comparisonData.fcs.d10?.toFixed(2) || 'N/A', comparisonData.nta.d10?.toFixed(2) || 'N/A',
+                (comparisonData.nta.d10 && comparisonData.fcs.d10) ? (comparisonData.nta.d10 - comparisonData.fcs.d10).toFixed(2) : 'N/A'],
+              ['D50 (nm)', comparisonData.fcs.d50?.toFixed(2) || 'N/A', comparisonData.nta.d50?.toFixed(2) || 'N/A',
+                (comparisonData.nta.d50 && comparisonData.fcs.d50) ? (comparisonData.nta.d50 - comparisonData.fcs.d50).toFixed(2) : 'N/A'],
+              ['D90 (nm)', comparisonData.fcs.d90?.toFixed(2) || 'N/A', comparisonData.nta.d90?.toFixed(2) || 'N/A',
+                (comparisonData.nta.d90 && comparisonData.fcs.d90) ? (comparisonData.nta.d90 - comparisonData.fcs.d90).toFixed(2) : 'N/A'],
+              ['Mean (nm)', comparisonData.fcs.mean?.toFixed(2) || 'N/A', comparisonData.nta.mean?.toFixed(2) || 'N/A',
+                (comparisonData.nta.mean && comparisonData.fcs.mean) ? (comparisonData.nta.mean - comparisonData.fcs.mean).toFixed(2) : 'N/A'],
+            ],
+            theme: 'striped',
+            headStyles: { fillColor: [139, 92, 246] },
+            margin: { left: 14, right: 14 },
+          })
+          
+          // Footer
+          const pageCount = doc.getNumberOfPages()
+          for (let i = 1; i <= pageCount; i++) {
+            doc.setPage(i)
+            doc.setFontSize(8)
+            doc.setTextColor(150)
+            doc.text(
+              `Page ${i} of ${pageCount} | Generated by BioVaram EV Analysis Platform | ${new Date().toLocaleString()}`,
+              pageWidth / 2,
+              doc.internal.pageSize.getHeight() - 10,
+              { align: 'center' }
+            )
+          }
+          
+          doc.save(`CrossCompare_${fcsSampleName}_vs_${ntaSampleName}_${timestamp}.pdf`)
+          
+          toast({
+            title: "✅ PDF Export Complete",
+            description: "PDF comparison report downloaded successfully",
+          })
+          break
+        }
+        
+        default:
+          toast({
+            title: "Export Not Available",
+            description: `${format} export is not supported`,
+            variant: "destructive",
+          })
+      }
+    } catch (error) {
+      toast({
+        title: "Export Failed",
+        description: error instanceof Error ? error.message : "Failed to export comparison report",
+        variant: "destructive",
+      })
+    }
   }
 
   // Calculate stats from results or use defaults
@@ -405,8 +672,8 @@ export function CrossCompareTab() {
                 ntaResults={ntaResults} 
               />
               <StatisticalTestsCard
-                fcsData={fcsResults?.size_distribution?.map(d => d.size) || fcsAnalysis.results?.size_distribution?.map(d => d.size)}
-                ntaData={ntaResults?.size_distribution?.map(d => d.size) || ntaAnalysis.results?.size_distribution?.map(d => d.size)}
+                fcsData={fcsResults?.size_distribution?.map((d: { size: number }) => d.size) || fcsAnalysis.results?.size_distribution?.map((d: { size: number }) => d.size)}
+                ntaData={ntaResults?.size_distribution?.map((d: { size: number }) => d.size) || ntaAnalysis.results?.size_distribution?.map((d: { size: number }) => d.size)}
               />
             </TabsContent>
 

@@ -6,6 +6,7 @@ import { useApi } from "@/hooks/use-api"
 import { cn } from "@/lib/utils"
 import { ChevronLeft, ChevronRight, Filter, Settings, FileText, Beaker, Thermometer, Loader2, RefreshCw, Database, SlidersHorizontal, Play, RotateCcw, Plus, Trash2, FlaskConical, Shield } from "lucide-react"
 import { BestPracticesPanel } from "@/components/best-practices-panel"
+import { PreviousAnalyses } from "@/components/previous-analyses"
 import type { ExperimentData } from "@/lib/best-practices"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -28,18 +29,20 @@ export function Sidebar({ isMobile = false }: SidebarProps) {
   const { fetchSamples, openSampleInTab } = useApi()
 
   // Fetch samples on mount only if API is connected
+  // PERFORMANCE FIX: Remove fetchSamples from deps to prevent infinite loop
   useEffect(() => {
     if (apiConnected) {
       fetchSamples()
     }
-  }, [fetchSamples, apiConnected])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiConnected])
 
   const isCollapsed = isMobile ? false : sidebarCollapsed
 
   return (
     <aside
       className={cn(
-        "border-r border-border bg-sidebar transition-all duration-300 flex flex-col h-full",
+        "border-r border-border bg-sidebar transition-all duration-300 flex flex-col h-full overflow-hidden",
         isMobile ? "w-full" : isCollapsed ? "w-14" : "w-72",
       )}
     >
@@ -52,8 +55,15 @@ export function Sidebar({ isMobile = false }: SidebarProps) {
       )}
 
       {!isCollapsed && (
-        <ScrollArea className="flex-1 overflow-y-auto custom-scrollbar">
-          <div className="p-4 space-y-4">
+        <ScrollArea className="flex-1 overflow-hidden">
+          <div className="p-4 space-y-4 overflow-hidden">
+            {/* Previous Analyses Section - Visible in all tabs */}
+            <PreviousAnalyses 
+              compact={activeTab !== "dashboard"} 
+              defaultExpanded={activeTab === "dashboard"}
+            />
+
+            {/* Tab-specific content */}
             {activeTab === "flow-cytometry" && <FlowCytometrySidebar />}
             {activeTab === "nta" && <NTASidebar />}
             {activeTab === "cross-compare" && <CrossCompareSidebar />}
@@ -227,20 +237,20 @@ function DashboardSidebar({
             {apiSamples.length > 0 ? "No samples match filters" : "No samples uploaded yet"}
           </p>
         ) : (
-          <div className="space-y-1">
+          <div className="space-y-1 overflow-hidden">
             {/* API Samples */}
             {filteredApiSamples.slice(0, 5).map((sample) => (
               <div 
                 key={sample.id} 
-                className="text-sm p-2 rounded-md hover:bg-secondary/50 cursor-pointer flex items-center justify-between group"
+                className="text-sm p-2 rounded-md hover:bg-secondary/50 cursor-pointer flex items-center justify-between group overflow-hidden"
               >
-                <div className="flex-1 min-w-0">
-                  <span className="truncate block">{sample.sample_id}</span>
+                <div className="flex-1 min-w-0 overflow-hidden">
+                  <span className="truncate block max-w-[140px]" title={sample.sample_id}>{sample.sample_id}</span>
                   {sample.treatment && (
-                    <span className="text-[10px] text-muted-foreground">{sample.treatment}</span>
+                    <span className="text-[10px] text-muted-foreground truncate block">{sample.treatment}</span>
                   )}
                 </div>
-                <div className="flex gap-1">
+                <div className="flex gap-1 shrink-0">
                   {sample.files?.fcs && (
                     <Badge 
                       variant="outline" 
@@ -269,10 +279,10 @@ function DashboardSidebar({
             {samples.slice(0, Math.max(0, 5 - filteredApiSamples.length)).map((sample) => (
               <div 
                 key={sample.id} 
-                className="text-sm p-2 rounded-md hover:bg-secondary/50 cursor-pointer flex items-center justify-between"
+                className="text-sm p-2 rounded-md hover:bg-secondary/50 cursor-pointer flex items-center justify-between overflow-hidden"
               >
-                <span className="truncate flex-1">{sample.name}</span>
-                <Badge variant="secondary" className="text-[10px] px-1">
+                <span className="truncate flex-1 max-w-[140px]" title={sample.name}>{sample.name}</span>
+                <Badge variant="secondary" className="text-[10px] px-1 shrink-0">
                   {sample.type.toUpperCase()}
                 </Badge>
               </div>
@@ -502,13 +512,15 @@ function FlowCytometrySidebar() {
         <Button
           variant="outline"
           size="sm"
-          className="w-full gap-2 text-xs"
+          className="w-full gap-2 text-xs overflow-hidden"
           onClick={() => setShowConditionsDialog(true)}
         >
-          <FlaskConical className="h-3.5 w-3.5" />
-          {fcsAnalysis.experimentalConditions ? "Edit Experiment Conditions" : "Record Experiment Conditions"}
+          <FlaskConical className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">
+            {fcsAnalysis.experimentalConditions ? "Edit Conditions" : "Record Conditions"}
+          </span>
           {fcsAnalysis.experimentalConditions && (
-            <Badge variant="secondary" className="ml-auto text-[10px] px-1">Saved</Badge>
+            <Badge variant="secondary" className="ml-auto text-[10px] px-1 shrink-0">Saved</Badge>
           )}
         </Button>
       </div>
@@ -896,19 +908,19 @@ function FlowCytometrySidebar() {
           <BestPracticesPanel 
             data={{
               // Experimental conditions from saved data
-              antibody_concentration_ug: fcsAnalysis.experimentalConditions?.antibodyConcentration,
-              dilution_factor: fcsAnalysis.experimentalConditions?.dilutionFactor,
-              incubation_time_min: fcsAnalysis.experimentalConditions?.incubationTime,
+              antibody_concentration_ug: fcsAnalysis.experimentalConditions?.antibody_concentration_ug,
+              dilution_factor: fcsAnalysis.experimentalConditions?.dilution_factor,
+              incubation_time_min: fcsAnalysis.experimentalConditions?.incubation_time_min,
               // Size statistics from analysis results
-              median_size_nm: fcsAnalysis.results?.statistics?.medianDiameter,
-              d10_nm: fcsAnalysis.results?.statistics?.d10,
-              d50_nm: fcsAnalysis.results?.statistics?.d50,
-              d90_nm: fcsAnalysis.results?.statistics?.d90,
+              median_size_nm: fcsAnalysis.results?.size_statistics?.d50,
+              d10_nm: fcsAnalysis.results?.size_statistics?.d10,
+              d50_nm: fcsAnalysis.results?.size_statistics?.d50,
+              d90_nm: fcsAnalysis.results?.size_statistics?.d90,
               // Quality metrics
-              total_events: fcsAnalysis.results?.statistics?.totalParticles,
-              anomaly_pct: fcsAnalysis.results?.statistics?.anomalyPercentage,
-              valid_events_pct: fcsAnalysis.results?.statistics?.validParticles 
-                ? (fcsAnalysis.results.statistics.validParticles / (fcsAnalysis.results.statistics.totalParticles || 1)) * 100
+              total_events: fcsAnalysis.results?.total_events,
+              anomaly_pct: fcsAnalysis.anomalyData?.anomaly_percentage,
+              valid_events_pct: fcsAnalysis.results?.size_filtering?.valid_count 
+                ? (fcsAnalysis.results.size_filtering.valid_count / (fcsAnalysis.results.total_events || 1)) * 100
                 : undefined,
             } as ExperimentData} 
             compact={true}

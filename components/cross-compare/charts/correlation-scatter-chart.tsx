@@ -70,9 +70,10 @@ const generateDefaultData = (): ScatterPoint[] => {
   const fcsBase = [89.2, 127.4, 198.3, 125.0, 45.2]
   const ntaBase = [92.1, 135.2, 201.8, 132.0, 42.8]
 
+  // Use deterministic variation based on index to avoid hydration mismatch
   return labels.map((label, i) => ({
-    fcs: fcsBase[i] * (0.95 + Math.random() * 0.1),
-    nta: ntaBase[i] * (0.95 + Math.random() * 0.1),
+    fcs: fcsBase[i] * (0.95 + ((Math.sin(i * 7) + 1) / 2) * 0.1),
+    nta: ntaBase[i] * (0.95 + ((Math.sin(i * 11 + 3) + 1) / 2) * 0.1),
     label,
   }))
 }

@@ -47,33 +47,39 @@ interface PositionAnalysisProps {
   className?: string
 }
 
+// Deterministic pseudo-random based on seed (avoids hydration mismatch)
+function seededRandom(seed: number): number {
+  const x = Math.sin(seed * 9999) * 10000
+  return x - Math.floor(x)
+}
+
 // Generate mock data for demonstration
 function generateMockPositionData(count: number, width: number, height: number): PositionData[] {
   const data: PositionData[] = []
   for (let i = 0; i < count; i++) {
-    // Create some clustering patterns
-    const cluster = Math.random()
+    // Create some clustering patterns using deterministic random
+    const cluster = seededRandom(i * 5)
     let x, y
     if (cluster < 0.3) {
       // Cluster 1: center
-      x = width/2 + (Math.random() - 0.5) * width * 0.3
-      y = height/2 + (Math.random() - 0.5) * height * 0.3
+      x = width/2 + (seededRandom(i * 5 + 1) - 0.5) * width * 0.3
+      y = height/2 + (seededRandom(i * 5 + 2) - 0.5) * height * 0.3
     } else if (cluster < 0.5) {
       // Cluster 2: top right
-      x = width * 0.75 + (Math.random() - 0.5) * width * 0.2
-      y = height * 0.25 + (Math.random() - 0.5) * height * 0.2
+      x = width * 0.75 + (seededRandom(i * 5 + 1) - 0.5) * width * 0.2
+      y = height * 0.25 + (seededRandom(i * 5 + 2) - 0.5) * height * 0.2
     } else {
       // Random
-      x = Math.random() * width
-      y = Math.random() * height
+      x = seededRandom(i * 5 + 1) * width
+      y = seededRandom(i * 5 + 2) * height
     }
     
     data.push({
       x,
       y,
-      size: 30 + Math.random() * 170,
-      frame: Math.floor(Math.random() * 100),
-      intensity: Math.random() * 100,
+      size: 30 + seededRandom(i * 5 + 3) * 170,
+      frame: Math.floor(seededRandom(i * 5 + 4) * 100),
+      intensity: seededRandom(i * 5 + 5) * 100,
     })
   }
   return data

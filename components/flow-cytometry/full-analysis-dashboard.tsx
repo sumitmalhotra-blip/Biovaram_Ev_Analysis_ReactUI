@@ -12,10 +12,12 @@ import {
   Grid2X2, 
   LayoutGrid,
   Eye,
-  EyeOff
+  EyeOff,
+  Layers
 } from "lucide-react"
 import { SizeDistributionChart } from "./charts/size-distribution-chart"
 import { ScatterPlotChart, type ScatterDataPoint } from "./charts/scatter-plot-with-selection"
+import { InteractiveScatterChart } from "./charts/interactive-scatter-chart"
 import { TheoryVsMeasuredChart } from "./charts/theory-vs-measured-chart"
 import { DiameterVsSSCChart, type DiameterDataPoint } from "./charts/diameter-vs-ssc-chart"
 import { useAnalysisStore, type AnomalyDetectionResult } from "@/lib/store"
@@ -28,6 +30,14 @@ interface FullAnalysisDashboardProps {
   scatterData?: ScatterDataPoint[]
   anomalyData?: AnomalyDetectionResult | null
   sampleId?: string
+  // Axis selection for scatter plots
+  xChannel?: string
+  yChannel?: string
+  // Secondary data for overlay comparison
+  secondaryResults?: FCSResult | null
+  secondaryScatterData?: ScatterDataPoint[]
+  secondaryAnomalyData?: AnomalyDetectionResult | null
+  secondarySizeData?: number[]
 }
 
 type ChartType = "distribution" | "fsc-ssc" | "diameter-ssc" | "theory"
@@ -71,12 +81,21 @@ export function FullAnalysisDashboard({
   scatterData = [],
   anomalyData,
   sampleId,
+  xChannel = "FSC-A",
+  yChannel = "SSC-A",
+  secondaryResults,
+  secondaryScatterData = [],
+  secondaryAnomalyData,
+  secondarySizeData = [],
 }: FullAnalysisDashboardProps) {
-  const { pinChart } = useAnalysisStore()
+  const { pinChart, overlayConfig } = useAnalysisStore()
   const { toast } = useToast()
   const [expandedChart, setExpandedChart] = useState<ChartType | null>(null)
   const [highlightAnomalies, setHighlightAnomalies] = useState(true)
   const [isCompactMode, setIsCompactMode] = useState(false)
+
+  // Check if overlay mode is enabled and we have secondary data
+  const hasOverlay = overlayConfig.enabled && secondaryResults !== null
 
   const handlePin = (chartTitle: string, chartType: "histogram" | "scatter" | "line") => {
     pinChart({
@@ -107,23 +126,58 @@ export function FullAnalysisDashboard({
       isAnomaly: anomalyData?.anomalous_indices?.includes(p.index ?? -1) || false,
     }))
 
+  // Convert secondary scatter data to diameter format for overlay
+  const secondaryDiameterData: DiameterDataPoint[] = secondaryScatterData
+    .filter((p) => p.diameter !== undefined && p.y !== undefined)
+    .map((p) => ({
+      diameter: p.diameter as number,
+      ssc: p.y,
+      index: p.index,
+      isAnomaly: secondaryAnomalyData?.anomalous_indices?.includes(p.index ?? -1) || false,
+    }))
+
   const renderChart = (chartId: ChartType, compact: boolean = false) => {
     const height = compact ? 200 : expandedChart === chartId ? 450 : 280
 
     switch (chartId) {
       case "distribution":
-        return <SizeDistributionChart height={height} compact={compact} />
+        return (
+          <SizeDistributionChart 
+            height={height} 
+            compact={compact}
+            secondarySizeData={hasOverlay ? secondarySizeData : undefined}
+            secondaryD10={hasOverlay ? secondaryResults?.size_statistics?.d10 : undefined}
+            secondaryD50={hasOverlay ? secondaryResults?.size_statistics?.d50 : undefined}
+            secondaryD90={hasOverlay ? secondaryResults?.size_statistics?.d90 : undefined}
+          />
+        )
       case "fsc-ssc":
+        // Use interactive chart when expanded, simple chart when compact
+        if (expandedChart === chartId || !compact) {
+          return (
+            <InteractiveScatterChart
+              title={`${xChannel} vs ${yChannel}`}
+              xLabel={xChannel}
+              yLabel={yChannel}
+              data={scatterData}
+              anomalousIndices={anomalyData?.anomalous_indices || []}
+              highlightAnomalies={highlightAnomalies}
+              height={height}
+            />
+          )
+        }
         return (
           <ScatterPlotChart
-            title="FSC vs SSC"
-            xLabel="FSC-A"
-            yLabel="SSC-A"
+            title={`${xChannel} vs ${yChannel}`}
+            xLabel={xChannel}
+            yLabel={yChannel}
             data={scatterData}
             anomalousIndices={anomalyData?.anomalous_indices || []}
             highlightAnomalies={highlightAnomalies}
             showLegend={!compact}
             height={height}
+            secondaryData={hasOverlay ? secondaryScatterData : undefined}
+            secondaryAnomalousIndices={hasOverlay ? secondaryAnomalyData?.anomalous_indices : undefined}
           />
         )
       case "diameter-ssc":
@@ -135,6 +189,8 @@ export function FullAnalysisDashboard({
             showMieTheory={true}
             showLegend={!compact}
             height={height}
+            secondaryData={hasOverlay && secondaryDiameterData.length > 0 ? secondaryDiameterData : undefined}
+            secondaryAnomalousIndices={hasOverlay ? secondaryAnomalyData?.anomalous_indices : undefined}
           />
         )
       case "theory":
@@ -216,6 +272,12 @@ export function FullAnalysisDashboard({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {hasOverlay && (
+              <Badge variant="outline" className="gap-1 bg-orange-500/20 text-orange-500 border-orange-500/50">
+                <Layers className="h-3 w-3" />
+                Overlay Active
+              </Badge>
+            )}
             {anomalyData && anomalyData.total_anomalies > 0 && (
               <Button
                 variant="ghost"

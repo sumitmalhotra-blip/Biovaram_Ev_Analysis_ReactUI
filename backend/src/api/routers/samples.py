@@ -15,7 +15,7 @@ Author: CRMIT Backend Team
 Date: November 21, 2025
 """
 
-from typing import Optional, List  # noqa: F401
+from typing import Optional, List, Dict, Any  # noqa: F401
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession  # type: ignore[import-not-found]
 from sqlalchemy import select, func  # type: ignore[import-not-found]
@@ -38,6 +38,7 @@ async def list_samples(
     treatment: Optional[str] = Query(None, description="Filter by treatment"),
     qc_status: Optional[str] = Query(None, description="Filter by QC status (pass/warn/fail)"),
     processing_status: Optional[str] = Query(None, description="Filter by processing status"),
+    user_id: Optional[int] = Query(None, description="Filter by user ID (for user-specific samples)"),
     db: AsyncSession = Depends(get_session)
 ):
     """
@@ -78,6 +79,8 @@ async def list_samples(
         query = select(Sample)
         
         # Apply filters
+        if user_id is not None:
+            query = query.where(Sample.user_id == user_id)
         if treatment:
             query = query.where(Sample.treatment == treatment)
         if qc_status:
@@ -87,6 +90,8 @@ async def list_samples(
         
         # Get total count
         count_query = select(func.count()).select_from(Sample)
+        if user_id is not None:
+            count_query = count_query.where(Sample.user_id == user_id)
         if treatment:
             count_query = count_query.where(Sample.treatment == treatment)
         if qc_status:
@@ -570,17 +575,13 @@ async def get_scatter_data(
         fsc_ch = fsc_channel  # From query parameter
         ssc_ch = ssc_channel  # From query parameter
         
-        # Validate override channels exist
+        # Validate override channels exist - fallback if not found
         if fsc_ch and fsc_ch not in channels:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"FSC channel '{fsc_ch}' not found. Available: {', '.join(channels)}"
-            )
+            logger.warning(f"⚠️ Requested FSC channel '{fsc_ch}' not found, will auto-detect")
+            fsc_ch = None  # Reset to trigger auto-detection
         if ssc_ch and ssc_ch not in channels:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"SSC channel '{ssc_ch}' not found. Available: {', '.join(channels)}"
-            )
+            logger.warning(f"⚠️ Requested SSC channel '{ssc_ch}' not found, will auto-detect")
+            ssc_ch = None  # Reset to trigger auto-detection
         
         # Use channel config for detection if not overridden
         if not fsc_ch:
@@ -612,22 +613,54 @@ async def get_scatter_data(
             # Use random sampling to maintain distribution
             sampled_indices = np.random.choice(total_events, size=max_points, replace=False)
             sampled_indices.sort()
-            sampled_data = parsed_data.iloc[sampled_indices]
+            sampled_data = parsed_data.iloc[sampled_indices].reset_index(drop=True)
             logger.info(f"📉 Sampled {max_points} from {total_events} events")
         else:
-            sampled_data = parsed_data
+            sampled_data = parsed_data.reset_index(drop=True)
             sampled_indices = np.arange(total_events)
         
-        # Build scatter data array
-        scatter_data = []
-        for idx, (orig_idx, row) in enumerate(zip(sampled_indices, sampled_data.itertuples())):
-            scatter_data.append({
-                "x": float(getattr(row, fsc_ch)),
-                "y": float(getattr(row, ssc_ch)),
-                "index": int(orig_idx)
-            })
+        # Initialize Mie calculator for diameter estimation
+        from src.physics.mie_scatter import MieScatterCalculator
+        mie_calc = MieScatterCalculator(
+            wavelength_nm=488.0,
+            n_particle=1.40,
+            n_medium=1.33
+        )
         
-        logger.success(f"✅ Returned {len(scatter_data)} scatter points for {sample_id}")
+        # Build scatter data array with diameter calculation
+        # Note: Use direct column access instead of itertuples() to handle column names with hyphens
+        scatter_data = []
+        fsc_values = sampled_data[fsc_ch].values
+        ssc_values = sampled_data[ssc_ch].values
+        
+        for idx, orig_idx in enumerate(sampled_indices):
+            fsc_val = float(fsc_values[idx])
+            ssc_val = float(ssc_values[idx])
+            
+            # Calculate diameter from FSC using Mie theory
+            diameter = None
+            try:
+                d, success = mie_calc.diameter_from_scatter(
+                    fsc_intensity=fsc_val,
+                    min_diameter=20.0,
+                    max_diameter=500.0
+                )
+                if success and d > 0:
+                    diameter = round(d, 1)
+            except Exception:
+                pass
+            
+            point_data = {
+                "x": fsc_val,
+                "y": ssc_val,
+                "index": int(orig_idx)
+            }
+            if diameter is not None:
+                point_data["diameter"] = diameter
+            
+            scatter_data.append(point_data)
+        
+        logger.success(f"✅ Returned {len(scatter_data)} scatter points with diameter for {sample_id}")
         
         return {
             "sample_id": sample_id,
@@ -648,6 +681,543 @@ async def get_scatter_data(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get scatter data: {str(e)}"
+        )
+
+
+# ============================================================================
+# Gated Analysis Endpoint (T-009: Population Gating)
+# ============================================================================
+
+from pydantic import BaseModel, Field
+from typing import Literal
+
+class RectangleGateRequest(BaseModel):
+    """Rectangle gate coordinates."""
+    type: Literal["rectangle"] = "rectangle"
+    x1: float = Field(..., description="Left X coordinate")
+    y1: float = Field(..., description="Bottom Y coordinate")
+    x2: float = Field(..., description="Right X coordinate")
+    y2: float = Field(..., description="Top Y coordinate")
+
+
+class PolygonGateRequest(BaseModel):
+    """Polygon gate coordinates."""
+    type: Literal["polygon"] = "polygon"
+    points: List[Dict[str, float]] = Field(..., description="List of {x, y} points defining polygon vertices")
+
+
+class EllipseGateRequest(BaseModel):
+    """Ellipse gate coordinates."""
+    type: Literal["ellipse"] = "ellipse"
+    cx: float = Field(..., description="Center X coordinate")
+    cy: float = Field(..., description="Center Y coordinate")
+    rx: float = Field(..., description="X radius")
+    ry: float = Field(..., description="Y radius")
+    rotation: float = Field(default=0.0, description="Rotation angle in degrees")
+
+
+class GatedAnalysisRequest(BaseModel):
+    """Request model for gated population analysis."""
+    gate_name: str = Field(default="Gate 1", description="Name of the gate")
+    gate_type: Literal["rectangle", "polygon", "ellipse"] = Field(default="rectangle", description="Gate shape type")
+    gate_coordinates: Dict[str, Any] = Field(..., description="Gate coordinates based on type")
+    x_channel: str = Field(..., description="X-axis channel name")
+    y_channel: str = Field(..., description="Y-axis channel name")
+    include_diameter_stats: bool = Field(default=True, description="Include diameter statistics")
+
+
+@router.post("/{sample_id}/gated-analysis", response_model=dict)
+async def analyze_gated_population(
+    sample_id: str,
+    request: GatedAnalysisRequest,
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    Analyze a gated (selected) population from a scatter plot.
+    
+    This endpoint performs statistical analysis on a subset of events
+    that fall within a user-defined gate region on a scatter plot.
+    
+    **Supported Gate Types:**
+    - Rectangle: `{x1, y1, x2, y2}` - axis-aligned bounding box
+    - Polygon: `{points: [{x, y}, ...]}` - arbitrary polygon vertices
+    - Ellipse: `{cx, cy, rx, ry, rotation}` - rotated ellipse
+    
+    **Request Example:**
+    ```json
+    {
+        "gate_name": "EV Population",
+        "gate_type": "rectangle",
+        "gate_coordinates": {"x1": 100, "y1": 200, "x2": 500, "y2": 800},
+        "x_channel": "FSC-A",
+        "y_channel": "SSC-A",
+        "include_diameter_stats": true
+    }
+    ```
+    
+    **Response:**
+    ```json
+    {
+        "sample_id": "P5_F10_CD81",
+        "gate_name": "EV Population",
+        "total_events": 100000,
+        "gated_events": 24500,
+        "gated_percentage": 24.5,
+        "statistics": {
+            "x_channel": {
+                "channel": "FSC-A",
+                "mean": 350.2,
+                "median": 320.5,
+                "std": 125.3,
+                "min": 100.0,
+                "max": 500.0,
+                "cv": 35.8
+            },
+            "y_channel": {...},
+            "diameter": {...}
+        },
+        "percentiles": {
+            "D10": 85.2,
+            "D50": 120.5,
+            "D90": 185.3
+        },
+        "comparison_to_total": {
+            "x_mean_diff_percent": -12.5,
+            "y_mean_diff_percent": 8.2,
+            "enrichment_factor": 1.85
+        }
+    }
+    ```
+    """
+    import numpy as np
+    
+    try:
+        # Get sample
+        result = await db.execute(select(Sample).where(Sample.sample_id == sample_id))
+        sample = result.scalar_one_or_none()
+        
+        if not sample:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Sample {sample_id} not found"
+            )
+        
+        if not sample.file_path_fcs:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No FCS file associated with sample {sample_id}"
+            )
+        
+        # Parse FCS file
+        from src.parsers.fcs_parser import FCSParser
+        from src.utils.channel_config import get_channel_config
+        
+        logger.info(f"🎯 Running gated analysis for sample: {sample_id}, gate: {request.gate_name}")
+        
+        parser = FCSParser(sample.file_path_fcs)
+        parsed_data = parser.parse()
+        
+        # Validate channels exist
+        available_channels = list(parsed_data.columns)
+        if request.x_channel not in available_channels:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"X channel '{request.x_channel}' not found. Available: {available_channels}"
+            )
+        if request.y_channel not in available_channels:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Y channel '{request.y_channel}' not found. Available: {available_channels}"
+            )
+        
+        # Extract channel data
+        x_data = parsed_data[request.x_channel].values
+        y_data = parsed_data[request.y_channel].values
+        total_events = len(x_data)
+        
+        # Apply gate to find selected points
+        gate_coords = request.gate_coordinates
+        gate_type = request.gate_type
+        
+        if gate_type == "rectangle":
+            # Rectangle gate: check if points are within bounds
+            x1, y1 = gate_coords.get("x1", 0), gate_coords.get("y1", 0)
+            x2, y2 = gate_coords.get("x2", 0), gate_coords.get("y2", 0)
+            
+            # Ensure correct ordering
+            x_min, x_max = min(x1, x2), max(x1, x2)
+            y_min, y_max = min(y1, y2), max(y1, y2)
+            
+            mask = (
+                (x_data >= x_min) & (x_data <= x_max) &
+                (y_data >= y_min) & (y_data <= y_max)
+            )
+            
+        elif gate_type == "polygon":
+            # Polygon gate: point-in-polygon test
+            points = gate_coords.get("points", [])
+            if len(points) < 3:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Polygon gate requires at least 3 points"
+                )
+            
+            # Use matplotlib path for efficient point-in-polygon
+            try:
+                from matplotlib.path import Path
+                polygon_vertices = [(p["x"], p["y"]) for p in points]
+                polygon_path = Path(polygon_vertices)
+                test_points = np.column_stack((x_data, y_data))
+                mask = polygon_path.contains_points(test_points)
+            except ImportError:
+                # Fallback: simple ray casting algorithm
+                mask = np.array([
+                    _point_in_polygon(x_data[i], y_data[i], points)
+                    for i in range(len(x_data))
+                ])
+                
+        elif gate_type == "ellipse":
+            # Ellipse gate: check if points are within ellipse
+            cx = gate_coords.get("cx", 0)
+            cy = gate_coords.get("cy", 0)
+            rx = gate_coords.get("rx", 1)
+            ry = gate_coords.get("ry", 1)
+            rotation = np.radians(gate_coords.get("rotation", 0))
+            
+            # Transform points relative to ellipse center
+            dx = x_data - cx
+            dy = y_data - cy
+            
+            # Apply rotation
+            cos_r, sin_r = np.cos(-rotation), np.sin(-rotation)
+            rx_rot = dx * cos_r - dy * sin_r
+            ry_rot = dx * sin_r + dy * cos_r
+            
+            # Check if within ellipse
+            mask = ((rx_rot / rx) ** 2 + (ry_rot / ry) ** 2) <= 1.0
+            
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported gate type: {gate_type}"
+            )
+        
+        # Get gated data
+        gated_indices = np.where(mask)[0]
+        gated_count = len(gated_indices)
+        gated_percentage = (gated_count / total_events * 100) if total_events > 0 else 0
+        
+        if gated_count == 0:
+            return {
+                "sample_id": sample_id,
+                "gate_name": request.gate_name,
+                "gate_type": gate_type,
+                "total_events": total_events,
+                "gated_events": 0,
+                "gated_percentage": 0.0,
+                "message": "No events found within the gate region",
+                "statistics": None,
+                "percentiles": None,
+                "comparison_to_total": None
+            }
+        
+        # Get gated values
+        gated_x = x_data[mask]
+        gated_y = y_data[mask]
+        
+        # Calculate statistics helper function
+        def calc_stats(values: np.ndarray, channel_name: str) -> dict:
+            """Calculate comprehensive statistics for a channel."""
+            return {
+                "channel": channel_name,
+                "count": len(values),
+                "mean": float(np.mean(values)),
+                "median": float(np.median(values)),
+                "std": float(np.std(values)),
+                "min": float(np.min(values)),
+                "max": float(np.max(values)),
+                "cv": float(np.std(values) / np.mean(values) * 100) if np.mean(values) > 0 else 0,
+                "q25": float(np.percentile(values, 25)),
+                "q75": float(np.percentile(values, 75)),
+                "iqr": float(np.percentile(values, 75) - np.percentile(values, 25))
+            }
+        
+        # Calculate gated statistics
+        x_stats = calc_stats(gated_x, request.x_channel)
+        y_stats = calc_stats(gated_y, request.y_channel)
+        
+        # Calculate total population statistics for comparison
+        total_x_mean = float(np.mean(x_data))
+        total_y_mean = float(np.mean(y_data))
+        
+        # Diameter statistics if requested
+        diameter_stats = None
+        diameter_percentiles = None
+        
+        if request.include_diameter_stats:
+            try:
+                from src.physics.mie_scatter import MieScatterCalculator
+                mie_calc = MieScatterCalculator(
+                    wavelength_nm=488.0,
+                    n_particle=1.40,
+                    n_medium=1.33
+                )
+                
+                # Calculate diameters for gated events
+                diameters = []
+                for fsc_val in gated_x:
+                    try:
+                        d, success = mie_calc.diameter_from_scatter(
+                            fsc_intensity=float(fsc_val),
+                            min_diameter=20.0,
+                            max_diameter=500.0
+                        )
+                        if success and d > 0:
+                            diameters.append(d)
+                    except Exception:
+                        pass
+                
+                if len(diameters) >= 10:  # Need enough data points
+                    diameters = np.array(diameters)
+                    diameter_stats = calc_stats(diameters, "diameter_nm")
+                    diameter_percentiles = {
+                        "D10": float(np.percentile(diameters, 10)),
+                        "D50": float(np.percentile(diameters, 50)),
+                        "D90": float(np.percentile(diameters, 90)),
+                        "mean": float(np.mean(diameters)),
+                        "mode_estimate": float(np.percentile(diameters, 50))  # Using median as mode estimate
+                    }
+                    logger.info(f"📏 Calculated diameter for {len(diameters)}/{gated_count} gated events")
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to calculate diameter stats: {e}")
+        
+        # Calculate comparison metrics
+        comparison = {
+            "x_mean_diff_percent": float((x_stats["mean"] - total_x_mean) / total_x_mean * 100) if total_x_mean != 0 else 0,
+            "y_mean_diff_percent": float((y_stats["mean"] - total_y_mean) / total_y_mean * 100) if total_y_mean != 0 else 0,
+            "enrichment_factor": gated_percentage / 100.0 * total_events / gated_count if gated_count > 0 else 0,
+            "total_x_mean": total_x_mean,
+            "total_y_mean": total_y_mean,
+            "total_x_std": float(np.std(x_data)),
+            "total_y_std": float(np.std(y_data))
+        }
+        
+        logger.success(f"✅ Gated analysis complete: {gated_count}/{total_events} events ({gated_percentage:.2f}%)")
+        
+        return {
+            "sample_id": sample_id,
+            "gate_name": request.gate_name,
+            "gate_type": gate_type,
+            "gate_coordinates": gate_coords,
+            "total_events": total_events,
+            "gated_events": gated_count,
+            "gated_percentage": round(gated_percentage, 2),
+            "gated_indices": gated_indices.tolist()[:1000],  # Return first 1000 indices for reference
+            "statistics": {
+                "x_channel": x_stats,
+                "y_channel": y_stats,
+                "diameter": diameter_stats
+            },
+            "percentiles": diameter_percentiles,
+            "comparison_to_total": comparison
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"❌ Failed gated analysis for {sample_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to analyze gated population: {str(e)}"
+        )
+
+
+def _point_in_polygon(x: float, y: float, polygon: List[Dict[str, float]]) -> bool:
+    """
+    Ray casting algorithm for point-in-polygon test.
+    Fallback when matplotlib is not available.
+    """
+    n = len(polygon)
+    inside = False
+    
+    j = n - 1
+    for i in range(n):
+        xi, yi = polygon[i]["x"], polygon[i]["y"]
+        xj, yj = polygon[j]["x"], polygon[j]["y"]
+        
+        if ((yi > y) != (yj > y)) and (x < (xj - xi) * (y - yi) / (yj - yi) + xi):
+            inside = not inside
+        j = i
+    
+    return inside
+
+
+# ============================================================================
+# Auto Axis Selection Endpoint (CRMIT-002)
+# ============================================================================
+
+@router.get("/{sample_id}/recommend-axes", response_model=dict)
+async def get_recommended_axes(
+    sample_id: str,
+    n_recommendations: int = Query(5, ge=1, le=10, description="Number of axis pair recommendations"),
+    include_scatter: bool = Query(True, description="Include scatter channel combinations"),
+    include_fluorescence: bool = Query(True, description="Include fluorescence channel combinations"),
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    Get AI-recommended optimal axis pairs for scatter plot visualization.
+    
+    Uses intelligent analysis to recommend the best channel combinations based on:
+    - Variance and spread (information content)
+    - Correlation between channels (avoid redundancy)
+    - Dynamic range assessment
+    - Population separation metrics (multi-modal distributions)
+    - Standard cytometry best practices
+    
+    **Scoring Criteria:**
+    - Variance (30%): High variance = more information
+    - Correlation (20%): Low correlation = independent information
+    - Dynamic Range (20%): Larger range = better separation
+    - Population Separation (20%): Multi-population = interesting biology
+    - Modality (10%): Bimodal distributions = distinct populations
+    
+    **Response:**
+    ```json
+    {
+        "sample_id": "P5_F10_CD81",
+        "recommendations": [
+            {
+                "rank": 1,
+                "x_channel": "VFSC-A",
+                "y_channel": "VSSC1-A",
+                "score": 0.95,
+                "reason": "Standard gating view (FSC vs SSC)",
+                "description": "Universal starting point for flow cytometry. Used for initial gating, doublet discrimination, and debris removal."
+            },
+            {
+                "rank": 2,
+                "x_channel": "B531-H",
+                "y_channel": "VFSC-A",
+                "score": 0.78,
+                "reason": "Fluorescence vs Size",
+                "description": "Compare marker expression with particle size to identify marker-positive populations."
+            }
+        ],
+        "channels": {
+            "scatter": ["VFSC-A", "VFSC-H", "VSSC1-A", "VSSC1-H"],
+            "fluorescence": ["B531-H", "R670-H", "Y585-H", "V447-H"],
+            "all": ["VFSC-A", "VFSC-H", "VSSC1-A", ...]
+        }
+    }
+    ```
+    """
+    try:
+        # Get sample
+        result = await db.execute(select(Sample).where(Sample.sample_id == sample_id))
+        sample = result.scalar_one_or_none()
+        
+        if not sample:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Sample {sample_id} not found"
+            )
+        
+        # Check if FCS file exists
+        if not sample.file_path_fcs:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No FCS file associated with sample {sample_id}"
+            )
+        
+        # Parse FCS file
+        from src.parsers.fcs_parser import FCSParser
+        from src.visualization.auto_axis_selector import AutoAxisSelector
+        
+        logger.info(f"🎯 Analyzing optimal axes for sample: {sample_id}")
+        
+        parser = FCSParser(sample.file_path_fcs)
+        parsed_data = parser.parse()
+        
+        # Get all available channels
+        all_channels = parser.channel_names
+        
+        # Initialize auto-axis selector
+        selector = AutoAxisSelector()
+        
+        # Get channel categories
+        scatter_channels = selector._identify_scatter_channels(all_channels)
+        fluorescence_channels = selector._identify_fluorescence_channels(all_channels)
+        
+        # Get recommendations
+        best_pairs = selector.select_best_axes(
+            parsed_data,
+            n_pairs=n_recommendations,
+            include_scatter=include_scatter,
+            include_fluorescence=include_fluorescence
+        )
+        
+        # Build detailed recommendations
+        recommendations = []
+        for rank, (x_ch, y_ch, score) in enumerate(best_pairs, 1):
+            # Determine reason and description
+            x_upper = x_ch.upper()
+            y_upper = y_ch.upper()
+            
+            # Check channel types
+            x_is_scatter = any(s in x_upper for s in ['FSC', 'SSC', 'VFSC', 'VSSC'])
+            y_is_scatter = any(s in y_upper for s in ['FSC', 'SSC', 'VFSC', 'VSSC'])
+            
+            if x_is_scatter and y_is_scatter:
+                # Both scatter - check if FSC vs SSC
+                is_fsc_ssc = (
+                    ('FSC' in x_upper or 'VFSC' in x_upper) and 
+                    ('SSC' in y_upper or 'VSSC' in y_upper)
+                ) or (
+                    ('SSC' in x_upper or 'VSSC' in x_upper) and 
+                    ('FSC' in y_upper or 'VFSC' in y_upper)
+                )
+                if is_fsc_ssc:
+                    reason = "Standard gating view (FSC vs SSC)"
+                    description = "Universal starting point for flow cytometry. Used for initial gating, doublet discrimination, and debris removal."
+                else:
+                    reason = "Scatter comparison"
+                    description = "Compare scatter parameters to identify particle characteristics (e.g., FSC-A vs FSC-H for doublet discrimination)."
+            elif x_is_scatter or y_is_scatter:
+                reason = "Fluorescence vs Size"
+                description = "Compare marker expression with particle size to identify size characteristics of marker-positive populations."
+            else:
+                reason = "Multi-marker analysis"
+                description = "Compare expression of two fluorescence markers to identify co-expression patterns and distinct populations."
+            
+            recommendations.append({
+                "rank": rank,
+                "x_channel": x_ch,
+                "y_channel": y_ch,
+                "score": round(float(score), 3),
+                "reason": reason,
+                "description": description
+            })
+        
+        logger.success(f"✅ Generated {len(recommendations)} axis recommendations for {sample_id}")
+        
+        return {
+            "sample_id": sample_id,
+            "total_events": len(parsed_data),
+            "recommendations": recommendations,
+            "channels": {
+                "scatter": scatter_channels,
+                "fluorescence": fluorescence_channels,
+                "all": all_channels
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"❌ Failed to get axis recommendations for {sample_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get axis recommendations: {str(e)}"
         )
 
 
@@ -755,23 +1325,13 @@ async def get_size_bins(
         
         # Sample for performance (calculate on subset, extrapolate to full dataset)
         sample_size = min(10000, total_events)
-        sampled_fsc = parsed_data[fsc_ch].sample(n=sample_size, random_state=42)
+        sampled_fsc = parsed_data[fsc_ch].sample(n=sample_size, random_state=42).values
         
-        # Convert FSC to size for sampled events
-        sizes = []
-        for fsc_val in sampled_fsc:
-            try:
-                diameter, success = mie_calc.diameter_from_scatter(
-                    fsc_intensity=float(fsc_val),
-                    min_diameter=10.0,
-                    max_diameter=500.0
-                )
-                if success and diameter > 0:
-                    sizes.append(diameter)
-            except:
-                pass
-        
-        sizes_array = np.array(sizes)
+        # FAST vectorized batch conversion: FSC to size (100x faster than loop)
+        sizes_array, success_mask = mie_calc.diameters_from_scatter_batch(
+            sampled_fsc, min_diameter=10.0, max_diameter=500.0
+        )
+        sizes_array = sizes_array[success_mask & (sizes_array > 0)]
         
         # Bin sizes into categories
         small_count = np.sum(sizes_array < 50)
@@ -826,6 +1386,153 @@ async def get_size_bins(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get size bins: {str(e)}"
+        )
+
+
+# ============================================================================
+# Anomaly Detection Endpoint
+# ============================================================================
+
+@router.get("/{sample_id}/anomaly-detection", response_model=dict)
+async def detect_anomalies(
+    sample_id: str,
+    method: str = Query("zscore", description="Anomaly method: zscore, iqr, both"),
+    zscore_threshold: float = Query(3.0, ge=1.0, le=10.0, description="Z-score threshold"),
+    iqr_factor: float = Query(1.5, ge=1.0, le=5.0, description="IQR factor for outlier detection"),
+    fsc_channel: Optional[str] = Query(None, description="FSC channel name override"),
+    ssc_channel: Optional[str] = Query(None, description="SSC channel name override"),
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    Run anomaly detection on a sample's scatter data.
+    
+    Uses statistical methods (Z-score and/or IQR) to detect anomalous events.
+    
+    **Parameters:**
+    - method: Detection method - "zscore", "iqr", or "both"
+    - zscore_threshold: Z-score threshold (default 3.0)
+    - iqr_factor: IQR factor for outlier detection (default 1.5)
+    
+    **Response:**
+    ```json
+    {
+        "sample_id": "P5_F10_CD81",
+        "enabled": true,
+        "method": "zscore",
+        "total_anomalies": 250,
+        "anomaly_percentage": 2.5,
+        "anomalous_indices": [123, 456, ...]
+    }
+    ```
+    """
+    try:
+        # Get sample
+        result = await db.execute(select(Sample).where(Sample.sample_id == sample_id))
+        sample = result.scalar_one_or_none()
+        
+        if not sample:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Sample {sample_id} not found"
+            )
+        
+        if not sample.file_path_fcs:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No FCS file associated with sample {sample_id}"
+            )
+        
+        # Parse FCS file
+        from src.parsers.fcs_parser import FCSParser
+        from src.utils.channel_config import get_channel_config
+        import numpy as np
+        
+        logger.info(f"🔍 Running anomaly detection for sample: {sample_id}")
+        
+        parser = FCSParser(sample.file_path_fcs)
+        parsed_data = parser.parse()
+        
+        # Get channels
+        channels = parser.channel_names
+        channel_config = get_channel_config()
+        
+        fsc_ch = fsc_channel or channel_config.detect_fsc_channel(channels)
+        ssc_ch = ssc_channel or channel_config.detect_ssc_channel(channels)
+        
+        if not fsc_ch and len(channels) >= 1:
+            fsc_ch = channels[0]
+        if not ssc_ch and len(channels) >= 2:
+            ssc_ch = channels[1]
+        
+        if not fsc_ch or not ssc_ch:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Could not find FSC/SSC channels. Available: {', '.join(channels)}"
+            )
+        
+        # Run anomaly detection
+        fsc_values = parsed_data[fsc_ch].values
+        ssc_values = parsed_data[ssc_ch].values
+        
+        anomalous_indices = set()
+        
+        if method in ['zscore', 'both']:
+            # Z-score based detection
+            fsc_mean, fsc_std = np.mean(fsc_values), np.std(fsc_values)
+            ssc_mean, ssc_std = np.mean(ssc_values), np.std(ssc_values)
+            
+            fsc_zscore = np.abs((fsc_values - fsc_mean) / (fsc_std + 1e-10))
+            ssc_zscore = np.abs((ssc_values - ssc_mean) / (ssc_std + 1e-10))
+            
+            zscore_outliers = np.where((fsc_zscore > zscore_threshold) | (ssc_zscore > zscore_threshold))[0]
+            anomalous_indices.update(zscore_outliers.tolist())
+        
+        if method in ['iqr', 'both']:
+            # IQR based detection
+            fsc_q1, fsc_q3 = np.percentile(fsc_values, [25, 75])
+            ssc_q1, ssc_q3 = np.percentile(ssc_values, [25, 75])
+            
+            fsc_iqr = fsc_q3 - fsc_q1
+            ssc_iqr = ssc_q3 - ssc_q1
+            
+            fsc_lower, fsc_upper = fsc_q1 - iqr_factor * fsc_iqr, fsc_q3 + iqr_factor * fsc_iqr
+            ssc_lower, ssc_upper = ssc_q1 - iqr_factor * ssc_iqr, ssc_q3 + iqr_factor * ssc_iqr
+            
+            iqr_outliers = np.where(
+                (fsc_values < fsc_lower) | (fsc_values > fsc_upper) |
+                (ssc_values < ssc_lower) | (ssc_values > ssc_upper)
+            )[0]
+            anomalous_indices.update(iqr_outliers.tolist())
+        
+        anomalous_list = sorted(list(anomalous_indices))
+        total_events = len(parsed_data)
+        anomaly_percentage = (len(anomalous_list) / total_events * 100) if total_events > 0 else 0
+        
+        logger.success(
+            f"✅ Anomaly detection for {sample_id}: "
+            f"{len(anomalous_list)} anomalies ({anomaly_percentage:.2f}%)"
+        )
+        
+        return {
+            "sample_id": sample_id,
+            "enabled": True,
+            "method": method,
+            "total_anomalies": len(anomalous_list),
+            "anomaly_percentage": round(anomaly_percentage, 2),
+            "anomalous_indices": anomalous_list,
+            "settings": {
+                "zscore_threshold": zscore_threshold,
+                "iqr_factor": iqr_factor
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"❌ Failed anomaly detection for {sample_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed anomaly detection: {str(e)}"
         )
 
 

@@ -1,9 +1,75 @@
 /**
  * Utility functions for exporting analysis data
+ * Includes Excel (XLSX), PDF, CSV, JSON, Markdown exports
  */
 
 import type { AnomalyEvent } from "@/components/flow-cytometry/anomaly-events-table"
 import type { AnomalyDetectionResult } from "@/components/flow-cytometry/anomaly-summary-card"
+import * as XLSX from 'xlsx'
+
+// =====================================================
+// TYPE DEFINITIONS
+// =====================================================
+
+export interface FCSExportData {
+  sampleId: string
+  fileName?: string
+  results: {
+    total_events?: number
+    gated_events?: number
+    fsc_mean?: number
+    fsc_median?: number
+    ssc_mean?: number
+    ssc_median?: number
+    particle_size_median_nm?: number
+    particle_size_mean_nm?: number
+    size_statistics?: {
+      d10?: number
+      d50?: number
+      d90?: number
+      mean?: number
+      std?: number
+    }
+    fsc_cv_pct?: number
+    ssc_cv_pct?: number
+    debris_pct?: number
+    noise_events_removed?: number
+    channels?: string[]
+  }
+  scatterData?: Array<{ x: number; y: number; index?: number; isAnomaly?: boolean }>
+  sizeDistribution?: Array<{ size: number; count: number }>
+  anomalyData?: AnomalyDetectionResult
+  experimentalConditions?: {
+    treatment?: string
+    cellLine?: string
+    bufferType?: string
+    dilutionFactor?: number
+    notes?: string
+  }
+}
+
+export interface NTAExportData {
+  sampleId: string
+  fileName?: string
+  results: {
+    median_size_nm?: number
+    mean_size_nm?: number
+    d10_nm?: number
+    d50_nm?: number
+    d90_nm?: number
+    concentration_particles_ml?: number
+    temperature_celsius?: number
+    ph?: number
+    total_particles?: number
+    bin_50_80nm_pct?: number
+    bin_80_100nm_pct?: number
+    bin_100_120nm_pct?: number
+    bin_120_150nm_pct?: number
+    bin_150_200nm_pct?: number
+    bin_200_plus_pct?: number
+  }
+  sizeDistribution?: Array<{ size: number; concentration: number }>
+}
 
 /**
  * Export anomaly events to CSV file
@@ -561,4 +627,584 @@ export function downloadChatHistory(
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
+}
+
+// =====================================================
+// EXCEL EXPORT FUNCTIONS (P-002)
+// =====================================================
+
+/**
+ * Export FCS analysis results to proper Excel format (.xlsx)
+ * Includes multiple sheets: Summary, Statistics, Raw Data, Anomalies
+ */
+export function exportFCSToExcel(data: FCSExportData): void {
+  const workbook = XLSX.utils.book_new()
+  const timestamp = new Date().toISOString().split('T')[0]
+  
+  // Sheet 1: Summary
+  const summaryData = [
+    ['BioVaram EV Analysis Platform - FCS Report'],
+    [''],
+    ['Sample Information'],
+    ['Sample ID', data.sampleId],
+    ['File Name', data.fileName || 'N/A'],
+    ['Export Date', new Date().toLocaleString()],
+    [''],
+    ['Analysis Summary'],
+    ['Total Events', data.results.total_events || 'N/A'],
+    ['Gated Events', data.results.gated_events || 'N/A'],
+    ['Debris %', data.results.debris_pct ? `${data.results.debris_pct.toFixed(2)}%` : 'N/A'],
+    [''],
+    ['Particle Size'],
+    ['Median Size (nm)', data.results.particle_size_median_nm?.toFixed(2) || 'N/A'],
+    ['Mean Size (nm)', data.results.particle_size_mean_nm?.toFixed(2) || 'N/A'],
+    ['D10 (nm)', data.results.size_statistics?.d10?.toFixed(2) || 'N/A'],
+    ['D50 (nm)', data.results.size_statistics?.d50?.toFixed(2) || 'N/A'],
+    ['D90 (nm)', data.results.size_statistics?.d90?.toFixed(2) || 'N/A'],
+    [''],
+    ['Scatter Statistics'],
+    ['FSC Mean', data.results.fsc_mean?.toFixed(2) || 'N/A'],
+    ['FSC Median', data.results.fsc_median?.toFixed(2) || 'N/A'],
+    ['FSC CV%', data.results.fsc_cv_pct ? `${data.results.fsc_cv_pct.toFixed(2)}%` : 'N/A'],
+    ['SSC Mean', data.results.ssc_mean?.toFixed(2) || 'N/A'],
+    ['SSC Median', data.results.ssc_median?.toFixed(2) || 'N/A'],
+    ['SSC CV%', data.results.ssc_cv_pct ? `${data.results.ssc_cv_pct.toFixed(2)}%` : 'N/A'],
+  ]
+  
+  // Add experimental conditions if present
+  if (data.experimentalConditions) {
+    summaryData.push([''])
+    summaryData.push(['Experimental Conditions'])
+    if (data.experimentalConditions.treatment) {
+      summaryData.push(['Treatment', data.experimentalConditions.treatment])
+    }
+    if (data.experimentalConditions.cellLine) {
+      summaryData.push(['Cell Line', data.experimentalConditions.cellLine])
+    }
+    if (data.experimentalConditions.bufferType) {
+      summaryData.push(['Buffer Type', data.experimentalConditions.bufferType])
+    }
+    if (data.experimentalConditions.dilutionFactor) {
+      summaryData.push(['Dilution Factor', `${data.experimentalConditions.dilutionFactor}x`])
+    }
+    if (data.experimentalConditions.notes) {
+      summaryData.push(['Notes', data.experimentalConditions.notes])
+    }
+  }
+  
+  const summarySheet = XLSX.utils.aoa_to_sheet(summaryData)
+  
+  // Style the summary sheet
+  summarySheet['!cols'] = [{ wch: 25 }, { wch: 30 }]
+  XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary')
+  
+  // Sheet 2: Size Distribution (if available)
+  if (data.sizeDistribution && data.sizeDistribution.length > 0) {
+    const sizeData = [
+      ['Size Distribution'],
+      ['Size (nm)', 'Count'],
+      ...data.sizeDistribution.map(d => [d.size, d.count])
+    ]
+    const sizeSheet = XLSX.utils.aoa_to_sheet(sizeData)
+    sizeSheet['!cols'] = [{ wch: 15 }, { wch: 15 }]
+    XLSX.utils.book_append_sheet(workbook, sizeSheet, 'Size Distribution')
+  }
+  
+  // Sheet 3: Scatter Data (if available, limited to first 10000 rows for performance)
+  if (data.scatterData && data.scatterData.length > 0) {
+    const maxRows = Math.min(data.scatterData.length, 10000)
+    const scatterExport = data.scatterData.slice(0, maxRows)
+    const scatterRows = [
+      ['Scatter Plot Data'],
+      ['Event Index', 'FSC-H', 'SSC-H', 'Is Anomaly'],
+      ...scatterExport.map((d, i) => [
+        d.index ?? i,
+        d.x.toFixed(4),
+        d.y.toFixed(4),
+        d.isAnomaly ? 'Yes' : 'No'
+      ])
+    ]
+    const scatterSheet = XLSX.utils.aoa_to_sheet(scatterRows)
+    scatterSheet['!cols'] = [{ wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 12 }]
+    XLSX.utils.book_append_sheet(workbook, scatterSheet, 'Scatter Data')
+    
+    if (data.scatterData.length > maxRows) {
+      console.log(`Note: Scatter data truncated to ${maxRows} rows for Excel export`)
+    }
+  }
+  
+  // Sheet 4: Anomaly Summary (if available)
+  if (data.anomalyData) {
+    const anomalyRows = [
+      ['Anomaly Detection Results'],
+      [''],
+      ['Detection Method', data.anomalyData.method],
+      ['Total Anomalies', data.anomalyData.total_anomalies],
+      ['Anomaly Percentage', `${data.anomalyData.anomaly_percentage.toFixed(2)}%`],
+      ['Z-Score Threshold', data.anomalyData.zscore_threshold || 'N/A'],
+      ['IQR Factor', data.anomalyData.iqr_factor || 'N/A'],
+    ]
+    const anomalySheet = XLSX.utils.aoa_to_sheet(anomalyRows)
+    anomalySheet['!cols'] = [{ wch: 20 }, { wch: 20 }]
+    XLSX.utils.book_append_sheet(workbook, anomalySheet, 'Anomalies')
+  }
+  
+  // Generate filename and download
+  const filename = `${data.sampleId}_FCS_Report_${timestamp}.xlsx`
+  XLSX.writeFile(workbook, filename)
+}
+
+/**
+ * Export NTA analysis results to proper Excel format (.xlsx)
+ */
+export function exportNTAToExcel(data: NTAExportData): void {
+  const workbook = XLSX.utils.book_new()
+  const timestamp = new Date().toISOString().split('T')[0]
+  
+  // Sheet 1: Summary
+  const summaryData = [
+    ['BioVaram EV Analysis Platform - NTA Report'],
+    [''],
+    ['Sample Information'],
+    ['Sample ID', data.sampleId],
+    ['File Name', data.fileName || 'N/A'],
+    ['Export Date', new Date().toLocaleString()],
+    [''],
+    ['Size Analysis'],
+    ['Median Size (nm)', data.results.median_size_nm?.toFixed(2) || 'N/A'],
+    ['Mean Size (nm)', data.results.mean_size_nm?.toFixed(2) || 'N/A'],
+    ['D10 (nm)', data.results.d10_nm?.toFixed(2) || 'N/A'],
+    ['D50 (nm)', data.results.d50_nm?.toFixed(2) || 'N/A'],
+    ['D90 (nm)', data.results.d90_nm?.toFixed(2) || 'N/A'],
+    [''],
+    ['Concentration'],
+    ['Particles/mL', data.results.concentration_particles_ml?.toExponential(2) || 'N/A'],
+    ['Total Particles', data.results.total_particles || 'N/A'],
+    [''],
+    ['Measurement Conditions'],
+    ['Temperature (°C)', data.results.temperature_celsius?.toFixed(1) || 'N/A'],
+    ['pH', data.results.ph?.toFixed(2) || 'N/A'],
+    [''],
+    ['Size Distribution Bins'],
+    ['50-80nm', data.results.bin_50_80nm_pct ? `${data.results.bin_50_80nm_pct.toFixed(2)}%` : 'N/A'],
+    ['80-100nm', data.results.bin_80_100nm_pct ? `${data.results.bin_80_100nm_pct.toFixed(2)}%` : 'N/A'],
+    ['100-120nm', data.results.bin_100_120nm_pct ? `${data.results.bin_100_120nm_pct.toFixed(2)}%` : 'N/A'],
+    ['120-150nm', data.results.bin_120_150nm_pct ? `${data.results.bin_120_150nm_pct.toFixed(2)}%` : 'N/A'],
+    ['150-200nm', data.results.bin_150_200nm_pct ? `${data.results.bin_150_200nm_pct.toFixed(2)}%` : 'N/A'],
+    ['200+nm', data.results.bin_200_plus_pct ? `${data.results.bin_200_plus_pct.toFixed(2)}%` : 'N/A'],
+  ]
+  
+  const summarySheet = XLSX.utils.aoa_to_sheet(summaryData)
+  summarySheet['!cols'] = [{ wch: 25 }, { wch: 30 }]
+  XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary')
+  
+  // Sheet 2: Size Distribution (if available)
+  if (data.sizeDistribution && data.sizeDistribution.length > 0) {
+    const sizeRows = [
+      ['Size Distribution'],
+      ['Size (nm)', 'Concentration'],
+      ...data.sizeDistribution.map(d => [d.size, d.concentration])
+    ]
+    const sizeSheet = XLSX.utils.aoa_to_sheet(sizeRows)
+    sizeSheet['!cols'] = [{ wch: 15 }, { wch: 20 }]
+    XLSX.utils.book_append_sheet(workbook, sizeSheet, 'Size Distribution')
+  }
+  
+  // Generate filename and download
+  const filename = `${data.sampleId}_NTA_Report_${timestamp}.xlsx`
+  XLSX.writeFile(workbook, filename)
+}
+
+/**
+ * Export comparison data to Excel
+ */
+export function exportComparisonToExcel(
+  primaryData: FCSExportData | NTAExportData,
+  secondaryData: FCSExportData | NTAExportData,
+  comparisonType: 'FCS' | 'NTA' | 'Cross'
+): void {
+  const workbook = XLSX.utils.book_new()
+  const timestamp = new Date().toISOString().split('T')[0]
+  
+  // Sheet 1: Comparison Summary
+  const summaryData = [
+    ['BioVaram EV Analysis Platform - Comparison Report'],
+    [''],
+    ['Comparison Type', comparisonType],
+    ['Export Date', new Date().toLocaleString()],
+    [''],
+    ['Samples Compared'],
+    ['Primary Sample', primaryData.sampleId],
+    ['Secondary Sample', secondaryData.sampleId],
+    [''],
+    ['Side-by-Side Comparison'],
+    ['Metric', 'Primary', 'Secondary', 'Difference'],
+  ]
+  
+  // Add comparison metrics based on type
+  if ('fsc_mean' in primaryData.results && 'fsc_mean' in secondaryData.results) {
+    // FCS comparison
+    const p = primaryData.results as FCSExportData['results']
+    const s = secondaryData.results as FCSExportData['results']
+    
+    if (p.total_events && s.total_events) {
+      summaryData.push(['Total Events', String(p.total_events), String(s.total_events), String(s.total_events - p.total_events)])
+    }
+    if (p.particle_size_median_nm && s.particle_size_median_nm) {
+      summaryData.push([
+        'Median Size (nm)',
+        p.particle_size_median_nm.toFixed(2),
+        s.particle_size_median_nm.toFixed(2),
+        (s.particle_size_median_nm - p.particle_size_median_nm).toFixed(2)
+      ])
+    }
+    if (p.fsc_mean && s.fsc_mean) {
+      summaryData.push([
+        'FSC Mean',
+        p.fsc_mean.toFixed(2),
+        s.fsc_mean.toFixed(2),
+        (s.fsc_mean - p.fsc_mean).toFixed(2)
+      ])
+    }
+    if (p.ssc_mean && s.ssc_mean) {
+      summaryData.push([
+        'SSC Mean',
+        p.ssc_mean.toFixed(2),
+        s.ssc_mean.toFixed(2),
+        (s.ssc_mean - p.ssc_mean).toFixed(2)
+      ])
+    }
+  }
+  
+  const summarySheet = XLSX.utils.aoa_to_sheet(summaryData)
+  summarySheet['!cols'] = [{ wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 15 }]
+  XLSX.utils.book_append_sheet(workbook, summarySheet, 'Comparison')
+  
+  const filename = `Comparison_${primaryData.sampleId}_vs_${secondaryData.sampleId}_${timestamp}.xlsx`
+  XLSX.writeFile(workbook, filename)
+}
+
+// =====================================================
+// PDF EXPORT FUNCTIONS (P-003)
+// =====================================================
+
+/**
+ * Generate PDF report for FCS analysis
+ * Uses jsPDF with autoTable for professional reports
+ */
+export async function exportFCSToPDF(data: FCSExportData): Promise<void> {
+  // Dynamic import to avoid SSR issues
+  const { default: jsPDF } = await import('jspdf')
+  const { default: autoTable } = await import('jspdf-autotable')
+  
+  const doc = new jsPDF()
+  const timestamp = new Date().toLocaleString()
+  const pageWidth = doc.internal.pageSize.getWidth()
+  
+  // Header
+  doc.setFontSize(20)
+  doc.setTextColor(139, 92, 246) // Purple color
+  doc.text('BioVaram', 14, 20)
+  
+  doc.setFontSize(12)
+  doc.setTextColor(100)
+  doc.text('EV Analysis Platform - FCS Report', 14, 28)
+  
+  // Title line
+  doc.setDrawColor(139, 92, 246)
+  doc.setLineWidth(0.5)
+  doc.line(14, 32, pageWidth - 14, 32)
+  
+  // Sample Information
+  doc.setFontSize(14)
+  doc.setTextColor(0)
+  doc.text('Sample Information', 14, 42)
+  
+  autoTable(doc, {
+    startY: 46,
+    head: [['Property', 'Value']],
+    body: [
+      ['Sample ID', data.sampleId],
+      ['File Name', data.fileName || 'N/A'],
+      ['Export Date', timestamp],
+      ['Total Events', String(data.results.total_events || 'N/A')],
+      ['Gated Events', String(data.results.gated_events || 'N/A')],
+    ],
+    theme: 'striped',
+    headStyles: { fillColor: [139, 92, 246] },
+    margin: { left: 14, right: 14 },
+  })
+  
+  // Size Statistics
+  const sizeStartY = (doc as any).lastAutoTable.finalY + 10
+  doc.setFontSize(14)
+  doc.text('Particle Size Statistics', 14, sizeStartY)
+  
+  autoTable(doc, {
+    startY: sizeStartY + 4,
+    head: [['Metric', 'Value']],
+    body: [
+      ['Median Size (nm)', data.results.particle_size_median_nm?.toFixed(2) || 'N/A'],
+      ['Mean Size (nm)', data.results.particle_size_mean_nm?.toFixed(2) || 'N/A'],
+      ['D10 (nm)', data.results.size_statistics?.d10?.toFixed(2) || 'N/A'],
+      ['D50 (nm)', data.results.size_statistics?.d50?.toFixed(2) || 'N/A'],
+      ['D90 (nm)', data.results.size_statistics?.d90?.toFixed(2) || 'N/A'],
+    ],
+    theme: 'striped',
+    headStyles: { fillColor: [139, 92, 246] },
+    margin: { left: 14, right: 14 },
+  })
+  
+  // Scatter Statistics
+  const scatterStartY = (doc as any).lastAutoTable.finalY + 10
+  doc.setFontSize(14)
+  doc.text('Scatter Statistics', 14, scatterStartY)
+  
+  autoTable(doc, {
+    startY: scatterStartY + 4,
+    head: [['Parameter', 'Mean', 'Median', 'CV%']],
+    body: [
+      [
+        'FSC',
+        data.results.fsc_mean?.toFixed(2) || 'N/A',
+        data.results.fsc_median?.toFixed(2) || 'N/A',
+        data.results.fsc_cv_pct ? `${data.results.fsc_cv_pct.toFixed(2)}%` : 'N/A'
+      ],
+      [
+        'SSC',
+        data.results.ssc_mean?.toFixed(2) || 'N/A',
+        data.results.ssc_median?.toFixed(2) || 'N/A',
+        data.results.ssc_cv_pct ? `${data.results.ssc_cv_pct.toFixed(2)}%` : 'N/A'
+      ],
+    ],
+    theme: 'striped',
+    headStyles: { fillColor: [139, 92, 246] },
+    margin: { left: 14, right: 14 },
+  })
+  
+  // Anomaly Detection (if available)
+  if (data.anomalyData) {
+    const anomalyStartY = (doc as any).lastAutoTable.finalY + 10
+    doc.setFontSize(14)
+    doc.text('Anomaly Detection', 14, anomalyStartY)
+    
+    autoTable(doc, {
+      startY: anomalyStartY + 4,
+      head: [['Property', 'Value']],
+      body: [
+        ['Detection Method', data.anomalyData.method],
+        ['Total Anomalies', String(data.anomalyData.total_anomalies)],
+        ['Anomaly %', `${data.anomalyData.anomaly_percentage.toFixed(2)}%`],
+        ['Z-Score Threshold', String(data.anomalyData.zscore_threshold || 'N/A')],
+      ],
+      theme: 'striped',
+      headStyles: { fillColor: [249, 115, 22] }, // Orange for anomalies
+      margin: { left: 14, right: 14 },
+    })
+  }
+  
+  // Experimental Conditions (if available)
+  if (data.experimentalConditions) {
+    const condStartY = (doc as any).lastAutoTable.finalY + 10
+    doc.setFontSize(14)
+    doc.text('Experimental Conditions', 14, condStartY)
+    
+    const condBody: string[][] = []
+    if (data.experimentalConditions.treatment) {
+      condBody.push(['Treatment', data.experimentalConditions.treatment])
+    }
+    if (data.experimentalConditions.cellLine) {
+      condBody.push(['Cell Line', data.experimentalConditions.cellLine])
+    }
+    if (data.experimentalConditions.bufferType) {
+      condBody.push(['Buffer Type', data.experimentalConditions.bufferType])
+    }
+    if (data.experimentalConditions.dilutionFactor) {
+      condBody.push(['Dilution Factor', `${data.experimentalConditions.dilutionFactor}x`])
+    }
+    
+    if (condBody.length > 0) {
+      autoTable(doc, {
+        startY: condStartY + 4,
+        head: [['Condition', 'Value']],
+        body: condBody,
+        theme: 'striped',
+        headStyles: { fillColor: [16, 185, 129] }, // Green
+        margin: { left: 14, right: 14 },
+      })
+    }
+  }
+  
+  // Footer
+  const pageCount = doc.getNumberOfPages()
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i)
+    doc.setFontSize(8)
+    doc.setTextColor(150)
+    doc.text(
+      `Page ${i} of ${pageCount} | Generated by BioVaram EV Analysis Platform | ${timestamp}`,
+      pageWidth / 2,
+      doc.internal.pageSize.getHeight() - 10,
+      { align: 'center' }
+    )
+  }
+  
+  // Save
+  const filename = `${data.sampleId}_FCS_Report_${new Date().toISOString().split('T')[0]}.pdf`
+  doc.save(filename)
+}
+
+/**
+ * Generate PDF report for NTA analysis
+ */
+export async function exportNTAToPDF(data: NTAExportData): Promise<void> {
+  const { default: jsPDF } = await import('jspdf')
+  const { default: autoTable } = await import('jspdf-autotable')
+  
+  const doc = new jsPDF()
+  const timestamp = new Date().toLocaleString()
+  const pageWidth = doc.internal.pageSize.getWidth()
+  
+  // Header
+  doc.setFontSize(20)
+  doc.setTextColor(139, 92, 246)
+  doc.text('BioVaram', 14, 20)
+  
+  doc.setFontSize(12)
+  doc.setTextColor(100)
+  doc.text('EV Analysis Platform - NTA Report', 14, 28)
+  
+  doc.setDrawColor(139, 92, 246)
+  doc.setLineWidth(0.5)
+  doc.line(14, 32, pageWidth - 14, 32)
+  
+  // Sample Information
+  doc.setFontSize(14)
+  doc.setTextColor(0)
+  doc.text('Sample Information', 14, 42)
+  
+  autoTable(doc, {
+    startY: 46,
+    head: [['Property', 'Value']],
+    body: [
+      ['Sample ID', data.sampleId],
+      ['File Name', data.fileName || 'N/A'],
+      ['Export Date', timestamp],
+      ['Total Particles', String(data.results.total_particles || 'N/A')],
+      ['Concentration', data.results.concentration_particles_ml?.toExponential(2) || 'N/A'],
+    ],
+    theme: 'striped',
+    headStyles: { fillColor: [16, 185, 129] }, // Green for NTA
+    margin: { left: 14, right: 14 },
+  })
+  
+  // Size Statistics
+  const sizeStartY = (doc as any).lastAutoTable.finalY + 10
+  doc.setFontSize(14)
+  doc.text('Size Statistics', 14, sizeStartY)
+  
+  autoTable(doc, {
+    startY: sizeStartY + 4,
+    head: [['Metric', 'Value (nm)']],
+    body: [
+      ['Median Size', data.results.median_size_nm?.toFixed(2) || 'N/A'],
+      ['Mean Size', data.results.mean_size_nm?.toFixed(2) || 'N/A'],
+      ['D10', data.results.d10_nm?.toFixed(2) || 'N/A'],
+      ['D50', data.results.d50_nm?.toFixed(2) || 'N/A'],
+      ['D90', data.results.d90_nm?.toFixed(2) || 'N/A'],
+    ],
+    theme: 'striped',
+    headStyles: { fillColor: [16, 185, 129] },
+    margin: { left: 14, right: 14 },
+  })
+  
+  // Size Distribution Bins
+  const binsStartY = (doc as any).lastAutoTable.finalY + 10
+  doc.setFontSize(14)
+  doc.text('Size Distribution Bins', 14, binsStartY)
+  
+  autoTable(doc, {
+    startY: binsStartY + 4,
+    head: [['Size Range', 'Percentage']],
+    body: [
+      ['50-80 nm', data.results.bin_50_80nm_pct ? `${data.results.bin_50_80nm_pct.toFixed(2)}%` : 'N/A'],
+      ['80-100 nm', data.results.bin_80_100nm_pct ? `${data.results.bin_80_100nm_pct.toFixed(2)}%` : 'N/A'],
+      ['100-120 nm', data.results.bin_100_120nm_pct ? `${data.results.bin_100_120nm_pct.toFixed(2)}%` : 'N/A'],
+      ['120-150 nm', data.results.bin_150_200nm_pct ? `${data.results.bin_120_150nm_pct?.toFixed(2)}%` : 'N/A'],
+      ['150-200 nm', data.results.bin_150_200nm_pct ? `${data.results.bin_150_200nm_pct.toFixed(2)}%` : 'N/A'],
+      ['200+ nm', data.results.bin_200_plus_pct ? `${data.results.bin_200_plus_pct.toFixed(2)}%` : 'N/A'],
+    ],
+    theme: 'striped',
+    headStyles: { fillColor: [16, 185, 129] },
+    margin: { left: 14, right: 14 },
+  })
+  
+  // Measurement Conditions
+  const condStartY = (doc as any).lastAutoTable.finalY + 10
+  doc.setFontSize(14)
+  doc.text('Measurement Conditions', 14, condStartY)
+  
+  autoTable(doc, {
+    startY: condStartY + 4,
+    head: [['Parameter', 'Value']],
+    body: [
+      ['Temperature', data.results.temperature_celsius ? `${data.results.temperature_celsius.toFixed(1)}°C` : 'N/A'],
+      ['pH', data.results.ph?.toFixed(2) || 'N/A'],
+    ],
+    theme: 'striped',
+    headStyles: { fillColor: [16, 185, 129] },
+    margin: { left: 14, right: 14 },
+  })
+  
+  // Footer
+  const pageCount = doc.getNumberOfPages()
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i)
+    doc.setFontSize(8)
+    doc.setTextColor(150)
+    doc.text(
+      `Page ${i} of ${pageCount} | Generated by BioVaram EV Analysis Platform | ${timestamp}`,
+      pageWidth / 2,
+      doc.internal.pageSize.getHeight() - 10,
+      { align: 'center' }
+    )
+  }
+  
+  const filename = `${data.sampleId}_NTA_Report_${new Date().toISOString().split('T')[0]}.pdf`
+  doc.save(filename)
+}
+
+/**
+ * Capture a chart element and add to PDF
+ * Requires html2canvas
+ */
+export async function captureChartToPDF(
+  chartElement: HTMLElement,
+  doc: any,
+  startY: number,
+  title?: string
+): Promise<number> {
+  const html2canvas = (await import('html2canvas')).default
+  
+  const canvas = await html2canvas(chartElement, {
+    scale: 2,
+    backgroundColor: '#ffffff',
+    logging: false,
+  })
+  
+  const imgData = canvas.toDataURL('image/png')
+  const pageWidth = doc.internal.pageSize.getWidth()
+  const imgWidth = pageWidth - 28
+  const imgHeight = (canvas.height * imgWidth) / canvas.width
+  
+  if (title) {
+    doc.setFontSize(14)
+    doc.setTextColor(0)
+    doc.text(title, 14, startY)
+    startY += 6
+  }
+  
+  doc.addImage(imgData, 'PNG', 14, startY, imgWidth, imgHeight)
+  
+  return startY + imgHeight + 10
 }

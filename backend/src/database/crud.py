@@ -28,8 +28,11 @@ from src.database.models import (  # type: ignore[import-not-found]
     ProcessingJob,
     QCReport,
     ExperimentalConditions,
+    Alert,
     ProcessingStatus,
     QCStatus,
+    AlertSeverity,
+    AlertType,
 )
 
 
@@ -49,6 +52,7 @@ async def create_sample(
     file_path_tem: Optional[str] = None,
     operator: Optional[str] = None,
     notes: Optional[str] = None,
+    user_id: Optional[int] = None,
 ) -> Sample:
     """
     Create a new sample record.
@@ -65,6 +69,7 @@ async def create_sample(
         file_path_tem: Path to TEM file
         operator: Person who performed the experiment
         notes: Additional notes
+        user_id: ID of the user who owns this sample
         
     Returns:
         Created Sample object
@@ -86,6 +91,7 @@ async def create_sample(
             file_path_tem=file_path_tem,
             operator=operator,
             notes=notes,
+            user_id=user_id,
             processing_status=ProcessingStatus.PENDING,
             qc_status=QCStatus.PENDING,
         )
@@ -185,7 +191,7 @@ async def update_sample(
     Args:
         db: Database session
         sample_id: Sample identifier
-        **kwargs: Fields to update
+        **kwargs: Fields to update (None values are skipped to preserve existing data)
         
     Returns:
         Updated Sample object or None if not found
@@ -196,9 +202,9 @@ async def update_sample(
             logger.warning(f"⚠️ Sample not found for update: {sample_id}")
             return None
         
-        # Update fields
+        # Update fields - skip None values to preserve existing data
         for key, value in kwargs.items():
-            if hasattr(sample, key):
+            if hasattr(sample, key) and value is not None:
                 setattr(sample, key, value)
         
         await db.commit()
@@ -872,4 +878,344 @@ async def delete_experimental_conditions(
     except Exception as e:
         await db.rollback()
         logger.error(f"❌ Failed to delete experimental conditions: {e}")
+        raise
+
+
+# ============================================================================
+# Alert CRUD Operations (CRMIT-003)
+# ============================================================================
+
+async def create_alert(
+    db: AsyncSession,
+    alert_type: str,
+    severity: str,
+    title: str,
+    message: str,
+    source: str,
+    sample_id: Optional[int] = None,
+    user_id: Optional[int] = None,
+    sample_name: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> Alert:
+    """
+    Create a new alert.
+    
+    Args:
+        db: Database session
+        alert_type: Type of alert (AlertType enum value)
+        severity: Severity level (AlertSeverity enum value)
+        title: Short alert title
+        message: Detailed alert message
+        source: Source of alert (e.g., "fcs_analysis", "nta_analysis")
+        sample_id: Optional linked sample ID
+        user_id: Optional user ID (owner of the sample)
+        sample_name: Optional sample name for quick display
+        metadata: Optional additional context data
+        
+    Returns:
+        Created Alert object
+    """
+    try:
+        alert = Alert(
+            alert_type=alert_type,
+            severity=severity,
+            title=title,
+            message=message,
+            source=source,
+            sample_id=sample_id,
+            user_id=user_id,
+            sample_name=sample_name,
+            alert_data=metadata,  # DB column is 'alert_data', param is 'metadata' for API compat
+            is_acknowledged=False,
+        )
+        
+        db.add(alert)
+        await db.commit()
+        await db.refresh(alert)
+        
+        logger.info(f"🔔 Created alert: [{severity.upper()}] {title}")
+        return alert
+        
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"❌ Failed to create alert: {e}")
+        raise
+
+
+async def get_alert_by_id(
+    db: AsyncSession,
+    alert_id: int
+) -> Optional[Alert]:
+    """Get alert by ID."""
+    try:
+        result = await db.execute(
+            select(Alert).where(Alert.id == alert_id)
+        )
+        return result.scalar_one_or_none()
+    except Exception as e:
+        logger.error(f"❌ Failed to get alert {alert_id}: {e}")
+        raise
+
+
+async def get_alerts(
+    db: AsyncSession,
+    user_id: Optional[int] = None,
+    sample_id: Optional[int] = None,
+    severity: Optional[str] = None,
+    alert_type: Optional[str] = None,
+    is_acknowledged: Optional[bool] = None,
+    source: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+    order_by: str = "created_at",
+    order_desc: bool = True,
+) -> List[Alert]:
+    """
+    Get alerts with filtering and pagination.
+    
+    Args:
+        db: Database session
+        user_id: Filter by user ID
+        sample_id: Filter by sample ID
+        severity: Filter by severity level
+        alert_type: Filter by alert type
+        is_acknowledged: Filter by acknowledgment status
+        source: Filter by source
+        limit: Maximum number of results
+        offset: Offset for pagination
+        order_by: Field to order by
+        order_desc: Whether to order descending
+        
+    Returns:
+        List of Alert objects
+    """
+    try:
+        query = select(Alert)
+        
+        # Apply filters
+        if user_id is not None:
+            query = query.where(Alert.user_id == user_id)
+        if sample_id is not None:
+            query = query.where(Alert.sample_id == sample_id)
+        if severity is not None:
+            query = query.where(Alert.severity == severity)
+        if alert_type is not None:
+            query = query.where(Alert.alert_type == alert_type)
+        if is_acknowledged is not None:
+            query = query.where(Alert.is_acknowledged == is_acknowledged)
+        if source is not None:
+            query = query.where(Alert.source == source)
+        
+        # Apply ordering
+        order_column = getattr(Alert, order_by, Alert.created_at)
+        if order_desc:
+            query = query.order_by(order_column.desc())
+        else:
+            query = query.order_by(order_column.asc())
+        
+        # Apply pagination
+        query = query.limit(limit).offset(offset)
+        
+        result = await db.execute(query)
+        return list(result.scalars().all())
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to get alerts: {e}")
+        raise
+
+
+async def get_alert_counts(
+    db: AsyncSession,
+    user_id: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    Get alert counts grouped by severity and acknowledgment status.
+    
+    Args:
+        db: Database session
+        user_id: Optional user ID filter
+        
+    Returns:
+        Dictionary with counts
+    """
+    try:
+        # Base query
+        base_filter = Alert.user_id == user_id if user_id else True
+        
+        # Total unacknowledged
+        unack_query = select(func.count(Alert.id)).where(
+            base_filter,
+            Alert.is_acknowledged == False  # noqa: E712
+        )
+        unack_result = await db.execute(unack_query)
+        total_unacknowledged = unack_result.scalar() or 0
+        
+        # Total acknowledged
+        ack_query = select(func.count(Alert.id)).where(
+            base_filter,
+            Alert.is_acknowledged == True  # noqa: E712
+        )
+        ack_result = await db.execute(ack_query)
+        total_acknowledged = ack_result.scalar() or 0
+        
+        # Count by severity (unacknowledged only)
+        severity_counts = {}
+        for sev in ["critical", "error", "warning", "info"]:
+            sev_query = select(func.count(Alert.id)).where(
+                base_filter,
+                Alert.severity == sev,
+                Alert.is_acknowledged == False  # noqa: E712
+            )
+            sev_result = await db.execute(sev_query)
+            severity_counts[sev] = sev_result.scalar() or 0
+        
+        return {
+            "total": total_unacknowledged + total_acknowledged,
+            "unacknowledged": total_unacknowledged,
+            "acknowledged": total_acknowledged,
+            "by_severity": severity_counts,
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to get alert counts: {e}")
+        raise
+
+
+async def acknowledge_alert(
+    db: AsyncSession,
+    alert_id: int,
+    acknowledged_by: Optional[int] = None,
+    notes: Optional[str] = None,
+) -> Optional[Alert]:
+    """
+    Acknowledge an alert.
+    
+    Args:
+        db: Database session
+        alert_id: ID of the alert to acknowledge
+        acknowledged_by: User ID of acknowledger
+        notes: Optional acknowledgment notes
+        
+    Returns:
+        Updated Alert object or None if not found
+    """
+    try:
+        result = await db.execute(
+            select(Alert).where(Alert.id == alert_id)
+        )
+        alert = result.scalar_one_or_none()
+        
+        if not alert:
+            logger.warning(f"⚠️ Alert not found: {alert_id}")
+            return None
+        
+        alert.is_acknowledged = True
+        alert.acknowledged_by = acknowledged_by
+        alert.acknowledged_at = datetime.utcnow()
+        alert.acknowledgment_notes = notes
+        
+        await db.commit()
+        await db.refresh(alert)
+        
+        logger.success(f"✅ Acknowledged alert: {alert_id}")
+        return alert
+        
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"❌ Failed to acknowledge alert: {e}")
+        raise
+
+
+async def acknowledge_multiple_alerts(
+    db: AsyncSession,
+    alert_ids: List[int],
+    acknowledged_by: Optional[int] = None,
+    notes: Optional[str] = None,
+) -> int:
+    """
+    Acknowledge multiple alerts at once.
+    
+    Args:
+        db: Database session
+        alert_ids: List of alert IDs to acknowledge
+        acknowledged_by: User ID of acknowledger
+        notes: Optional acknowledgment notes
+        
+    Returns:
+        Number of alerts acknowledged
+    """
+    try:
+        count = 0
+        for alert_id in alert_ids:
+            result = await acknowledge_alert(db, alert_id, acknowledged_by, notes)
+            if result:
+                count += 1
+        
+        logger.success(f"✅ Acknowledged {count} alerts")
+        return count
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to acknowledge multiple alerts: {e}")
+        raise
+
+
+async def delete_alert(
+    db: AsyncSession,
+    alert_id: int
+) -> bool:
+    """
+    Delete an alert.
+    
+    Args:
+        db: Database session
+        alert_id: ID of the alert to delete
+        
+    Returns:
+        True if deleted, False if not found
+    """
+    try:
+        query = delete(Alert).where(Alert.id == alert_id)
+        result = await db.execute(query)
+        await db.commit()
+        
+        deleted = result.rowcount > 0
+        if deleted:
+            logger.success(f"✅ Deleted alert: {alert_id}")
+        else:
+            logger.warning(f"⚠️ Alert not found for deletion: {alert_id}")
+        
+        return deleted
+        
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"❌ Failed to delete alert: {e}")
+        raise
+
+
+async def delete_alerts_for_sample(
+    db: AsyncSession,
+    sample_id: int
+) -> int:
+    """
+    Delete all alerts for a sample.
+    
+    Args:
+        db: Database session
+        sample_id: Sample ID
+        
+    Returns:
+        Number of alerts deleted
+    """
+    try:
+        query = delete(Alert).where(Alert.sample_id == sample_id)
+        result = await db.execute(query)
+        await db.commit()
+        
+        deleted_count = result.rowcount
+        logger.success(f"✅ Deleted {deleted_count} alerts for sample {sample_id}")
+        return deleted_count
+        
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"❌ Failed to delete alerts for sample: {e}")
         raise

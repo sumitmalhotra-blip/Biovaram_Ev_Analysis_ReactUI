@@ -12,11 +12,13 @@ export function QuickStats() {
   const { fetchSamples } = useApi()
 
   // Fetch samples on mount only if API is connected
+  // PERFORMANCE FIX: Remove fetchSamples from deps to prevent infinite loop
   useEffect(() => {
     if (apiConnected) {
       fetchSamples()
     }
-  }, [fetchSamples, apiConnected])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiConnected])
 
   const totalSamples = apiSamples.length + samples.length
   const fcsSamples = apiSamples.filter(s => s.files?.fcs).length
@@ -72,11 +74,11 @@ export function QuickStats() {
         return (
           <Card key={stat.label} className="card-3d stat-card group">
             <CardContent className="p-4">
-              <div className={cn("absolute inset-0 bg-gradient-to-br opacity-50 rounded-xl", stat.gradient)} />
+              <div className={cn("absolute inset-0 bg-linear-to-br opacity-50 rounded-xl", stat.gradient)} />
               <div className="relative flex items-center gap-3">
                 <div
                   className={cn(
-                    "p-2.5 rounded-xl bg-gradient-to-br shadow-lg transition-transform group-hover:scale-110",
+                    "p-2.5 rounded-xl bg-linear-to-br shadow-lg transition-transform group-hover:scale-110",
                     stat.gradient,
                     stat.color,
                   )}

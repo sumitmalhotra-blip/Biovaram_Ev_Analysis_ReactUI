@@ -228,35 +228,37 @@ main::-webkit-scrollbar-thumb {
 }
 
 /* Enhanced floating animation for decorative elements with smooth easing */
+/* PERFORMANCE: Reduced duration and simplified transform */
 @keyframes float {
   0%,
   100% {
-    transform: translateY(0px) rotate(0deg);
+    transform: translateY(0px);
   }
   50% {
-    transform: translateY(-12px) rotate(3deg);
+    transform: translateY(-8px);
   }
 }
 
 .float-animation {
-  animation: float 8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  animation: float 6s ease-in-out infinite;
 }
 
 /* Enhanced pulse glow animation for status indicators */
+/* PERFORMANCE: Simplified pulse without box-shadow for better performance */
 @keyframes pulse-glow {
   0%,
   100% {
-    box-shadow: 0 0 0 0 currentColor;
     opacity: 1;
+    transform: scale(1);
   }
   50% {
-    box-shadow: 0 0 12px 4px currentColor;
-    opacity: 0.8;
+    opacity: 0.7;
+    transform: scale(1.1);
   }
 }
 
 .pulse-glow {
-  animation: pulse-glow 2.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  animation: pulse-glow 2s ease-in-out infinite;
 }
 
 /* Enhanced gradient border effect with improved visibility */
@@ -298,4 +300,38 @@ main::-webkit-scrollbar-thumb {
   );
   background-size: 1000px 100%;
   animation: shine 3s infinite; */
+}
+
+/* ============================================
+   ACCESSIBILITY: Reduced Motion Support
+   ============================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  
+  .float-animation,
+  .pulse-glow,
+  .shine-effect {
+    animation: none !important;
+  }
+}
+
+/* ============================================
+   PERFORMANCE: GPU Acceleration Hints
+   ============================================ */
+.float-animation,
+.pulse-glow {
+  will-change: transform, opacity;
+}
+
+/* Remove will-change after animation settles */
+.float-animation:not(:hover),
+.pulse-glow:not(:hover) {
+  will-change: auto;
 }

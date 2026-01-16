@@ -3,7 +3,12 @@
  * Connects to FastAPI backend at localhost:8000
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Get base URL and strip any trailing /api/v1 to prevent double prefix
+let API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Safety: Remove trailing /api/v1 if present (prevents double prefix bug)
+if (API_BASE_URL.endsWith("/api/v1")) {
+  API_BASE_URL = API_BASE_URL.replace(/\/api\/v1$/, "");
+}
 const API_PREFIX = "/api/v1";
 
 // Types matching backend models
@@ -35,13 +40,14 @@ export interface Sample {
 }
 
 export interface FCSResult {
-  id: number;
+  id?: number;  // Optional - may not be present in all contexts
   total_events: number;
   fsc_mean?: number;
   fsc_median?: number;
   ssc_mean?: number;
   ssc_median?: number;
   particle_size_median_nm?: number;
+  particle_size_mean_nm?: number;  // Added for P-002 Excel Export
   cd81_positive_pct?: number;
   debris_pct?: number;
   processed_at?: string;
@@ -85,6 +91,11 @@ export interface FCSResult {
     vssc2_selected_pct: number;
   };
   ssc_channel_used?: string;
+  // Additional properties for P-002/P-003 Export features
+  gated_events?: number;
+  fsc_cv_pct?: number;
+  ssc_cv_pct?: number;
+  noise_events_removed?: number;
 }
 
 export interface NTAResult {
@@ -106,6 +117,7 @@ export interface NTAResult {
   bin_200_plus_pct?: number;
   processed_at?: string;
   parquet_file?: string;
+  size_distribution?: Array<{ size: number; count?: number; concentration?: number }>;
   size_statistics?: {
     d10: number;
     d50: number;
@@ -201,7 +213,15 @@ class ApiClient {
   private isOffline: boolean = false;
 
   constructor() {
-    this.baseUrl = `${API_BASE_URL}${API_PREFIX}`;
+    // Build base URL, ensuring no double /api/v1 prefix
+    let base = API_BASE_URL;
+    // Strip any /api/v1 suffix that might have leaked in from env
+    if (base.includes("/api/v1")) {
+      base = base.replace(/\/api\/v1\/?$/, "");
+      console.warn("[API Client] Stripped duplicate /api/v1 from base URL");
+    }
+    this.baseUrl = `${base}${API_PREFIX}`;
+    console.log("[API Client] Base URL:", this.baseUrl);
   }
 
   // Check if the API is currently known to be offline
@@ -276,6 +296,7 @@ class ApiClient {
       preparation_method?: string;
       operator?: string;
       notes?: string;
+      user_id?: number;
     }
   ): Promise<UploadResponse> {
     try {
@@ -289,6 +310,7 @@ class ApiClient {
         formData.append("preparation_method", metadata.preparation_method);
       if (metadata?.operator) formData.append("operator", metadata.operator);
       if (metadata?.notes) formData.append("notes", metadata.notes);
+      if (metadata?.user_id) formData.append("user_id", metadata.user_id.toString());
 
       const response = await fetch(`${this.baseUrl}/upload/fcs`, {
         method: "POST",
@@ -309,6 +331,7 @@ class ApiClient {
       temperature_celsius?: number;
       operator?: string;
       notes?: string;
+      user_id?: number;
     }
   ): Promise<UploadResponse> {
     try {
@@ -320,6 +343,7 @@ class ApiClient {
         formData.append("temperature_celsius", metadata.temperature_celsius.toString());
       if (metadata?.operator) formData.append("operator", metadata.operator);
       if (metadata?.notes) formData.append("notes", metadata.notes);
+      if (metadata?.user_id) formData.append("user_id", metadata.user_id.toString());
 
       const response = await fetch(`${this.baseUrl}/upload/nta`, {
         method: "POST",
@@ -419,6 +443,7 @@ class ApiClient {
     treatment?: string;
     qc_status?: string;
     processing_status?: string;
+    user_id?: number;
   }): Promise<{ samples: Sample[]; total: number; skip: number; limit: number }> {
     try {
       const searchParams = new URLSearchParams();
@@ -428,6 +453,7 @@ class ApiClient {
       if (params?.qc_status) searchParams.append("qc_status", params.qc_status);
       if (params?.processing_status)
         searchParams.append("processing_status", params.processing_status);
+      if (params?.user_id) searchParams.append("user_id", params.user_id.toString());
 
       const url = `${this.baseUrl}/samples${searchParams.toString() ? `?${searchParams}` : ""}`;
       const response = await fetch(url, {
@@ -707,6 +733,215 @@ class ApiClient {
     }
   }
 
+  // =========================================================================
+  // Auto Axis Selection (CRMIT-002)
+  // =========================================================================
+
+  /**
+   * Get AI-recommended optimal axis pairs for scatter plot visualization.
+   * Uses intelligent analysis based on variance, correlation, and cytometry best practices.
+   */
+  async getRecommendedAxes(
+    sampleId: string,
+    options?: {
+      nRecommendations?: number;
+      includeScatter?: boolean;
+      includeFluorescence?: boolean;
+    }
+  ): Promise<{
+    sample_id: string;
+    total_events: number;
+    recommendations: Array<{
+      rank: number;
+      x_channel: string;
+      y_channel: string;
+      score: number;
+      reason: string;
+      description: string;
+    }>;
+    channels: {
+      scatter: string[];
+      fluorescence: string[];
+      all: string[];
+    };
+  }> {
+    try {
+      const params = new URLSearchParams();
+      if (options?.nRecommendations) {
+        params.append("n_recommendations", options.nRecommendations.toString());
+      }
+      if (options?.includeScatter !== undefined) {
+        params.append("include_scatter", options.includeScatter.toString());
+      }
+      if (options?.includeFluorescence !== undefined) {
+        params.append("include_fluorescence", options.includeFluorescence.toString());
+      }
+
+      const queryString = params.toString();
+      const url = `${this.baseUrl}/samples/${sampleId}/recommend-axes${queryString ? `?${queryString}` : ""}`;
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Get recommended axes failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  /**
+   * Get scatter data with custom axis selection
+   */
+  async getScatterDataWithAxes(
+    sampleId: string,
+    xChannel: string,
+    yChannel: string,
+    maxPoints: number = 5000
+  ): Promise<{
+    sample_id: string;
+    total_events: number;
+    returned_points: number;
+    data: Array<{ x: number; y: number; index: number; diameter?: number }>;
+    channels: { fsc: string; ssc: string; available: string[] };
+  }> {
+    try {
+      const params = new URLSearchParams({
+        max_points: maxPoints.toString(),
+        fsc_channel: xChannel,
+        ssc_channel: yChannel,
+      });
+
+      const response = await fetch(
+        `${this.baseUrl}/samples/${sampleId}/scatter-data?${params.toString()}`,
+        {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Get scatter data with axes failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  /**
+   * Analyze gated (selected) population from scatter plot
+   * T-009: Population Gating & Selection Analysis
+   */
+  async analyzeGatedPopulation(
+    sampleId: string,
+    gateConfig: {
+      gate_name: string;
+      gate_type: "rectangle" | "polygon" | "ellipse";
+      gate_coordinates: {
+        // Rectangle
+        x1?: number;
+        y1?: number;
+        x2?: number;
+        y2?: number;
+        // Polygon
+        points?: Array<{ x: number; y: number }>;
+        // Ellipse
+        cx?: number;
+        cy?: number;
+        rx?: number;
+        ry?: number;
+        rotation?: number;
+      };
+      x_channel: string;
+      y_channel: string;
+      include_diameter_stats?: boolean;
+    }
+  ): Promise<{
+    sample_id: string;
+    gate_name: string;
+    gate_type: string;
+    gate_coordinates: Record<string, unknown>;
+    total_events: number;
+    gated_events: number;
+    gated_percentage: number;
+    gated_indices: number[];
+    statistics: {
+      x_channel: {
+        channel: string;
+        count: number;
+        mean: number;
+        median: number;
+        std: number;
+        min: number;
+        max: number;
+        cv: number;
+        q25: number;
+        q75: number;
+        iqr: number;
+      };
+      y_channel: {
+        channel: string;
+        count: number;
+        mean: number;
+        median: number;
+        std: number;
+        min: number;
+        max: number;
+        cv: number;
+        q25: number;
+        q75: number;
+        iqr: number;
+      };
+      diameter: {
+        channel: string;
+        count: number;
+        mean: number;
+        median: number;
+        std: number;
+        min: number;
+        max: number;
+        cv: number;
+        q25: number;
+        q75: number;
+        iqr: number;
+      } | null;
+    } | null;
+    percentiles: {
+      D10: number;
+      D50: number;
+      D90: number;
+      mean: number;
+      mode_estimate: number;
+    } | null;
+    comparison_to_total: {
+      x_mean_diff_percent: number;
+      y_mean_diff_percent: number;
+      enrichment_factor: number;
+      total_x_mean: number;
+      total_y_mean: number;
+      total_x_std: number;
+      total_y_std: number;
+    } | null;
+    message?: string;
+  }> {
+    try {
+      const response = await fetch(
+        `${this.baseUrl}/samples/${sampleId}/gated-analysis`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(gateConfig),
+        }
+      );
+
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Gated analysis failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
   async getSizeBins(sampleId: string): Promise<{
     sample_id: string;
     total_events: number;
@@ -741,6 +976,49 @@ class ApiClient {
   }
 
   /**
+   * Run anomaly detection on a sample
+   */
+  async detectAnomalies(
+    sampleId: string,
+    options?: {
+      method?: "zscore" | "iqr" | "both";
+      zscore_threshold?: number;
+      iqr_factor?: number;
+    }
+  ): Promise<{
+    sample_id: string;
+    enabled: boolean;
+    method: string;
+    total_anomalies: number;
+    anomaly_percentage: number;
+    anomalous_indices: number[];
+    settings: {
+      zscore_threshold: number;
+      iqr_factor: number;
+    };
+  }> {
+    try {
+      const params = new URLSearchParams();
+      if (options?.method) params.append("method", options.method);
+      if (options?.zscore_threshold) params.append("zscore_threshold", options.zscore_threshold.toString());
+      if (options?.iqr_factor) params.append("iqr_factor", options.iqr_factor.toString());
+
+      const queryString = params.toString();
+      const url = `${this.baseUrl}/samples/${sampleId}/anomaly-detection${queryString ? `?${queryString}` : ""}`;
+      
+      const response = await fetch(url, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Anomaly detection failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  /**
    * Re-analyze a sample with custom settings
    */
   async reanalyzeSample(
@@ -749,6 +1027,8 @@ class ApiClient {
       wavelength_nm?: number;
       n_particle?: number;
       n_medium?: number;
+      fsc_angle_range?: [number, number];
+      ssc_angle_range?: [number, number];
       anomaly_detection?: boolean;
       anomaly_method?: string;
       zscore_threshold?: number;
@@ -1002,6 +1282,506 @@ class ApiClient {
       URL.revokeObjectURL(url);
     }
   }
+
+  // =========================================================================
+  // Alerts API (CRMIT-003)
+  // =========================================================================
+
+  /**
+   * Alert type definitions
+   */
+  async getAlerts(options?: {
+    userId?: number;
+    sampleId?: number;
+    severity?: "info" | "warning" | "critical" | "error";
+    alertType?: string;
+    isAcknowledged?: boolean;
+    source?: string;
+    limit?: number;
+    offset?: number;
+    orderBy?: string;
+    orderDesc?: boolean;
+  }): Promise<{
+    alerts: Array<{
+      id: number;
+      sample_id: number | null;
+      user_id: number | null;
+      alert_type: string;
+      severity: string;
+      title: string;
+      message: string;
+      source: string;
+      sample_name: string | null;
+      metadata: Record<string, any> | null;
+      is_acknowledged: boolean;
+      acknowledged_by: number | null;
+      acknowledged_at: string | null;
+      acknowledgment_notes: string | null;
+      created_at: string;
+      updated_at: string;
+    }>;
+    total: number;
+    limit: number;
+    offset: number;
+  }> {
+    try {
+      const params = new URLSearchParams();
+      if (options?.userId) params.append("user_id", options.userId.toString());
+      if (options?.sampleId) params.append("sample_id", options.sampleId.toString());
+      if (options?.severity) params.append("severity", options.severity);
+      if (options?.alertType) params.append("alert_type", options.alertType);
+      if (options?.isAcknowledged !== undefined) params.append("is_acknowledged", options.isAcknowledged.toString());
+      if (options?.source) params.append("source", options.source);
+      if (options?.limit) params.append("limit", options.limit.toString());
+      if (options?.offset) params.append("offset", options.offset.toString());
+      if (options?.orderBy) params.append("order_by", options.orderBy);
+      if (options?.orderDesc !== undefined) params.append("order_desc", options.orderDesc.toString());
+
+      const queryString = params.toString();
+      const url = `${this.baseUrl}/alerts${queryString ? `?${queryString}` : ""}`;
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Get alerts failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  async getAlertCounts(userId?: number): Promise<{
+    total: number;
+    unacknowledged: number;
+    acknowledged: number;
+    by_severity: {
+      critical: number;
+      error: number;
+      warning: number;
+      info: number;
+    };
+  }> {
+    try {
+      const params = userId ? `?user_id=${userId}` : "";
+      const response = await fetch(`${this.baseUrl}/alerts/counts${params}`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Get alert counts failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  async getAlert(alertId: number): Promise<{
+    id: number;
+    sample_id: number | null;
+    user_id: number | null;
+    alert_type: string;
+    severity: string;
+    title: string;
+    message: string;
+    source: string;
+    sample_name: string | null;
+    metadata: Record<string, any> | null;
+    is_acknowledged: boolean;
+    acknowledged_by: number | null;
+    acknowledged_at: string | null;
+    acknowledgment_notes: string | null;
+    created_at: string;
+    updated_at: string;
+  }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/alerts/${alertId}`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Get alert failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  async acknowledgeAlert(
+    alertId: number,
+    options?: {
+      acknowledgedBy?: number;
+      notes?: string;
+    }
+  ): Promise<{
+    message: string;
+    alert: {
+      id: number;
+      is_acknowledged: boolean;
+      acknowledged_at: string;
+      acknowledgment_notes: string | null;
+    };
+  }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/alerts/${alertId}/acknowledge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          acknowledged_by: options?.acknowledgedBy,
+          notes: options?.notes,
+        }),
+      });
+
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Acknowledge alert failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  async acknowledgeMultipleAlerts(
+    alertIds: number[],
+    options?: {
+      acknowledgedBy?: number;
+      notes?: string;
+    }
+  ): Promise<{
+    message: string;
+    acknowledged_count: number;
+  }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/alerts/acknowledge-multiple`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          alert_ids: alertIds,
+          acknowledged_by: options?.acknowledgedBy,
+          notes: options?.notes,
+        }),
+      });
+
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Acknowledge multiple alerts failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  async deleteAlert(alertId: number): Promise<{
+    message: string;
+    alert_id: number;
+  }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/alerts/${alertId}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Delete alert failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  // ============================================================================
+  // Population Shift Detection (CRMIT-004)
+  // ============================================================================
+
+  /**
+   * Detect population shift between two samples
+   */
+  async detectPopulationShift(options: {
+    sample_id_a: string;
+    sample_id_b: string;
+    metric?: string;
+    data_source?: "fcs" | "nta";
+    tests?: Array<"ks" | "emd" | "mean" | "variance">;
+    alpha?: number;
+  }): Promise<PopulationShiftResponse> {
+    try {
+      const response = await fetch(`${this.baseUrl}/analysis/population-shift`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sample_id_a: options.sample_id_a,
+          sample_id_b: options.sample_id_b,
+          metric: options.metric || "particle_size",
+          data_source: options.data_source || "fcs",
+          tests: options.tests || ["ks", "emd", "mean", "variance"],
+          alpha: options.alpha || 0.05,
+        }),
+      });
+
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Population shift detection failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  /**
+   * Compare multiple samples against a baseline
+   */
+  async compareToBaseline(options: {
+    baseline_sample_id: string;
+    sample_ids: string[];
+    metric?: string;
+    data_source?: "fcs" | "nta";
+    tests?: Array<"ks" | "emd" | "mean" | "variance">;
+    alpha?: number;
+  }): Promise<MultiSampleShiftResponse> {
+    try {
+      const response = await fetch(`${this.baseUrl}/analysis/population-shift/baseline`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          baseline_sample_id: options.baseline_sample_id,
+          sample_ids: options.sample_ids,
+          metric: options.metric || "particle_size",
+          data_source: options.data_source || "fcs",
+          tests: options.tests || ["ks", "emd", "mean", "variance"],
+          alpha: options.alpha || 0.05,
+        }),
+      });
+
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Baseline comparison failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  /**
+   * Temporal/sequential population shift analysis
+   */
+  async temporalShiftAnalysis(options: {
+    sample_ids: string[];
+    metric?: string;
+    data_source?: "fcs" | "nta";
+    tests?: Array<"ks" | "emd" | "mean" | "variance">;
+    alpha?: number;
+  }): Promise<MultiSampleShiftResponse> {
+    try {
+      const response = await fetch(`${this.baseUrl}/analysis/population-shift/temporal`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sample_ids: options.sample_ids,
+          metric: options.metric || "particle_size",
+          data_source: options.data_source || "fcs",
+          tests: options.tests || ["ks", "emd", "mean", "variance"],
+          alpha: options.alpha || 0.05,
+        }),
+      });
+
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Temporal shift analysis failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  // ============================================================================
+  // CRMIT-007: Temporal Analysis Methods
+  // ============================================================================
+
+  /**
+   * Analyze temporal trends for a single metric across samples
+   */
+  async analyzeTemporalTrends(options: {
+    sample_ids: string[];
+    metric?: string;
+    data_source?: "fcs" | "nta";
+    alpha?: number;
+    include_correlations?: boolean;
+  }): Promise<TemporalAnalysisResponse> {
+    try {
+      const response = await fetch(`${this.baseUrl}/analysis/temporal-analysis`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sample_ids: options.sample_ids,
+          metric: options.metric || "particle_size",
+          data_source: options.data_source || "fcs",
+          alpha: options.alpha || 0.05,
+          include_correlations: options.include_correlations !== false,
+        }),
+      });
+
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Temporal analysis failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  /**
+   * Analyze multiple metrics over time
+   */
+  async analyzeMultiMetricTemporal(options: {
+    sample_ids: string[];
+    metrics?: string[];
+    data_source?: "fcs" | "nta";
+    alpha?: number;
+  }): Promise<MultiMetricTemporalResponse> {
+    try {
+      const response = await fetch(`${this.baseUrl}/analysis/temporal-analysis/multi-metric`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sample_ids: options.sample_ids,
+          metrics: options.metrics || ["particle_size", "concentration", "fsc", "ssc"],
+          data_source: options.data_source || "fcs",
+          alpha: options.alpha || 0.05,
+        }),
+      });
+
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Multi-metric temporal analysis failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+}
+
+// ============================================================================
+// Population Shift Types (CRMIT-004)
+// ============================================================================
+
+export interface ShiftTestResult {
+  test_name: string;
+  statistic: number;
+  p_value: number;
+  significant: boolean;
+  effect_size?: number;
+  severity: "none" | "minor" | "moderate" | "major" | "critical";
+  interpretation: string;
+}
+
+export interface PopulationMetrics {
+  sample_id: string;
+  sample_name: string;
+  n_events: number;
+  mean: number;
+  median: number;
+  std: number;
+  iqr: number;
+  skewness: number;
+  kurtosis: number;
+  percentiles: Record<number, number>;
+}
+
+export interface PopulationShiftResponse {
+  success: boolean;
+  sample_a: PopulationMetrics;
+  sample_b: PopulationMetrics;
+  metric_name: string;
+  tests: ShiftTestResult[];
+  overall_shift_detected: boolean;
+  overall_severity: "none" | "minor" | "moderate" | "major" | "critical";
+  summary: string;
+  recommendations: string[];
+}
+
+export interface MultiSampleShiftResponse {
+  success: boolean;
+  mode: "pairwise" | "baseline" | "temporal" | "all_pairs";
+  baseline_sample?: string;
+  comparisons: PopulationShiftResponse[];
+  global_summary: string;
+  any_significant_shift: boolean;
+  max_severity: "none" | "minor" | "moderate" | "major" | "critical";
+}
+
+// ============================================================================
+// CRMIT-007: Temporal Analysis Types
+// ============================================================================
+
+export interface TrendResult {
+  type: "none" | "linear_increasing" | "linear_decreasing" | "exponential_growth" | "exponential_decay" | "cyclical" | "random_walk";
+  slope: number;
+  r_squared: number;
+  p_value: number;
+  is_significant: boolean;
+  interpretation: string;
+}
+
+export interface StabilityResult {
+  level: "excellent" | "good" | "acceptable" | "poor" | "unstable";
+  mean: number;
+  std: number;
+  cv: number;
+  min_value: number;
+  max_value: number;
+  interpretation: string;
+}
+
+export interface DriftResult {
+  severity: "none" | "minor" | "moderate" | "significant" | "critical";
+  magnitude: number;
+  direction: "increasing" | "decreasing" | "stable";
+  p_value: number;
+  is_significant: boolean;
+  change_points: number[];
+  interpretation: string;
+}
+
+export interface TemporalCorrelation {
+  metric_a: string;
+  metric_b: string;
+  pearson_r: number;
+  spearman_rho: number;
+  strength: "none" | "weak" | "moderate" | "strong" | "very_strong";
+  is_significant: boolean;
+  interpretation: string;
+}
+
+export interface TemporalAnalysisResponse {
+  success: boolean;
+  metric: string;
+  n_points: number;
+  time_range: {
+    start: string;
+    end: string;
+  };
+  trend: TrendResult;
+  stability: StabilityResult;
+  drift: DriftResult;
+  correlations: TemporalCorrelation[];
+  moving_average: number[];
+  smoothed_values: number[];
+  summary: string;
+  recommendations: string[];
+}
+
+export interface MultiMetricTemporalResponse {
+  success: boolean;
+  sample_ids: string[];
+  n_samples: number;
+  time_range: {
+    start: string | null;
+    end: string | null;
+  };
+  metrics_analyzed: string[];
+  individual_results: Record<string, any>;
+  overall_stability: {
+    level: string;
+    average_cv: number;
+    min_cv?: number;
+    max_cv?: number;
+  };
+  overall_drift: {
+    max_severity: string;
+    metrics_with_drift: Array<{
+      metric: string;
+      severity: string;
+      magnitude: number;
+      direction: string;
+    }>;
+    total_drifting_metrics: number;
+  };
 }
 
 // Export singleton instance

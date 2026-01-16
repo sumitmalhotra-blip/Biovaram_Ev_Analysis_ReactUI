@@ -39,6 +39,8 @@ import time
 from src.api.config import get_settings
 from src.api.routers import upload, samples, jobs  # type: ignore[import-not-found]
 from src.api.routers import analysis  # type: ignore[import-not-found]
+from src.api.routers import auth  # type: ignore[import-not-found]
+from src.api.routers import alerts  # CRMIT-003: Alert System
 from src.database.connection import init_database, close_connections, check_connection
 
 settings = get_settings()
@@ -191,10 +193,12 @@ async def root():
 
 
 @app.api_route("/health", methods=["GET", "OPTIONS"])
+@app.api_route(f"{settings.api_prefix}/health", methods=["GET", "OPTIONS"])
 async def health_check():
     """
     Health check endpoint for load balancers and monitoring.
     Handles both GET and OPTIONS (CORS preflight) requests.
+    Available at both /health and /api/v1/health for compatibility.
     
     Returns:
         Health status with system info
@@ -275,6 +279,19 @@ app.include_router(
     analysis.router,
     prefix=f"{settings.api_prefix}/analysis",
     tags=["Analysis"]
+)
+
+app.include_router(
+    auth.router,
+    prefix=f"{settings.api_prefix}/auth",
+    tags=["Authentication"]
+)
+
+# CRMIT-003: Alert System
+app.include_router(
+    alerts.router,
+    prefix=f"{settings.api_prefix}/alerts",
+    tags=["Alerts"]
 )
 
 

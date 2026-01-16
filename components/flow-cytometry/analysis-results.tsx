@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -21,6 +21,8 @@ import { useAnalysisStore } from "@/lib/store"
 import { useApi } from "@/hooks/use-api"
 import { SizeDistributionChart } from "./charts/size-distribution-chart"
 import { ScatterPlotChart, type ScatterDataPoint } from "./charts/scatter-plot-with-selection"
+import { InteractiveScatterChart } from "./charts/interactive-scatter-chart"
+import { ScatterAxisSelector } from "./charts/scatter-axis-selector"
 import { TheoryVsMeasuredChart } from "./charts/theory-vs-measured-chart"
 import { DiameterVsSSCChart } from "./charts/diameter-vs-ssc-chart"
 import { FullAnalysisDashboard } from "./full-analysis-dashboard"
@@ -29,13 +31,33 @@ import { ParticleSizeVisualization } from "./particle-size-visualization"
 import { CustomSizeRanges } from "./custom-size-ranges"
 import { AnomalySummaryCard } from "./anomaly-summary-card"
 import { AnomalyEventsTable, type AnomalyEvent } from "./anomaly-events-table"
+import { IndividualFileSummary } from "./individual-file-summary"
+import { GatedStatisticsPanel } from "./gated-statistics-panel"
 import { useToast } from "@/hooks/use-toast"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { exportAnomaliesToCSV, exportScatterDataToCSV, exportToParquet, generateMarkdownReport, downloadMarkdownReport } from "@/lib/export-utils"
+import { 
+  exportAnomaliesToCSV, 
+  exportScatterDataToCSV, 
+  exportToParquet, 
+  generateMarkdownReport, 
+  downloadMarkdownReport,
+  exportFCSToExcel,
+  exportFCSToPDF,
+  type FCSExportData
+} from "@/lib/export-utils"
 
 export function AnalysisResults() {
-  const { pinChart, fcsAnalysis, resetFCSAnalysis } = useAnalysisStore()
-  const { getScatterData, getSizeBins } = useApi()
+  const { 
+    pinChart, 
+    fcsAnalysis, 
+    resetFCSAnalysis, 
+    secondaryFcsAnalysis,
+    overlayConfig,
+    setSecondaryFCSScatterData,
+    setSecondaryFCSLoadingScatter,
+    setSecondaryFCSAnomalyData
+  } = useAnalysisStore()
+  const { getScatterData, getScatterDataWithAxes, getSizeBins, detectAnomalies } = useApi()
   const { toast } = useToast()
   const [showAnomalyDetails, setShowAnomalyDetails] = useState(false)
   const [highlightAnomalies, setHighlightAnomalies] = useState(true)
@@ -44,40 +66,166 @@ export function AnalysisResults() {
   const [sizeCategories, setSizeCategories] = useState<{ small: number; medium: number; large: number } | null>(null)
   const [loadingSizeBins, setLoadingSizeBins] = useState(false)
   const [selectedIndices, setSelectedIndices] = useState<number[]>([])
+  const [gateCoordinates, setGateCoordinates] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null)
+  
+  // CRMIT-002: Auto Axis Selection state - initialize as empty, will be set from FCS results
+  const [xChannel, setXChannel] = useState<string>("")
+  const [yChannel, setYChannel] = useState<string>("")
+  const [channelsInitialized, setChannelsInitialized] = useState(false)
 
   // Use real results from the API
   const results = fcsAnalysis.results
   const anomalyData = fcsAnalysis.anomalyData
   const sampleId = fcsAnalysis.sampleId
   const fileName = fcsAnalysis.file?.name
+  
+  // Secondary file data for overlay
+  const secondaryResults = secondaryFcsAnalysis.results
+  const secondarySampleId = secondaryFcsAnalysis.sampleId
+  const secondaryScatterData = secondaryFcsAnalysis.scatterData
+  const secondaryAnomalyData = secondaryFcsAnalysis.anomalyData
 
-  // Load real scatter data from backend
+  // CRMIT-002: Handle axis change from selector
+  const handleAxisChange = useCallback((newXChannel: string, newYChannel: string) => {
+    setXChannel(newXChannel)
+    setYChannel(newYChannel)
+  }, [])
+
+  // Initialize channel selection from FCS results when available
   useEffect(() => {
-    if (sampleId && results) {
+    if (results?.channels && results.channels.length > 0 && !channelsInitialized) {
+      const channels = results.channels
+      
+      // Try to find FSC/SSC channels, or use first two channels
+      const fscPatterns = ['FSC-A', 'VFSC-A', 'FSC-H', 'VFSC-H']
+      const sscPatterns = ['SSC-A', 'VSSC1-A', 'SSC-H', 'VSSC1-H', 'VSSC2-A']
+      
+      let detectedFsc = channels.find(ch => fscPatterns.some(p => ch.toUpperCase().includes(p.toUpperCase())))
+      let detectedSsc = channels.find(ch => sscPatterns.some(p => ch.toUpperCase().includes(p.toUpperCase())))
+      
+      // Fallback to first two channels if standard names not found
+      if (!detectedFsc && channels.length >= 1) {
+        detectedFsc = channels[0]
+      }
+      if (!detectedSsc && channels.length >= 2) {
+        detectedSsc = channels[1]
+      }
+      
+      if (detectedFsc) setXChannel(detectedFsc)
+      if (detectedSsc) setYChannel(detectedSsc)
+      setChannelsInitialized(true)
+      
+      console.log(`[AnalysisResults] Auto-detected channels: X=${detectedFsc}, Y=${detectedSsc} from ${channels.length} available channels`)
+    }
+  }, [results?.channels, channelsInitialized])
+
+  // Reset channel initialization when sample changes
+  useEffect(() => {
+    setChannelsInitialized(false)
+  }, [sampleId])
+
+  // Load real scatter data from backend - CRMIT-002: Updated to use custom axes
+  useEffect(() => {
+    let cancelled = false
+    // Only fetch if channels are set and sample exists
+    if (sampleId && results && xChannel && yChannel) {
       setLoadingScatter(true)
-      getScatterData(sampleId, 5000)
+      // Use getScatterDataWithAxes for custom channel selection
+      getScatterDataWithAxes(sampleId, xChannel, yChannel, 2000)
         .then((data) => {
-          if (data) {
+          if (!cancelled && data) {
             setScatterData(data.data)
           }
         })
-        .finally(() => setLoadingScatter(false))
+        .finally(() => {
+          if (!cancelled) setLoadingScatter(false)
+        })
     }
-  }, [sampleId, results, getScatterData])
-
-  // Load real size bins from backend
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sampleId, results, xChannel, yChannel])
+  
+  // Load secondary scatter data when overlay is enabled
+  // Uses fallback channels if primary channels don't exist in secondary file
   useEffect(() => {
+    let cancelled = false
+    if (overlayConfig.enabled && secondarySampleId && secondaryResults && xChannel && yChannel) {
+      setSecondaryFCSLoadingScatter(true)
+      
+      // Check if secondary file has the same channels, otherwise use its first two channels
+      const secondaryChannels = secondaryResults.channels || []
+      let secXChannel = xChannel
+      let secYChannel = yChannel
+      
+      // If primary channels don't exist in secondary file, use fallback
+      if (!secondaryChannels.includes(xChannel) || !secondaryChannels.includes(yChannel)) {
+        console.log(`[AnalysisResults] Secondary file doesn't have channels ${xChannel}/${yChannel}, using fallback`)
+        // Try to find FSC/SSC patterns in secondary file
+        const fscPatterns = ['FSC-A', 'VFSC-A', 'FSC-H', 'VFSC-H']
+        const sscPatterns = ['SSC-A', 'VSSC1-A', 'SSC-H', 'VSSC1-H', 'VSSC2-A']
+        
+        secXChannel = secondaryChannels.find(ch => fscPatterns.some(p => ch.toUpperCase().includes(p.toUpperCase()))) || secondaryChannels[0] || xChannel
+        secYChannel = secondaryChannels.find(ch => sscPatterns.some(p => ch.toUpperCase().includes(p.toUpperCase()))) || secondaryChannels[1] || yChannel
+      }
+      
+      getScatterDataWithAxes(secondarySampleId, secXChannel, secYChannel, 2000)
+        .then((data) => {
+          if (!cancelled && data) {
+            setSecondaryFCSScatterData(data.data)
+          }
+        })
+        .catch((err) => {
+          console.error("[AnalysisResults] Failed to load secondary scatter data:", err)
+        })
+        .finally(() => {
+          if (!cancelled) setSecondaryFCSLoadingScatter(false)
+        })
+    }
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overlayConfig.enabled, secondarySampleId, secondaryResults, xChannel, yChannel])
+
+  // Load secondary anomaly data when overlay is enabled
+  useEffect(() => {
+    let cancelled = false
+    if (overlayConfig.enabled && secondarySampleId && secondaryResults && !secondaryFcsAnalysis.anomalyData) {
+      detectAnomalies(secondarySampleId, { method: "zscore", zscore_threshold: 3.0 })
+        .then((data) => {
+          if (!cancelled && data) {
+            setSecondaryFCSAnomalyData({
+              method: data.method === "zscore" ? "Z-Score" : data.method === "iqr" ? "IQR" : "Both",
+              total_anomalies: data.total_anomalies,
+              anomaly_percentage: data.anomaly_percentage,
+              anomalous_indices: data.anomalous_indices
+            })
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to load secondary anomaly data:", err)
+        })
+    }
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overlayConfig.enabled, secondarySampleId, secondaryResults])
+
+  // Load real size bins from backend - PERFORMANCE FIX: Removed callback from deps
+  useEffect(() => {
+    let cancelled = false
     if (sampleId && results) {
       setLoadingSizeBins(true)
       getSizeBins(sampleId)
         .then((data) => {
-          if (data) {
+          if (!cancelled && data) {
             setSizeCategories(data.bins)
           }
         })
-        .finally(() => setLoadingSizeBins(false))
+        .finally(() => {
+          if (!cancelled) setLoadingSizeBins(false)
+        })
     }
-  }, [sampleId, results, getSizeBins])
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sampleId, results])
 
   if (!results) {
     return (
@@ -94,18 +242,24 @@ export function AnalysisResults() {
   const totalEvents = results.total_events || results.event_count || 0
   const medianSize = results.particle_size_median_nm
 
+  // Deterministic pseudo-random for SSR compatibility
+  const seededRandom = (seed: number): number => {
+    const x = Math.sin(seed * 9999) * 10000
+    return x - Math.floor(x)
+  }
+
   // Generate mock anomaly events for table (TODO: Replace with real data)
   const anomalyEvents: AnomalyEvent[] = useMemo(() => {
     if (!anomalyData || !anomalyData.anomalous_indices) return []
     
-    return anomalyData.anomalous_indices.slice(0, 100).map((index) => ({
+    return anomalyData.anomalous_indices.slice(0, 100).map((index, i) => ({
       index,
-      fsc: Math.random() * 1000 + 100,
-      ssc: Math.random() * 800 + 50,
-      zscore_fsc: (Math.random() - 0.5) * 8,
-      zscore_ssc: (Math.random() - 0.5) * 8,
-      iqr_outlier_fsc: Math.random() > 0.5,
-      iqr_outlier_ssc: Math.random() > 0.5,
+      fsc: seededRandom(i * 6) * 1000 + 100,
+      ssc: seededRandom(i * 6 + 1) * 800 + 50,
+      zscore_fsc: (seededRandom(i * 6 + 2) - 0.5) * 8,
+      zscore_ssc: (seededRandom(i * 6 + 3) - 0.5) * 8,
+      iqr_outlier_fsc: seededRandom(i * 6 + 4) > 0.5,
+      iqr_outlier_ssc: seededRandom(i * 6 + 5) > 0.5,
     }))
   }, [anomalyData])
 
@@ -177,6 +331,96 @@ export function AnalysisResults() {
       return
     }
 
+    // NEW: Excel Export (P-002)
+    if (format === "excel" && sampleId && results) {
+      try {
+        const exportData: FCSExportData = {
+          sampleId,
+          fileName: fileName || undefined,
+          results: {
+            total_events: results.total_events,
+            gated_events: results.gated_events,
+            fsc_mean: results.fsc_mean,
+            fsc_median: results.fsc_median,
+            ssc_mean: results.ssc_mean,
+            ssc_median: results.ssc_median,
+            particle_size_median_nm: results.particle_size_median_nm,
+            particle_size_mean_nm: results.particle_size_mean_nm,
+            size_statistics: results.size_statistics,
+            fsc_cv_pct: results.fsc_cv_pct,
+            ssc_cv_pct: results.ssc_cv_pct,
+            debris_pct: results.debris_pct,
+            noise_events_removed: results.noise_events_removed,
+            channels: results.channels,
+          },
+          scatterData: scatterData,
+          sizeDistribution: results.size_distribution?.histogram?.map((h: any) => ({ size: h.bin_center, count: h.count })),
+          anomalyData: anomalyData || undefined,
+          experimentalConditions: fcsAnalysis.experimentalConditions || undefined,
+        }
+        
+        exportFCSToExcel(exportData)
+        
+        toast({
+          title: "✅ Excel Export Complete",
+          description: `${sampleId}_FCS_Report.xlsx downloaded successfully`,
+        })
+      } catch (error) {
+        toast({
+          title: "Export Failed",
+          description: error instanceof Error ? error.message : "Failed to export Excel file",
+          variant: "destructive",
+        })
+      }
+      return
+    }
+
+    // NEW: PDF Export (P-003)
+    if (format === "pdf" && sampleId && results) {
+      try {
+        toast({
+          title: "Generating PDF...",
+          description: "Please wait while we create your report",
+        })
+        
+        const exportData: FCSExportData = {
+          sampleId,
+          fileName: fileName || undefined,
+          results: {
+            total_events: results.total_events,
+            gated_events: results.gated_events,
+            fsc_mean: results.fsc_mean,
+            fsc_median: results.fsc_median,
+            ssc_mean: results.ssc_mean,
+            ssc_median: results.ssc_median,
+            particle_size_median_nm: results.particle_size_median_nm,
+            particle_size_mean_nm: results.particle_size_mean_nm,
+            size_statistics: results.size_statistics,
+            fsc_cv_pct: results.fsc_cv_pct,
+            ssc_cv_pct: results.ssc_cv_pct,
+            debris_pct: results.debris_pct,
+            noise_events_removed: results.noise_events_removed,
+          },
+          anomalyData: anomalyData || undefined,
+          experimentalConditions: fcsAnalysis.experimentalConditions || undefined,
+        }
+        
+        await exportFCSToPDF(exportData)
+        
+        toast({
+          title: "✅ PDF Export Complete",
+          description: `${sampleId}_FCS_Report.pdf downloaded successfully`,
+        })
+      } catch (error) {
+        toast({
+          title: "Export Failed",
+          description: error instanceof Error ? error.message : "Failed to export PDF file",
+          variant: "destructive",
+        })
+      }
+      return
+    }
+
     if (format === "markdown" && sampleId && results) {
       const reportContent = generateMarkdownReport({
         title: `FCS Analysis Report - ${sampleId}`,
@@ -217,9 +461,97 @@ export function AnalysisResults() {
       return
     }
 
+    // CSV Export
+    if (format === "csv" && sampleId && results) {
+      const csvContent = [
+        "# FCS Analysis Export",
+        `# Sample ID: ${sampleId}`,
+        `# Export Date: ${new Date().toISOString()}`,
+        "#",
+        "Parameter,Value",
+        `Total Events,${results.total_events || 'N/A'}`,
+        `Gated Events,${results.gated_events || 'N/A'}`,
+        `FSC Mean,${results.fsc_mean?.toFixed(2) || 'N/A'}`,
+        `FSC Median,${results.fsc_median?.toFixed(2) || 'N/A'}`,
+        `SSC Mean,${results.ssc_mean?.toFixed(2) || 'N/A'}`,
+        `SSC Median,${results.ssc_median?.toFixed(2) || 'N/A'}`,
+        `Particle Size Median (nm),${results.particle_size_median_nm?.toFixed(2) || 'N/A'}`,
+        `Particle Size Mean (nm),${results.particle_size_mean_nm?.toFixed(2) || 'N/A'}`,
+        `D10 (nm),${results.size_statistics?.d10?.toFixed(2) || 'N/A'}`,
+        `D50 (nm),${results.size_statistics?.d50?.toFixed(2) || 'N/A'}`,
+        `D90 (nm),${results.size_statistics?.d90?.toFixed(2) || 'N/A'}`,
+      ].join('\n')
+      
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${sampleId}_fcs_summary.csv`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      
+      toast({
+        title: "✅ Export Complete",
+        description: "CSV file downloaded successfully",
+      })
+      return
+    }
+
+    // JSON Export
+    if (format === "json" && sampleId && results) {
+      const jsonContent = JSON.stringify({
+        sample_id: sampleId,
+        export_timestamp: new Date().toISOString(),
+        analysis_type: "FCS",
+        results: {
+          total_events: results.total_events,
+          gated_events: results.gated_events,
+          fsc_statistics: {
+            mean: results.fsc_mean,
+            median: results.fsc_median,
+            cv_pct: results.fsc_cv_pct,
+          },
+          ssc_statistics: {
+            mean: results.ssc_mean,
+            median: results.ssc_median,
+            cv_pct: results.ssc_cv_pct,
+          },
+          particle_size: {
+            median_nm: results.particle_size_median_nm,
+            mean_nm: results.particle_size_mean_nm,
+            d10: results.size_statistics?.d10,
+            d50: results.size_statistics?.d50,
+            d90: results.size_statistics?.d90,
+          },
+          debris_pct: results.debris_pct,
+          channels: results.channels,
+        },
+        experimental_conditions: fcsAnalysis.experimentalConditions,
+      }, null, 2)
+      
+      const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${sampleId}_fcs_results.json`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      
+      toast({
+        title: "✅ Export Complete",
+        description: "JSON file downloaded successfully",
+      })
+      return
+    }
+
     toast({
-      title: "Exporting...",
-      description: `Preparing ${format.toUpperCase()} export`,
+      title: "Export Not Available",
+      description: `${format.toUpperCase()} export is not implemented yet`,
+      variant: "destructive",
     })
   }
 
@@ -267,6 +599,22 @@ export function AnalysisResults() {
 
       {/* Statistics Cards */}
       <StatisticsCards results={results} />
+
+      {/* Individual File Summary - shown when comparing two files */}
+      {secondaryResults && (
+        <IndividualFileSummary
+          primaryFile={{
+            fileName: fileName,
+            sampleId: sampleId ?? undefined,
+            results: results,
+          }}
+          secondaryFile={{
+            fileName: secondaryFcsAnalysis.file?.name,
+            sampleId: secondarySampleId ?? undefined,
+            results: secondaryResults,
+          }}
+        />
+      )}
 
       {/* Particle Size Visualization with Real Data */}
       {loadingSizeBins ? (
@@ -339,11 +687,28 @@ export function AnalysisResults() {
             </TabsList>
 
             <TabsContent value="dashboard" className="space-y-4">
+              {/* Axis Selection for Dashboard - allows changing scatter plot axes */}
+              {sampleId && (
+                <ScatterAxisSelector
+                  sampleId={sampleId}
+                  xChannel={xChannel}
+                  yChannel={yChannel}
+                  onAxisChange={handleAxisChange}
+                  disabled={loadingScatter}
+                  availableChannels={results?.channels || []}
+                />
+              )}
               <FullAnalysisDashboard
                 results={results}
                 scatterData={scatterData}
                 anomalyData={anomalyData}
                 sampleId={sampleId || undefined}
+                xChannel={xChannel}
+                yChannel={yChannel}
+                secondaryResults={secondaryResults}
+                secondaryScatterData={secondaryScatterData}
+                secondaryAnomalyData={secondaryAnomalyData}
+                secondarySizeData={secondaryScatterData?.filter(p => p.diameter).map(p => p.diameter as number)}
               />
             </TabsContent>
 
@@ -374,7 +739,16 @@ export function AnalysisResults() {
                   </Button>
                 </div>
               </div>
-              <SizeDistributionChart />
+              <SizeDistributionChart 
+                sizeData={scatterData.filter(p => p.diameter).map(p => p.diameter as number)}
+                secondarySizeData={secondaryScatterData?.filter(p => p.diameter).map(p => p.diameter as number)}
+                d10={results.size_statistics?.d10}
+                d50={results.size_statistics?.d50}
+                d90={results.size_statistics?.d90}
+                secondaryD10={secondaryResults?.size_statistics?.d10}
+                secondaryD50={secondaryResults?.size_statistics?.d50}
+                secondaryD90={secondaryResults?.size_statistics?.d90}
+              />
             </TabsContent>
 
             <TabsContent value="theory" className="space-y-4">
@@ -395,79 +769,101 @@ export function AnalysisResults() {
             </TabsContent>
 
             <TabsContent value="fsc-ssc" className="space-y-4">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  {anomalyData && anomalyData.total_anomalies > 0 && (
-                    <Badge variant="outline" className="bg-destructive/20 text-destructive border-destructive/50">
-                      {anomalyData.total_anomalies.toLocaleString()} anomalies detected
-                    </Badge>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setHighlightAnomalies(!highlightAnomalies)}
-                    className="h-7 text-xs"
-                  >
-                    {highlightAnomalies ? (
-                      <>
-                        <Eye className="h-3 w-3 mr-1" />
-                        Highlighting ON
-                      </>
-                    ) : (
-                      <>
-                        <EyeOff className="h-3 w-3 mr-1" />
-                        Highlighting OFF
-                      </>
-                    )}
-                  </Button>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-8 w-8"
-                    onClick={() => handleExport("scatter")}
-                  >
-                    <Download className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
-                    <Maximize2 className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => handlePin("FSC vs SSC Scatter", "scatter")}
-                  >
-                    <Pin className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
+              {/* CRMIT-002: Auto Axis Selection */}
+              {sampleId && (
+                <ScatterAxisSelector
+                  sampleId={sampleId}
+                  xChannel={xChannel}
+                  yChannel={yChannel}
+                  onAxisChange={handleAxisChange}
+                  disabled={loadingScatter}
+                  availableChannels={results?.channels || []}
+                />
+              )}
+              
               {loadingScatter ? (
                 <div className="flex items-center justify-center h-[400px]">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
                   <span className="ml-3 text-muted-foreground">Loading scatter data...</span>
                 </div>
               ) : (
-                <ScatterPlotChart
-                  title="FSC vs SSC - Interactive"
-                  xLabel="FSC-A"
-                  yLabel="SSC-A"
-                  data={scatterData}
-                  anomalousIndices={anomalyData?.anomalous_indices || []}
-                  highlightAnomalies={highlightAnomalies}
-                  showLegend={true}
-                  height={400}
-                  onSelectionChange={(indices) => {
-                    setSelectedIndices(indices)
-                    if (indices.length > 0) {
-                      toast({
-                        title: "Selection made",
-                        description: `${indices.length} events selected`,
-                      })
-                    }
-                  }}
-                />
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+                  <div className="lg:col-span-3">
+                    {/* NEW: Interactive SVG-based scatter chart with reliable selection */}
+                    <InteractiveScatterChart
+                      title={`${xChannel} vs ${yChannel}`}
+                      xLabel={xChannel}
+                      yLabel={yChannel}
+                      data={scatterData}
+                      anomalousIndices={anomalyData?.anomalous_indices || []}
+                      highlightAnomalies={highlightAnomalies}
+                      height={450}
+                      onSelectionChange={(indices, coords) => {
+                        setSelectedIndices(indices)
+                        setGateCoordinates(coords || null)
+                        if (indices.length > 0) {
+                          toast({
+                            title: "Population Gated",
+                            description: `${indices.length} events selected. Click "Analyze Selection" or "Save Gate" for further analysis.`,
+                          })
+                        }
+                      }}
+                      onGatedAnalysis={(selectedData) => {
+                        // Calculate statistics for selected population
+                        if (selectedData.length === 0) return
+                        const xValues = selectedData.map(p => p.x)
+                        const yValues = selectedData.map(p => p.y)
+                        const diameters = selectedData.filter(p => p.diameter).map(p => p.diameter!)
+                        
+                        const meanX = xValues.reduce((a, b) => a + b, 0) / xValues.length
+                        const meanY = yValues.reduce((a, b) => a + b, 0) / yValues.length
+                        const meanDiam = diameters.length > 0 
+                          ? diameters.reduce((a, b) => a + b, 0) / diameters.length 
+                          : null
+                        
+                        toast({
+                          title: `Gated Population Analysis (${selectedData.length} events)`,
+                          description: `Mean ${xChannel}: ${meanX.toFixed(1)}, Mean ${yChannel}: ${meanY.toFixed(1)}${meanDiam ? `, Mean Diameter: ${meanDiam.toFixed(1)} nm` : ''}`,
+                          duration: 8000,
+                        })
+                      }}
+                    />
+                  </div>
+                  <div className="lg:col-span-1">
+                    <GatedStatisticsPanel
+                      scatterData={scatterData}
+                      xLabel={xChannel}
+                      yLabel={yChannel}
+                      selectedIndices={selectedIndices}
+                      sampleId={sampleId}
+                      gateCoordinates={gateCoordinates}
+                      onExportSelection={(indices) => {
+                        // Export selected events to CSV
+                        const selectedData = scatterData.filter((_, idx) => indices.includes(idx))
+                        const csv = [
+                          ["Index", xChannel, yChannel, "Diameter (nm)"],
+                          ...selectedData.map((p, idx) => [p.index ?? idx, p.x, p.y, p.diameter ?? "N/A"]),
+                        ]
+                          .map((row) => row.join(","))
+                          .join("\n")
+
+                        const blob = new Blob([csv], { type: "text/csv" })
+                        const url = URL.createObjectURL(blob)
+                        const a = document.createElement("a")
+                        a.href = url
+                        a.download = `gated_population_${new Date().toISOString().slice(0, 10)}.csv`
+                        document.body.appendChild(a)
+                        a.click()
+                        document.body.removeChild(a)
+                        URL.revokeObjectURL(url)
+                        toast({
+                          title: "Export Complete",
+                          description: `Exported ${indices.length} events to CSV`,
+                        })
+                      }}
+                    />
+                  </div>
+                </div>
               )}
             </TabsContent>
 
@@ -520,6 +916,16 @@ export function AnalysisResults() {
                 showMieTheory={true}
                 showLegend={true}
                 height={450}
+                secondaryData={secondaryScatterData
+                  ?.filter((p) => p.diameter !== undefined && p.y !== undefined)
+                  .map((p) => ({
+                    diameter: p.diameter as number,
+                    ssc: p.y,
+                    index: p.index,
+                    isAnomaly: secondaryAnomalyData?.anomalous_indices?.includes(p.index ?? -1) || false,
+                  }))
+                }
+                secondaryAnomalousIndices={secondaryAnomalyData?.anomalous_indices || []}
               />
             </TabsContent>
           </Tabs>

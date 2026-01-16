@@ -53,6 +53,7 @@ interface InteractiveChartWrapperProps {
   onZoom?: (domain: { x?: [number, number]; y?: [number, number] }) => void
   onReset?: () => void
   enableCapture?: boolean
+  headerContent?: ReactNode
 }
 
 const initialZoomState: ZoomState = {
@@ -94,35 +95,124 @@ export function InteractiveChartWrapper({
   const [isSelecting, setIsSelecting] = useState(false)
   const [zoomLevel, setZoomLevel] = useState(1)
   const [isCapturing, setIsCapturing] = useState(false)
+  
+  // Domain-based zoom state for actual data zoom
+  const [domainZoom, setDomainZoom] = useState<{ 
+    x?: [number, number]; 
+    y?: [number, number]; 
+    active: boolean 
+  }>({ active: false })
 
-  // Handle zoom in
+  // Handle zoom in - zoom to center 50% of current view
   const handleZoomIn = useCallback(() => {
-    setZoomLevel((prev) => Math.min(prev * 1.5, 10))
+    if (!data || data.length === 0) {
+      toast({
+        title: "Cannot Zoom",
+        description: "No data available to zoom.",
+        variant: "destructive",
+      })
+      return
+    }
+    
+    // Get current data range
+    const xValues = data.map(d => d[xAxisKey] || d.x || 0).filter(v => typeof v === 'number')
+    const yValues = data.map(d => d[yAxisKey] || d.y || 0).filter(v => typeof v === 'number')
+    
+    if (xValues.length === 0) return
+    
+    // Use current domain or full range
+    const currentXMin = domainZoom.x?.[0] ?? Math.min(...xValues)
+    const currentXMax = domainZoom.x?.[1] ?? Math.max(...xValues)
+    const currentYMin = domainZoom.y?.[0] ?? Math.min(...yValues)
+    const currentYMax = domainZoom.y?.[1] ?? Math.max(...yValues)
+    
+    // Zoom to center 50%
+    const xRange = currentXMax - currentXMin
+    const yRange = currentYMax - currentYMin
+    const newXMin = currentXMin + xRange * 0.25
+    const newXMax = currentXMax - xRange * 0.25
+    const newYMin = currentYMin + yRange * 0.25
+    const newYMax = currentYMax - yRange * 0.25
+    
+    const newLevel = Math.min(zoomLevel * 1.5, 10)
+    setZoomLevel(newLevel)
+    setDomainZoom({ 
+      x: [newXMin, newXMax], 
+      y: [newYMin, newYMax],
+      active: true 
+    })
+    
+    onZoom?.({ x: [newXMin, newXMax], y: [newYMin, newYMax] })
+    
     toast({
       title: "Zoomed In",
-      description: `Zoom level: ${Math.round(Math.min(zoomLevel * 1.5, 10) * 100)}%`,
+      description: `Zoom level: ${Math.round(newLevel * 100)}%`,
     })
-  }, [zoomLevel, toast])
+  }, [data, xAxisKey, yAxisKey, domainZoom, zoomLevel, onZoom, toast])
 
   // Handle zoom out
   const handleZoomOut = useCallback(() => {
-    setZoomLevel((prev) => Math.max(prev / 1.5, 0.5))
+    if (!data || data.length === 0) return
+    
+    // Get full data range
+    const xValues = data.map(d => d[xAxisKey] || d.x || 0).filter(v => typeof v === 'number')
+    const yValues = data.map(d => d[yAxisKey] || d.y || 0).filter(v => typeof v === 'number')
+    
+    if (xValues.length === 0) return
+    
+    const fullXMin = Math.min(...xValues)
+    const fullXMax = Math.max(...xValues)
+    const fullYMin = Math.min(...yValues)
+    const fullYMax = Math.max(...yValues)
+    
+    // Expand current view by 50%
+    const currentXMin = domainZoom.x?.[0] ?? fullXMin
+    const currentXMax = domainZoom.x?.[1] ?? fullXMax
+    const currentYMin = domainZoom.y?.[0] ?? fullYMin
+    const currentYMax = domainZoom.y?.[1] ?? fullYMax
+    
+    const xRange = currentXMax - currentXMin
+    const yRange = currentYMax - currentYMin
+    
+    const newXMin = Math.max(fullXMin, currentXMin - xRange * 0.25)
+    const newXMax = Math.min(fullXMax, currentXMax + xRange * 0.25)
+    const newYMin = Math.max(fullYMin, currentYMin - yRange * 0.25)
+    const newYMax = Math.min(fullYMax, currentYMax + yRange * 0.25)
+    
+    const newLevel = Math.max(zoomLevel / 1.5, 1)
+    setZoomLevel(newLevel)
+    
+    // If back to original zoom, reset
+    if (newLevel <= 1) {
+      setDomainZoom({ active: false })
+      onZoom?.({ x: undefined, y: undefined })
+    } else {
+      setDomainZoom({ 
+        x: [newXMin, newXMax], 
+        y: [newYMin, newYMax],
+        active: true 
+      })
+      onZoom?.({ x: [newXMin, newXMax], y: [newYMin, newYMax] })
+    }
+    
     toast({
       title: "Zoomed Out",
-      description: `Zoom level: ${Math.round(Math.max(zoomLevel / 1.5, 0.5) * 100)}%`,
+      description: `Zoom level: ${Math.round(newLevel * 100)}%`,
     })
-  }, [zoomLevel, toast])
+  }, [data, xAxisKey, yAxisKey, domainZoom, zoomLevel, onZoom, toast])
 
   // Handle reset
   const handleReset = useCallback(() => {
     setZoomState(initialZoomState)
     setZoomLevel(1)
+    setDomainZoom({ active: false })
     onReset?.()
+    onZoom?.({ x: undefined, y: undefined })
     toast({
       title: "Chart Reset",
       description: "Zoom and selection have been reset.",
     })
-  }, [onReset, toast])
+  }, [onReset, onZoom, toast])
 
   // Handle mouse down for selection
   const handleMouseDown = useCallback((e: any) => {
@@ -349,8 +439,6 @@ export function InteractiveChartWrapper({
         className="w-full"
         style={{ 
           height: typeof height === "number" ? `${height}px` : height,
-          transform: `scale(${zoomLevel})`,
-          transformOrigin: "center center",
         }}
       >
         {children}

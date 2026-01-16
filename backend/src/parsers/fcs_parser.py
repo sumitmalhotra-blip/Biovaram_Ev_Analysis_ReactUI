@@ -122,11 +122,21 @@ class FCSParser(BaseParser):
                 fcs_data = flowio.FlowData(str(self.file_path))
                 
                 # Get channel names from PnN or PnS parameters
+                # FCS metadata keys can be lowercase (p1n, p1s) or uppercase ($P1N, $P1S)
                 channel_count = fcs_data.channel_count
                 channel_names = []
                 for i in range(1, channel_count + 1):
-                    # Try $PnN (name) first, then $PnS (short name)
-                    name = fcs_data.text.get(f'$P{i}N', '') or fcs_data.text.get(f'$P{i}S', '') or f'Channel_{i}'
+                    # Try multiple key formats - prefer short name (PnS) which has descriptive names like VFSC-A
+                    # Check lowercase keys first (flowio returns lowercase), then uppercase
+                    name = (
+                        fcs_data.text.get(f'p{i}s', '') or  # lowercase short name (preferred - VFSC-A, VSSC1-A)
+                        fcs_data.text.get(f'p{i}n', '') or  # lowercase full name (FSC-A, SSC-A)
+                        fcs_data.text.get(f'$P{i}S', '') or  # uppercase with $ prefix
+                        fcs_data.text.get(f'$P{i}N', '') or  # uppercase with $ prefix
+                        fcs_data.text.get(f'P{i}S', '') or   # uppercase without $
+                        fcs_data.text.get(f'P{i}N', '') or   # uppercase without $
+                        f'Channel_{i}'
+                    )
                     # Clean up the name
                     name = name.strip()
                     if not name:

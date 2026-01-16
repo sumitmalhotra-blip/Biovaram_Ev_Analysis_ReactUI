@@ -1,26 +1,33 @@
 "use client"
 
 import { useEffect } from "react"
-import { Bell, ChevronDown, HelpCircle, LogOut, Settings, User, Sun, Moon, Menu, RefreshCw, Wifi, WifiOff } from "lucide-react"
+import { useSession, signOut } from "next-auth/react"
+import { useRouter } from "next/navigation"
+import { ChevronDown, HelpCircle, LogIn, LogOut, Settings, User, Sun, Moon, Menu, RefreshCw, Wifi, WifiOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { useAnalysisStore } from "@/lib/store"
 import { useApi } from "@/hooks/use-api"
 import { cn } from "@/lib/utils"
 import { Sidebar } from "./sidebar"
+import { AlertPanel } from "./dashboard/alert-panel"
 import Image from "next/image"
 
 export function Header() {
   const { apiConnected, apiChecking, isDarkMode, toggleDarkMode, lastHealthCheck } = useAnalysisStore()
   const { checkHealth, startHealthCheck } = useApi()
+  const { data: session, status } = useSession()
+  const router = useRouter()
 
   // Start health check on mount
   useEffect(() => {
@@ -35,6 +42,21 @@ export function Header() {
     if (diff < 60) return `${diff}s ago`
     if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
     return lastHealthCheck.toLocaleTimeString()
+  }
+
+  const handleSignOut = async () => {
+    await signOut({ redirect: false })
+    router.push("/login")
+  }
+
+  const getInitials = (name?: string | null) => {
+    if (!name) return "U"
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2)
   }
 
   return (
@@ -52,11 +74,19 @@ export function Header() {
         </Sheet>
 
         <div className="flex items-center gap-3 shrink-0">
+          {/* PERFORMANCE: Use optimized WebP logo (16KB vs 1.8MB original) */}
           <div className="relative w-32 h-10 rounded-lg overflow-visible shadow-lg hover:shadow-xl transition-all">
-            <Image src="/logo-biovaram.png" alt="BioVaram" fill className="object-contain" priority />
+            <Image 
+              src="/logo-biovaram-optimized.webp" 
+              alt="BioVaram" 
+              fill 
+              className="object-contain" 
+              priority
+              sizes="128px"
+            />
           </div>
           <div className="hidden sm:flex flex-col">
-            <span className="font-bold text-lg bg-gradient-to-r from-orange-500 via-purple-500 to-green-500 bg-clip-text text-transparent">
+            <span className="font-bold text-lg bg-linear-to-r from-orange-500 via-purple-500 to-green-500 bg-clip-text text-transparent">
               BioVaram
             </span>
             <span className="text-xs text-muted-foreground">EV Analysis Platform</span>
@@ -112,40 +142,76 @@ export function Header() {
           </TooltipProvider>
         </div>
 
-        <Button
-          variant="ghost"
-          size="icon"
-          className="relative h-9 w-9 hidden sm:flex rounded-xl hover:bg-secondary/50"
-        >
-          <Bell className="h-4 w-4" />
-          <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-primary rounded-full text-[10px] flex items-center justify-center text-primary-foreground font-bold">
-            3
-          </span>
-        </Button>
+        {/* CRMIT-003: Alert Panel - Dynamic alerts with timestamps */}
+        <AlertPanel compact />
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="flex items-center gap-1 md:gap-2 px-2 rounded-xl hover:bg-secondary/50">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary/30 to-accent/30 flex items-center justify-center ring-2 ring-primary/20">
-                <User className="h-4 w-4 text-primary" />
-              </div>
+              {status === "authenticated" && session?.user ? (
+                <Avatar className="h-8 w-8 ring-2 ring-primary/20">
+                  <AvatarFallback className="bg-linear-to-br from-primary/30 to-accent/30 text-sm font-semibold">
+                    {getInitials(session.user.name)}
+                  </AvatarFallback>
+                </Avatar>
+              ) : (
+                <div className="w-8 h-8 rounded-lg bg-linear-to-br from-primary/30 to-accent/30 flex items-center justify-center ring-2 ring-primary/20">
+                  <User className="h-4 w-4 text-primary" />
+                </div>
+              )}
               <ChevronDown className="h-4 w-4 text-muted-foreground hidden sm:block" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem>
-              <Settings className="mr-2 h-4 w-4" />
-              Settings
-            </DropdownMenuItem>
-            <DropdownMenuItem>
-              <HelpCircle className="mr-2 h-4 w-4" />
-              Help
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive">
-              <LogOut className="mr-2 h-4 w-4" />
-              Logout
-            </DropdownMenuItem>
+          <DropdownMenuContent align="end" className="w-56">
+            {status === "authenticated" && session?.user ? (
+              <>
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">{session.user.name}</p>
+                    <p className="text-xs leading-none text-muted-foreground">{session.user.email}</p>
+                    {session.user.role && (
+                      <p className="text-xs leading-none text-muted-foreground capitalize">
+                        {session.user.role.replace("_", " ")}
+                      </p>
+                    )}
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem>
+                  <User className="mr-2 h-4 w-4" />
+                  Profile
+                </DropdownMenuItem>
+                <DropdownMenuItem>
+                  <Settings className="mr-2 h-4 w-4" />
+                  Settings
+                </DropdownMenuItem>
+                <DropdownMenuItem>
+                  <HelpCircle className="mr-2 h-4 w-4" />
+                  Help
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="text-destructive" onClick={handleSignOut}>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Sign Out
+                </DropdownMenuItem>
+              </>
+            ) : (
+              <>
+                <DropdownMenuItem onClick={() => router.push("/login")}>
+                  <LogIn className="mr-2 h-4 w-4" />
+                  Sign In
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => router.push("/signup")}>
+                  <User className="mr-2 h-4 w-4" />
+                  Create Account
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem>
+                  <HelpCircle className="mr-2 h-4 w-4" />
+                  Help
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

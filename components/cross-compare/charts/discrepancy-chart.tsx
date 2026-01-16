@@ -34,7 +34,9 @@ export function DiscrepancyChart() {
               border: "1px solid #334155",
               borderRadius: "8px",
               fontSize: "12px",
+              color: "#f8fafc",
             }}
+            labelStyle={{ color: "#94a3b8" }}
             formatter={(value: number) => [`${value.toFixed(1)}%`, "Discrepancy"]}
           />
           <ReferenceLine

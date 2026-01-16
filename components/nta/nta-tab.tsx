@@ -42,10 +42,11 @@ export function NTATab() {
   const [showConditionsDialog, setShowConditionsDialog] = useState(false)
   const [justUploadedSampleId, setJustUploadedSampleId] = useState<string | null>(null)
 
-  // Check API on mount
+  // Check API on mount - PERFORMANCE FIX: Empty deps for mount-only
   useEffect(() => {
     checkHealth()
-  }, [checkHealth])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Show experimental conditions dialog after successful upload
   useEffect(() => {

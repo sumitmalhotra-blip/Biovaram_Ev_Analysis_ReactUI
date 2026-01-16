@@ -1,0 +1,388 @@
+"""
+Authentication Router
+=====================
+
+Endpoints for user authentication and registration.
+
+Endpoints:
+- POST /auth/register  - Register new user
+- POST /auth/login     - Login and get token
+- GET  /auth/me        - Get current user profile
+- PUT  /auth/profile   - Update user profile
+- POST /auth/logout    - Logout (client-side token removal)
+
+Author: CRMIT Backend Team
+Date: December 26, 2025
+"""
+
+from datetime import datetime
+from typing import Optional
+import bcrypt
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from loguru import logger
+
+from src.database.connection import get_session
+from src.database.models import User
+
+router = APIRouter()
+
+
+# ============================================================================
+# Request/Response Models
+# ============================================================================
+
+class UserRegisterRequest(BaseModel):
+    """Request body for user registration."""
+    email: EmailStr = Field(..., description="User email address")
+    password: str = Field(..., min_length=8, description="Password (min 8 characters)")
+    name: str = Field(..., min_length=2, description="User's full name")
+    organization: Optional[str] = Field(None, description="Organization name")
+    role: Optional[str] = Field("user", description="User role (user, researcher, admin)")
+
+
+class UserLoginRequest(BaseModel):
+    """Request body for user login."""
+    email: EmailStr = Field(..., description="User email address")
+    password: str = Field(..., description="User password")
+
+
+class UserProfileUpdateRequest(BaseModel):
+    """Request body for profile update."""
+    name: Optional[str] = Field(None, min_length=2)
+    organization: Optional[str] = Field(None)
+
+
+class UserResponse(BaseModel):
+    """User response model (excludes password)."""
+    id: int
+    email: str
+    name: str
+    role: str
+    organization: Optional[str]
+    is_active: bool
+    created_at: datetime
+    last_login: Optional[datetime]
+
+    class Config:
+        from_attributes = True
+
+
+class AuthResponse(BaseModel):
+    """Authentication response with user data."""
+    success: bool
+    message: str
+    user: Optional[UserResponse] = None
+
+
+# ============================================================================
+# Helper Functions
+# ============================================================================
+
+def hash_password(password: str) -> str:
+    """Hash password using bcrypt."""
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
+    return hashed.decode('utf-8')
+
+
+def verify_password(password: str, hashed: str) -> bool:
+    """Verify password against hash."""
+    return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+
+
+# ============================================================================
+# Endpoints
+# ============================================================================
+
+@router.post("/register", response_model=AuthResponse)
+async def register_user(
+    request: UserRegisterRequest,
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    Register a new user account.
+    
+    **Request Body:**
+    ```json
+    {
+        "email": "user@example.com",
+        "password": "securepassword123",
+        "name": "John Doe",
+        "organization": "BioVaram Labs"
+    }
+    ```
+    
+    **Response:**
+    ```json
+    {
+        "success": true,
+        "message": "User registered successfully",
+        "user": {
+            "id": 1,
+            "email": "user@example.com",
+            "name": "John Doe",
+            "role": "user",
+            ...
+        }
+    }
+    ```
+    """
+    try:
+        # Check if email already exists
+        result = await db.execute(
+            select(User).where(User.email == request.email)
+        )
+        existing_user = result.scalar_one_or_none()
+        
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered"
+            )
+        
+        # Create new user
+        password_hash = hash_password(request.password)
+        
+        # Validate role (only allow user and researcher for self-registration)
+        allowed_roles = ["user", "researcher"]
+        user_role = request.role if request.role in allowed_roles else "user"
+        
+        new_user = User(
+            email=request.email,
+            password_hash=password_hash,
+            name=request.name,
+            organization=request.organization,
+            role=user_role,
+            is_active=True,
+            email_verified=False
+        )
+        
+        db.add(new_user)
+        await db.commit()
+        await db.refresh(new_user)
+        
+        logger.info(f"✅ New user registered: {request.email}")
+        
+        return AuthResponse(
+            success=True,
+            message="User registered successfully",
+            user=UserResponse.model_validate(new_user)
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"❌ Registration failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Registration failed: {str(e)}"
+        )
+
+
+@router.post("/login", response_model=AuthResponse)
+async def login_user(
+    request: UserLoginRequest,
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    Authenticate user and return user data.
+    
+    **Request Body:**
+    ```json
+    {
+        "email": "user@example.com",
+        "password": "securepassword123"
+    }
+    ```
+    
+    **Response:**
+    ```json
+    {
+        "success": true,
+        "message": "Login successful",
+        "user": {
+            "id": 1,
+            "email": "user@example.com",
+            "name": "John Doe",
+            "role": "user",
+            ...
+        }
+    }
+    ```
+    """
+    try:
+        # Find user by email
+        result = await db.execute(
+            select(User).where(User.email == request.email)
+        )
+        user = result.scalar_one_or_none()
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password"
+            )
+        
+        # Verify password
+        if not verify_password(request.password, str(user.password_hash)):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password"
+            )
+        
+        # Check if user is active
+        if not bool(user.is_active):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account is deactivated"
+            )
+        
+        # Update last login
+        user.last_login = datetime.utcnow()  # type: ignore[assignment]
+        await db.commit()
+        await db.refresh(user)
+        
+        logger.info(f"✅ User logged in: {request.email}")
+        
+        return AuthResponse(
+            success=True,
+            message="Login successful",
+            user=UserResponse.model_validate(user)
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"❌ Login failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Login failed: {str(e)}"
+        )
+
+
+@router.get("/me/{user_id}", response_model=UserResponse)
+async def get_current_user(
+    user_id: int,
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    Get current user profile by ID.
+    
+    **Path Parameters:**
+    - user_id: User ID
+    
+    **Response:** User profile data
+    """
+    try:
+        result = await db.execute(
+            select(User).where(User.id == user_id)
+        )
+        user = result.scalar_one_or_none()
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        return UserResponse.model_validate(user)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"❌ Failed to get user: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get user: {str(e)}"
+        )
+
+
+@router.put("/profile/{user_id}", response_model=UserResponse)
+async def update_profile(
+    user_id: int,
+    request: UserProfileUpdateRequest,
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    Update user profile.
+    
+    **Path Parameters:**
+    - user_id: User ID
+    
+    **Request Body:**
+    ```json
+    {
+        "name": "New Name",
+        "organization": "New Organization"
+    }
+    ```
+    """
+    try:
+        result = await db.execute(
+            select(User).where(User.id == user_id)
+        )
+        user = result.scalar_one_or_none()
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        # Update fields
+        if request.name is not None:
+            user.name = request.name  # type: ignore[assignment]
+        if request.organization is not None:
+            user.organization = request.organization  # type: ignore[assignment]
+        
+        await db.commit()
+        await db.refresh(user)
+        
+        logger.info(f"✅ Profile updated for user: {user.email}")
+        
+        return UserResponse.model_validate(user)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"❌ Profile update failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Profile update failed: {str(e)}"
+        )
+
+
+@router.get("/users", response_model=list[UserResponse])
+async def list_users(
+    db: AsyncSession = Depends(get_session),
+    skip: int = 0,
+    limit: int = 100
+):
+    """
+    List all users (admin only in production).
+    
+    **Query Parameters:**
+    - skip: Number of records to skip
+    - limit: Maximum records to return
+    """
+    try:
+        result = await db.execute(
+            select(User)
+            .order_by(User.created_at.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        users = result.scalars().all()
+        
+        return [UserResponse.model_validate(user) for user in users]
+        
+    except Exception as e:
+        logger.exception(f"❌ Failed to list users: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list users: {str(e)}"
+        )

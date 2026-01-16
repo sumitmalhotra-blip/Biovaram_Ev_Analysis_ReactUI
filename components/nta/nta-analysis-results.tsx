@@ -31,7 +31,10 @@ import { PositionAnalysis } from "./position-analysis"
 import { 
   generateMarkdownReport, 
   downloadMarkdownReport,
-  exportToParquet
+  exportToParquet,
+  exportNTAToExcel,
+  exportNTAToPDF,
+  type NTAExportData
 } from "@/lib/export-utils"
 import type { NTAResult } from "@/lib/api-client"
 
@@ -42,9 +45,12 @@ interface NTAAnalysisResultsProps {
 }
 
 export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisResultsProps) {
-  const { pinChart, resetNTAAnalysis } = useAnalysisStore()
+  const { pinChart, resetNTAAnalysis, secondaryNtaAnalysis, ntaOverlayEnabled } = useAnalysisStore()
   const { toast } = useToast()
   const [activeTab, setActiveTab] = useState("distribution")
+  
+  // Get secondary results for overlay
+  const secondaryResults = ntaOverlayEnabled ? secondaryNtaAnalysis.results : null
 
   const handlePin = (chartTitle: string, chartType: "histogram" | "bar" | "line") => {
     pinChart({
@@ -127,62 +133,47 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
         }
         
         case "Excel": {
-          // Export as tab-separated values (TSV) that Excel can open
-          const excelHeaders = [
-            "Sample ID",
-            "Median Size (nm)",
-            "Mean Size (nm)",
-            "D10 (nm)",
-            "D50 (nm)", 
-            "D90 (nm)",
-            "Concentration (particles/mL)",
-            "Temperature (°C)",
-            "pH",
-            "Total Particles",
-            "50-80nm (%)",
-            "80-100nm (%)",
-            "100-120nm (%)",
-            "120-150nm (%)",
-            "150-200nm (%)",
-            "200+nm (%)"
-          ]
-          
-          const excelData = [
-            sampleName,
-            results.median_size_nm?.toFixed(2) || "",
-            results.mean_size_nm?.toFixed(2) || "",
-            results.d10_nm?.toFixed(2) || "",
-            results.d50_nm?.toFixed(2) || "",
-            results.d90_nm?.toFixed(2) || "",
-            results.concentration_particles_ml?.toExponential(2) || "",
-            results.temperature_celsius?.toFixed(1) || "",
-            results.ph?.toFixed(2) || "",
-            results.total_particles?.toString() || "",
-            results.bin_50_80nm_pct?.toFixed(2) || "",
-            results.bin_80_100nm_pct?.toFixed(2) || "",
-            results.bin_100_120nm_pct?.toFixed(2) || "",
-            results.bin_120_150nm_pct?.toFixed(2) || "",
-            results.bin_150_200nm_pct?.toFixed(2) || "",
-            results.bin_200_plus_pct?.toFixed(2) || ""
-          ]
-          
-          const excelContent = excelHeaders.join("\t") + "\n" + excelData.join("\t") + "\n"
-          
-          // Tab-separated values work well with Excel
-          const blob = new Blob([excelContent], { type: "text/tab-separated-values;charset=utf-8;" })
-          const url = URL.createObjectURL(blob)
-          const link = document.createElement("a")
-          link.href = url
-          link.download = `${sampleName}_nta_results.xls`
-          document.body.appendChild(link)
-          link.click()
-          document.body.removeChild(link)
-          URL.revokeObjectURL(url)
-          
-          toast({
-            title: "Export Complete",
-            description: `NTA results exported as Excel file successfully.`,
-          })
+          // NEW: Real Excel export using xlsx library (P-002)
+          try {
+            const exportData: NTAExportData = {
+              sampleId: sampleName,
+              fileName: fileName || undefined,
+              results: {
+                median_size_nm: results.median_size_nm,
+                mean_size_nm: results.mean_size_nm,
+                d10_nm: results.d10_nm,
+                d50_nm: results.d50_nm,
+                d90_nm: results.d90_nm,
+                concentration_particles_ml: results.concentration_particles_ml,
+                temperature_celsius: results.temperature_celsius,
+                ph: results.ph,
+                total_particles: results.total_particles,
+                bin_50_80nm_pct: results.bin_50_80nm_pct,
+                bin_80_100nm_pct: results.bin_80_100nm_pct,
+                bin_100_120nm_pct: results.bin_100_120nm_pct,
+                bin_120_150nm_pct: results.bin_120_150nm_pct,
+                bin_150_200nm_pct: results.bin_150_200nm_pct,
+                bin_200_plus_pct: results.bin_200_plus_pct,
+              },
+              sizeDistribution: (results as any).size_distribution?.map((d: any) => ({
+                size: d.size || d.diameter,
+                concentration: d.concentration || d.count
+              })),
+            }
+            
+            exportNTAToExcel(exportData)
+            
+            toast({
+              title: "✅ Excel Export Complete",
+              description: `${sampleName}_NTA_Report.xlsx downloaded successfully`,
+            })
+          } catch (error) {
+            toast({
+              title: "Export Failed",
+              description: error instanceof Error ? error.message : "Failed to export Excel file",
+              variant: "destructive",
+            })
+          }
           break
         }
         
@@ -238,46 +229,48 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
         }
         
         case "PDF Report": {
-          // Generate markdown report using the proper generateMarkdownReport signature
-          const reportData = {
-            title: `NTA Analysis Report - ${sampleName}`,
-            sampleId: sampleName,
-            analysisType: "NTA" as const,
-            timestamp: new Date(),
-            results: {
-              "Median Size (nm)": results.median_size_nm?.toFixed(2) || "N/A",
-              "Mean Size (nm)": results.mean_size_nm?.toFixed(2) || "N/A",
-              "D10 (nm)": results.d10_nm?.toFixed(2) || "N/A",
-              "D50 (nm)": results.d50_nm?.toFixed(2) || "N/A",
-              "D90 (nm)": results.d90_nm?.toFixed(2) || "N/A",
-              "Concentration (particles/mL)": results.concentration_particles_ml?.toExponential(2) || "N/A",
-              "Temperature (°C)": results.temperature_celsius?.toFixed(1) || "N/A",
-              "pH": results.ph?.toFixed(2) || "N/A",
-              "Total Particles": results.total_particles?.toLocaleString() || "N/A"
-            } as Record<string, unknown>,
-            statistics: {
-              "50-80nm (%)": results.bin_50_80nm_pct || 0,
-              "80-100nm (%)": results.bin_80_100nm_pct || 0,
-              "100-120nm (%)": results.bin_100_120nm_pct || 0,
-              "120-150nm (%)": results.bin_120_150nm_pct || 0,
-              "150-200nm (%)": results.bin_150_200nm_pct || 0,
-              "200+nm (%)": results.bin_200_plus_pct || 0
-            },
-            charts: [
-              { title: "Size Distribution", description: "Histogram of particle size distribution" },
-              { title: "Concentration Profile", description: "Concentration vs size profile" },
-              { title: "EV Category Breakdown", description: "Pie chart of EV size categories" }
-            ],
-            notes: `File: ${fileName || "N/A"}\nProcessed: ${results.processed_at || new Date().toISOString()}`
+          // NEW: Real PDF export using jsPDF (P-003)
+          try {
+            toast({
+              title: "Generating PDF...",
+              description: "Please wait while we create your report",
+            })
+            
+            const exportData: NTAExportData = {
+              sampleId: sampleName,
+              fileName: fileName || undefined,
+              results: {
+                median_size_nm: results.median_size_nm,
+                mean_size_nm: results.mean_size_nm,
+                d10_nm: results.d10_nm,
+                d50_nm: results.d50_nm,
+                d90_nm: results.d90_nm,
+                concentration_particles_ml: results.concentration_particles_ml,
+                temperature_celsius: results.temperature_celsius,
+                ph: results.ph,
+                total_particles: results.total_particles,
+                bin_50_80nm_pct: results.bin_50_80nm_pct,
+                bin_80_100nm_pct: results.bin_80_100nm_pct,
+                bin_100_120nm_pct: results.bin_100_120nm_pct,
+                bin_120_150nm_pct: results.bin_120_150nm_pct,
+                bin_150_200nm_pct: results.bin_150_200nm_pct,
+                bin_200_plus_pct: results.bin_200_plus_pct,
+              },
+            }
+            
+            await exportNTAToPDF(exportData)
+            
+            toast({
+              title: "✅ PDF Export Complete",
+              description: `${sampleName}_NTA_Report.pdf downloaded successfully`,
+            })
+          } catch (error) {
+            toast({
+              title: "Export Failed",
+              description: error instanceof Error ? error.message : "Failed to export PDF file",
+              variant: "destructive",
+            })
           }
-          
-          const reportContent = generateMarkdownReport(reportData)
-          downloadMarkdownReport(reportContent, `${sampleName}_nta_report.md`)
-          
-          toast({
-            title: "Export Complete",
-            description: `NTA report exported as Markdown successfully.`,
-          })
           break
         }
         
@@ -518,7 +511,10 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
                   <Pin className="h-4 w-4" />
                 </Button>
               </div>
-              <NTASizeDistributionChart data={results} />
+              <NTASizeDistributionChart 
+                data={results} 
+                secondaryData={secondaryResults || undefined}
+              />
             </TabsContent>
 
             <TabsContent value="concentration" className="space-y-4">
@@ -541,7 +537,10 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
                   <Pin className="h-4 w-4" />
                 </Button>
               </div>
-              <ConcentrationProfileChart data={results} />
+              <ConcentrationProfileChart 
+                data={results} 
+                secondaryData={secondaryResults || undefined}
+              />
             </TabsContent>
 
             <TabsContent value="position" className="space-y-4">
