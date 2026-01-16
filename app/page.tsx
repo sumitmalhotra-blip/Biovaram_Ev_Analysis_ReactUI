@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, Suspense, lazy } from "react"
+import { useEffect, useState, Suspense, lazy } from "react"
 import { Header } from "@/components/header"
 import { TabNavigation } from "@/components/tab-navigation"
 import { Sidebar } from "@/components/sidebar"
@@ -26,8 +26,26 @@ function TabLoading() {
   )
 }
 
+// Full page loading for hydration
+function HydrationLoading() {
+  return (
+    <div className="h-screen w-screen flex items-center justify-center bg-background">
+      <div className="flex flex-col items-center gap-4">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <span className="text-muted-foreground">Loading analysis platform...</span>
+      </div>
+    </div>
+  )
+}
+
 export default function Home() {
   const { activeTab, isDarkMode } = useAnalysisStore()
+  const [hydrated, setHydrated] = useState(false)
+
+  // Handle hydration - wait for client-side state to be restored
+  useEffect(() => {
+    setHydrated(true)
+  }, [])
 
   useEffect(() => {
     if (isDarkMode) {
@@ -36,6 +54,11 @@ export default function Home() {
       document.documentElement.classList.remove("dark")
     }
   }, [isDarkMode])
+
+  // Show loading state until hydration is complete
+  if (!hydrated) {
+    return <HydrationLoading />
+  }
 
   return (
     <ErrorBoundary>

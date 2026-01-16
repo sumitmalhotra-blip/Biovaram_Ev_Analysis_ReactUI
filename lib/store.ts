@@ -1,4 +1,5 @@
 import { create } from "zustand"
+import { persist, createJSONStorage } from "zustand/middleware"
 import type { Sample as APISample, FCSResult, NTAResult, ProcessingJob } from "./api-client"
 
 export type TabType = "dashboard" | "flow-cytometry" | "nta" | "cross-compare" | "research-chat"
@@ -531,7 +532,9 @@ const initialSecondaryNTAAnalysis: SecondaryNTAAnalysisState = {
   error: null,
 }
 
-export const useAnalysisStore = create<AnalysisState>((set) => ({
+export const useAnalysisStore = create<AnalysisState>()(
+  persist(
+    (set) => ({
   // UI State
   activeTab: "dashboard",
   setActiveTab: (tab) => set({ activeTab: tab }),
@@ -883,4 +886,93 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
     
   resetGatingState: () =>
     set({ gatingState: initialGatingState }),
-}))
+}),
+    {
+      name: 'ev-analysis-storage', // unique name for localStorage key
+      storage: createJSONStorage(() => localStorage),
+      // Selectively persist only important state (not File objects or transient state)
+      partialize: (state) => ({
+        // UI preferences
+        activeTab: state.activeTab,
+        sidebarCollapsed: state.sidebarCollapsed,
+        isDarkMode: state.isDarkMode,
+        // Analysis results (excluding File objects which can't be serialized)
+        fcsAnalysis: {
+          ...state.fcsAnalysis,
+          file: null, // Don't persist File objects
+          isAnalyzing: false,
+        },
+        secondaryFcsAnalysis: {
+          ...state.secondaryFcsAnalysis,
+          file: null,
+          isAnalyzing: false,
+        },
+        ntaAnalysis: {
+          ...state.ntaAnalysis,
+          file: null,
+          isAnalyzing: false,
+        },
+        secondaryNtaAnalysis: {
+          ...state.secondaryNtaAnalysis,
+          file: null,
+          isAnalyzing: false,
+        },
+        // Settings
+        overlayConfig: state.overlayConfig,
+        ntaOverlayEnabled: state.ntaOverlayEnabled,
+        fcsAnalysisSettings: state.fcsAnalysisSettings,
+        ntaAnalysisSettings: state.ntaAnalysisSettings,
+        crossComparisonSettings: state.crossComparisonSettings,
+        // Gating state (preserve gates between refreshes)
+        gatingState: {
+          ...state.gatingState,
+          isDrawing: false,
+          drawingPoints: [],
+        },
+        // Chat history
+        chatMessages: state.chatMessages,
+        // Pinned charts and saved images
+        pinnedCharts: state.pinnedCharts,
+        savedImages: state.savedImages,
+        // Local samples (not API samples which should be re-fetched)
+        samples: state.samples,
+      }),
+      // Handle date serialization/deserialization
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          // Convert date strings back to Date objects
+          if (state.chatMessages) {
+            state.chatMessages = state.chatMessages.map(msg => ({
+              ...msg,
+              timestamp: new Date(msg.timestamp)
+            }))
+          }
+          if (state.pinnedCharts) {
+            state.pinnedCharts = state.pinnedCharts.map(chart => ({
+              ...chart,
+              timestamp: new Date(chart.timestamp)
+            }))
+          }
+          if (state.savedImages) {
+            state.savedImages = state.savedImages.map(img => ({
+              ...img,
+              timestamp: new Date(img.timestamp)
+            }))
+          }
+          if (state.gatingState?.gates) {
+            state.gatingState.gates = state.gatingState.gates.map(gate => ({
+              ...gate,
+              createdAt: new Date(gate.createdAt)
+            }))
+          }
+          if (state.samples) {
+            state.samples = state.samples.map(sample => ({
+              ...sample,
+              uploadedAt: new Date(sample.uploadedAt)
+            }))
+          }
+        }
+      },
+    }
+  )
+)

@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next"
 import { Inter } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { SessionProvider } from "@/components/session-provider"
+import { StoreProvider } from "@/components/store-provider"
 import "./globals.css"
 
 // PERFORMANCE: Optimize font loading with display swap and subset
@@ -49,7 +50,9 @@ export default function RootLayout({
       </head>
       <body className={`${inter.className} antialiased`}>
         <SessionProvider>
-          {children}
+          <StoreProvider>
+            {children}
+          </StoreProvider>
         </SessionProvider>
         <Analytics />
       </body>
