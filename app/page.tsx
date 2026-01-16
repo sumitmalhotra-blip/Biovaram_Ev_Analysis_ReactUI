@@ -1,11 +1,11 @@
 "use client"
 
-import { useEffect, useState, Suspense, lazy } from "react"
+import { useEffect, Suspense, lazy } from "react"
 import { Header } from "@/components/header"
 import { TabNavigation } from "@/components/tab-navigation"
 import { Sidebar } from "@/components/sidebar"
 import { ErrorBoundary } from "@/components/error-boundary"
-import { useAnalysisStore } from "@/lib/store"
+import { useAnalysisStore, useHasHydrated } from "@/lib/store"
 import { Toaster } from "@/components/ui/toaster"
 import { Loader2 } from "lucide-react"
 
@@ -26,10 +26,10 @@ function TabLoading() {
   )
 }
 
-// Full page loading for hydration
+// Full page loading for hydration - always render same structure on server and client
 function HydrationLoading() {
   return (
-    <div className="h-screen w-screen flex items-center justify-center bg-background">
+    <div className="h-screen w-screen flex items-center justify-center bg-background" suppressHydrationWarning>
       <div className="flex flex-col items-center gap-4">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
         <span className="text-muted-foreground">Loading analysis platform...</span>
@@ -39,13 +39,8 @@ function HydrationLoading() {
 }
 
 export default function Home() {
+  const hasHydrated = useHasHydrated()
   const { activeTab, isDarkMode } = useAnalysisStore()
-  const [hydrated, setHydrated] = useState(false)
-
-  // Handle hydration - wait for client-side state to be restored
-  useEffect(() => {
-    setHydrated(true)
-  }, [])
 
   useEffect(() => {
     if (isDarkMode) {
@@ -55,8 +50,8 @@ export default function Home() {
     }
   }, [isDarkMode])
 
-  // Show loading state until hydration is complete
-  if (!hydrated) {
+  // Show loading state until Zustand store is hydrated from localStorage
+  if (!hasHydrated) {
     return <HydrationLoading />
   }
 

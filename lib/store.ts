@@ -1,5 +1,6 @@
 import { create } from "zustand"
 import { persist, createJSONStorage } from "zustand/middleware"
+import { useState, useEffect } from "react"
 import type { Sample as APISample, FCSResult, NTAResult, ProcessingJob } from "./api-client"
 
 export type TabType = "dashboard" | "flow-cytometry" | "nta" | "cross-compare" | "research-chat"
@@ -532,9 +533,17 @@ const initialSecondaryNTAAnalysis: SecondaryNTAAnalysisState = {
   error: null,
 }
 
-export const useAnalysisStore = create<AnalysisState>()(
+// Hydration state tracking
+interface HydrationState {
+  _hasHydrated: boolean
+}
+
+export const useAnalysisStore = create<AnalysisState & HydrationState>()(
   persist(
     (set) => ({
+  // Hydration tracking
+  _hasHydrated: false,
+  
   // UI State
   activeTab: "dashboard",
   setActiveTab: (tab) => set({ activeTab: tab }),
@@ -937,9 +946,15 @@ export const useAnalysisStore = create<AnalysisState>()(
         // Local samples (not API samples which should be re-fetched)
         samples: state.samples,
       }),
-      // Handle date serialization/deserialization
-      onRehydrateStorage: () => (state) => {
+      // Handle date serialization/deserialization and mark hydration complete
+      onRehydrateStorage: () => (state, error) => {
+        if (error) {
+          console.error('Zustand hydration error:', error)
+        }
         if (state) {
+          // Mark hydration as complete
+          state._hasHydrated = true
+          
           // Convert date strings back to Date objects
           if (state.chatMessages) {
             state.chatMessages = state.chatMessages.map(msg => ({
@@ -973,6 +988,34 @@ export const useAnalysisStore = create<AnalysisState>()(
           }
         }
       },
+      // Skip hydration on server side
+      skipHydration: true,
     }
   )
 )
+
+// Helper hook for hydration status
+export const useHasHydrated = () => {
+  const [hasHydrated, setHasHydrated] = useState(false)
+  
+  useEffect(() => {
+    // Manually trigger rehydration on client
+    useAnalysisStore.persist.rehydrate()
+    
+    // Check hydration status
+    const unsubFinishHydration = useAnalysisStore.persist.onFinishHydration(() => {
+      setHasHydrated(true)
+    })
+    
+    // If already hydrated (e.g., fast reload)
+    if (useAnalysisStore.persist.hasHydrated()) {
+      setHasHydrated(true)
+    }
+    
+    return () => {
+      unsubFinishHydration()
+    }
+  }, [])
+  
+  return hasHydrated
+}
