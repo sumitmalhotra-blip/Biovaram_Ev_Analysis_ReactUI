@@ -1,0 +1,9 @@
+{
+  "nta_sample_volume_ul": 1000,
+  "nanofacs_sample_volume_ul": 23,
+  "nanofacs_final_volume_ul": 150,
+  "volume_reduction_factor": 43.47826086956522,
+  "additional_dilution_factor": 6.521739130434782,
+  "total_dilution_factor": 283.5538752362949,
+  "notes": "From Jan 21, 2026 meeting with Surya - explains NTA vs FCS particle count differences"
+}

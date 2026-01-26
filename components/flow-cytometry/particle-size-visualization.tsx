@@ -3,86 +3,174 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { Sparkles, Circle } from "lucide-react"
+import { Sparkles } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useAnalysisStore, type SizeRange } from "@/lib/store"
+import { useMemo } from "react"
+import { type ScatterDataPoint } from "./charts/scatter-plot-with-selection"
 
 interface SizeCategoryData {
   name: string
   range: string
+  min: number
+  max: number
   count: number
   percentage: number
   color: string
   bgColor: string
   borderColor: string
   description: string
-  icon: string
 }
 
 interface ParticleSizeVisualizationProps {
   totalEvents: number
   medianSize?: number
-  sizeCategories?: {
-    small: number
-    medium: number
-    large: number
+  // Scatter data with diameter values for calculating custom bins
+  scatterData?: ScatterDataPoint[]
+  // Legacy: custom bins from reanalyze endpoint
+  customBins?: Record<string, number>
+}
+
+// Generate color classes from hex color
+function getColorClasses(hexColor: string): { text: string; bg: string; border: string } {
+  // Map common colors to Tailwind classes
+  const colorMap: Record<string, { text: string; bg: string; border: string }> = {
+    "#22c55e": { text: "text-green-400", bg: "bg-green-500/20", border: "border-green-500/50" },
+    "#3b82f6": { text: "text-blue-400", bg: "bg-blue-500/20", border: "border-blue-500/50" },
+    "#a855f7": { text: "text-purple-400", bg: "bg-purple-500/20", border: "border-purple-500/50" },
+    "#f59e0b": { text: "text-amber-400", bg: "bg-amber-500/20", border: "border-amber-500/50" },
+    "#ef4444": { text: "text-red-400", bg: "bg-red-500/20", border: "border-red-500/50" },
+    "#06b6d4": { text: "text-cyan-400", bg: "bg-cyan-500/20", border: "border-cyan-500/50" },
+    "#8b5cf6": { text: "text-violet-400", bg: "bg-violet-500/20", border: "border-violet-500/50" },
+    "#ec4899": { text: "text-pink-400", bg: "bg-pink-500/20", border: "border-pink-500/50" },
   }
+  
+  // Find closest match or use default
+  return colorMap[hexColor] || { text: "text-primary", bg: "bg-primary/20", border: "border-primary/50" }
+}
+
+// Get description based on size range
+function getRangeDescription(min: number, max: number): string {
+  if (max <= 50) return "Exomeres, small EVs, protein aggregates"
+  if (min >= 30 && max <= 100) return "Small EVs, exomeres"
+  if (min >= 50 && max <= 150) return "Small exosomes"
+  if (min >= 100 && max <= 200) return "Exosomes, classic EV size range"
+  if (min >= 200 && max <= 500) return "Microvesicles, large EVs"
+  if (min >= 500) return "Large microvesicles, apoptotic bodies"
+  return "Extracellular vesicles"
 }
 
 export function ParticleSizeVisualization({
   totalEvents,
   medianSize,
-  sizeCategories,
+  scatterData,
+  customBins,
 }: ParticleSizeVisualizationProps) {
-  // Use provided data or calculate defaults
-  const smallCount = sizeCategories?.small ?? Math.floor(totalEvents * 0.15)
-  const mediumCount = sizeCategories?.medium ?? Math.floor(totalEvents * 0.70)
-  const largeCount = sizeCategories?.large ?? Math.floor(totalEvents * 0.15)
-
-  const totalCounted = smallCount + mediumCount + largeCount
-  const smallPct = (smallCount / totalCounted) * 100
-  const mediumPct = (mediumCount / totalCounted) * 100
-  const largePct = (largeCount / totalCounted) * 100
-
-  const categories: SizeCategoryData[] = [
-    {
-      name: "Small Particles",
-      range: "< 50 nm",
-      count: smallCount,
-      percentage: smallPct,
-      color: "text-cyan-400",
-      bgColor: "bg-cyan-500/20",
-      borderColor: "border-cyan-500/50",
-      description: "Small EVs, exomeres, protein aggregates",
-      icon: "⚫",
-    },
-    {
-      name: "Medium Particles",
-      range: "50-200 nm",
-      count: mediumCount,
-      percentage: mediumPct,
-      color: "text-purple-400",
-      bgColor: "bg-purple-500/20",
-      borderColor: "border-purple-500/50",
-      description: "Exosomes, classic EV size range",
-      icon: "⚫",
-    },
-    {
-      name: "Large Particles",
-      range: "> 200 nm",
-      count: largeCount,
-      percentage: largePct,
-      color: "text-amber-400",
-      bgColor: "bg-amber-500/20",
-      borderColor: "border-amber-500/50",
-      description: "Microvesicles, large EVs, apoptotic bodies",
-      icon: "⚫",
-    },
-  ]
+  const { fcsAnalysis } = useAnalysisStore()
+  
+  // Get custom size ranges from the store
+  const sizeRanges = fcsAnalysis.sizeRanges
+  
+  // Calculate bin counts from scatter data (which already has diameter values)
+  const calculatedBins = useMemo(() => {
+    if (!sizeRanges || sizeRanges.length === 0 || !scatterData || scatterData.length === 0) {
+      console.log('[ParticleSizeViz] Missing data:', { 
+        sizeRanges: sizeRanges?.length || 0, 
+        scatterData: scatterData?.length || 0 
+      })
+      return {}
+    }
+    
+    // Get valid diameters from scatter data
+    const validSizes = scatterData
+      .filter((p) => p.diameter !== undefined && p.diameter !== null && p.diameter > 0)
+      .map((p) => p.diameter as number)
+    
+    console.log('[ParticleSizeViz] Valid sizes from scatter data:', {
+      totalScatterPoints: scatterData.length,
+      validSizeCount: validSizes.length,
+      sampleDiameters: validSizes.slice(0, 10),
+      sizeRanges: sizeRanges.map(r => `${r.name}: ${r.min}-${r.max}`)
+    })
+    
+    if (validSizes.length === 0) {
+      console.log('[ParticleSizeViz] No valid sizes found in scatter data')
+      return {}
+    }
+    
+    // Calculate counts for each custom range
+    const bins: Record<string, number> = {}
+    
+    sizeRanges.forEach((range) => {
+      const count = validSizes.filter(
+        (size) => size >= range.min && size < range.max
+      ).length
+      bins[range.name] = count
+    })
+    
+    // Scale to full dataset (scatter data is sampled)
+    // Use validSizes.length for accurate scaling (not all scatter points have diameters)
+    const scaleFactor = totalEvents / Math.max(scatterData.length, 1)
+    Object.keys(bins).forEach(key => {
+      bins[key] = Math.round(bins[key] * scaleFactor)
+    })
+    
+    console.log('[ParticleSizeViz] Calculated bins:', bins, 'scaleFactor:', scaleFactor)
+    
+    return bins
+  }, [sizeRanges, scatterData, totalEvents])
+  
+  // Build categories from custom ranges (always use store's sizeRanges)
+  const categories: SizeCategoryData[] = useMemo(() => {
+    // Default ranges if store doesn't have any
+    const ranges = (sizeRanges && sizeRanges.length > 0) ? sizeRanges : [
+      { name: "Small EVs", min: 30, max: 100, color: "#22c55e" },
+      { name: "Medium EVs", min: 100, max: 200, color: "#3b82f6" },
+      { name: "Large EVs", min: 200, max: 500, color: "#a855f7" },
+    ]
+    
+    // Use calculated bins if available
+    const bins = Object.keys(calculatedBins).length > 0 ? calculatedBins : customBins || {}
+    
+    // Calculate total for percentages - use sum of bins or totalEvents
+    const totalInBins = Object.values(bins).reduce((sum, count) => sum + count, 0)
+    const percentageBase = totalInBins > 0 ? totalInBins : totalEvents
+    
+    return ranges.map((range) => {
+      const count = bins[range.name] || 0
+      const colorClasses = getColorClasses(range.color || "#3b82f6")
+      
+      return {
+        name: range.name,
+        range: `${range.min}-${range.max} nm`,
+        min: range.min,
+        max: range.max,
+        count: count,
+        percentage: percentageBase > 0 ? (count / percentageBase) * 100 : 0,
+        color: colorClasses.text,
+        bgColor: colorClasses.bg,
+        borderColor: colorClasses.border,
+        description: getRangeDescription(range.min, range.max),
+      }
+    })
+  }, [sizeRanges, totalEvents, calculatedBins, customBins])
 
   // Determine dominant population
-  const dominantCategory = categories.reduce((prev, current) =>
-    current.percentage > prev.percentage ? current : prev
-  )
+  const dominantCategory = useMemo(() => {
+    return categories.reduce((prev, current) =>
+      current.percentage > prev.percentage ? current : prev
+    )
+  }, [categories])
+
+  // Calculate circle sizes proportionally
+  const maxCircleSize = 80
+  const minCircleSize = 32
+  const maxPercentage = Math.max(...categories.map(c => c.percentage), 1)
+  
+  const getCircleSize = (percentage: number): number => {
+    const ratio = percentage / maxPercentage
+    return minCircleSize + (maxCircleSize - minCircleSize) * ratio
+  }
 
   return (
     <Card className="card-3d overflow-hidden">
@@ -116,13 +204,24 @@ export function ParticleSizeVisualization({
 
         {/* Visual Size Representation */}
         <div className="space-y-2">
-          <div className="text-sm font-medium text-muted-foreground mb-3">Size Category Breakdown</div>
+          <div className="text-sm font-medium text-muted-foreground mb-3">
+            Size Category Breakdown
+          </div>
+
+          {/* Show warning if no diameter data available */}
+          {Object.keys(calculatedBins).length === 0 && (
+            <div className="text-center p-4 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-600 text-sm mb-4">
+              <p className="font-medium">Size data not yet calculated</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Waiting for Mie theory calculations from FCS data...
+              </p>
+            </div>
+          )}
 
           {/* Visual Circles showing relative sizes */}
-          <div className="flex items-end justify-center gap-6 h-32 p-4 rounded-lg bg-linear-to-b from-secondary/50 to-transparent border">
-            {categories.map((category, idx) => {
-              const sizes = [32, 56, 80] // Small, Medium, Large visual sizes
-              const size = sizes[idx]
+          <div className="flex items-end justify-center gap-4 flex-wrap min-h-32 p-4 rounded-lg bg-linear-to-b from-secondary/50 to-transparent border">
+            {categories.map((category) => {
+              const size = getCircleSize(category.percentage)
               return (
                 <div key={category.name} className="flex flex-col items-center gap-2">
                   <div
@@ -137,7 +236,9 @@ export function ParticleSizeVisualization({
                       height: `${size}px`,
                     }}
                   >
-                    <span className={cn("text-xs", category.color)}>{category.percentage.toFixed(0)}%</span>
+                    <span className={cn("text-xs", category.color)}>
+                      {category.percentage.toFixed(0)}%
+                    </span>
                   </div>
                   <div className="text-xs text-center">
                     <div className={cn("font-medium", category.color)}>{category.range}</div>
@@ -163,7 +264,10 @@ export function ParticleSizeVisualization({
               <div className="flex items-start justify-between mb-3">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className={cn("text-2xl", category.color)}>{category.icon}</span>
+                    <span 
+                      className="w-4 h-4 rounded-full" 
+                      style={{ backgroundColor: sizeRanges?.find(r => r.name === category.name)?.color || undefined }}
+                    />
                     <span className={cn("font-semibold", category.color)}>{category.name}</span>
                     <Badge variant="outline" className="text-xs">
                       {category.range}
@@ -172,8 +276,12 @@ export function ParticleSizeVisualization({
                   <p className="text-xs text-muted-foreground">{category.description}</p>
                 </div>
                 <div className="text-right">
-                  <div className={cn("text-2xl font-bold", category.color)}>{category.percentage.toFixed(1)}%</div>
-                  <div className="text-xs text-muted-foreground">{category.count.toLocaleString()} events</div>
+                  <div className={cn("text-2xl font-bold", category.color)}>
+                    {category.percentage.toFixed(1)}%
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {category.count.toLocaleString()} events
+                  </div>
                 </div>
               </div>
 
@@ -197,7 +305,9 @@ export function ParticleSizeVisualization({
               {dominantCategory.name.toLowerCase()}
             </span>{" "}
             dominant profile ({dominantCategory.percentage.toFixed(1)}%). This is{" "}
-            {dominantCategory.name.includes("Medium") ? "typical" : "noteworthy"} for EV preparations.
+            {dominantCategory.name.toLowerCase().includes("medium") || dominantCategory.name.toLowerCase().includes("exosome") 
+              ? "typical" 
+              : "noteworthy"} for EV preparations.
           </p>
         </div>
       </CardContent>

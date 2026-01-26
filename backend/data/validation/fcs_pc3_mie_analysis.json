@@ -1,0 +1,19 @@
+{
+  "sample": "PC3 EXO1",
+  "total_events": 914326,
+  "positive_events": 811588,
+  "vfsc_percentiles": {
+    "P10": 198.3000030517578,
+    "P25": 405.5,
+    "P50": 696.2999877929688,
+    "P75": 1020.2999877929688,
+    "P90": 1336.0
+  },
+  "mie_parameters": {
+    "wavelength_nm": 488.0,
+    "n_particle": 1.4,
+    "n_medium": 1.33
+  },
+  "calibration_status": "requires_polystyrene_standards",
+  "notes": "Relative scatter values shown; absolute sizing needs calibration"
+}

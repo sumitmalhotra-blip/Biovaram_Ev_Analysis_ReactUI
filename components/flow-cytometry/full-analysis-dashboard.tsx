@@ -20,6 +20,7 @@ import { ScatterPlotChart, type ScatterDataPoint } from "./charts/scatter-plot-w
 import { InteractiveScatterChart } from "./charts/interactive-scatter-chart"
 import { TheoryVsMeasuredChart } from "./charts/theory-vs-measured-chart"
 import { DiameterVsSSCChart, type DiameterDataPoint } from "./charts/diameter-vs-ssc-chart"
+import { EventVsSizeChart } from "./charts/event-vs-size-chart"
 import { useAnalysisStore, type AnomalyDetectionResult } from "@/lib/store"
 import { useToast } from "@/hooks/use-toast"
 import type { FCSResult } from "@/lib/api-client"
@@ -40,7 +41,7 @@ interface FullAnalysisDashboardProps {
   secondarySizeData?: number[]
 }
 
-type ChartType = "distribution" | "fsc-ssc" | "diameter-ssc" | "theory"
+type ChartType = "distribution" | "fsc-ssc" | "diameter-ssc" | "theory" | "event-size"
 
 interface ChartConfig {
   id: ChartType
@@ -73,6 +74,12 @@ const CHART_CONFIGS: ChartConfig[] = [
     title: "Theory vs Measured", 
     description: "Mie prediction comparison",
     pinType: "line"
+  },
+  { 
+    id: "event-size", 
+    title: "Event vs Size", 
+    description: "Per-event calculated particle sizes",
+    pinType: "scatter"
   },
 ]
 
@@ -195,6 +202,17 @@ export function FullAnalysisDashboard({
         )
       case "theory":
         return <TheoryVsMeasuredChart />
+      case "event-size":
+        return sampleId ? (
+          <EventVsSizeChart
+            sampleId={sampleId}
+            title="Event vs Size"
+          />
+        ) : (
+          <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">
+            <span>Upload a sample to view per-event sizes</span>
+          </div>
+        )
       default:
         return null
     }
@@ -327,6 +345,11 @@ export function FullAnalysisDashboard({
                   {config.id === "diameter-ssc" && (
                     <Badge variant="outline" className="text-[10px] h-4 px-1 bg-purple/20 text-purple border-purple/50">
                       Mie
+                    </Badge>
+                  )}
+                  {config.id === "event-size" && (
+                    <Badge variant="outline" className="text-[10px] h-4 px-1 bg-blue-500/20 text-blue-500 border-blue-500/50">
+                      Per-Event
                     </Badge>
                   )}
                 </div>

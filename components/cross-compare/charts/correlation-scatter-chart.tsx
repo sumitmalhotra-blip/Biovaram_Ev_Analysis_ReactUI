@@ -235,12 +235,12 @@ export function CorrelationScatterChart({
                 strokeWidth={1}
               />
 
-              {/* Regression line */}
+              {/* Regression line - use invisible shape to only show line */}
               <Scatter
                 name="Regression Line"
                 data={regressionLine}
                 line={{ stroke: "hsl(var(--chart-3))", strokeWidth: 2 }}
-                shape={<></>}
+                shape={(props: any) => <circle {...props} r={0} />}
                 legendType="line"
               />
 

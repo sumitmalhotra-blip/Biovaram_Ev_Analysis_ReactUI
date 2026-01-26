@@ -383,9 +383,14 @@ export function SampleDetailsModal({
                         <div className="flex items-center gap-2">
                           <FlaskConical className="h-4 w-4 text-blue-500" />
                           <span className="text-sm font-medium">FCS File</span>
+                          {fcsResults.length > 0 && (
+                            <Badge variant="secondary" className="text-xs">
+                              {fcsResults.length} result{fcsResults.length > 1 ? 's' : ''}
+                            </Badge>
+                          )}
                         </div>
                         <div className="flex items-center gap-1">
-                          {onOpenInTab && fcsResults.length > 0 && (
+                          {onOpenInTab && (
                             <Button 
                               variant="outline" 
                               size="sm"
@@ -407,9 +412,14 @@ export function SampleDetailsModal({
                         <div className="flex items-center gap-2">
                           <Microscope className="h-4 w-4 text-green-500" />
                           <span className="text-sm font-medium">NTA File</span>
+                          {ntaResults.length > 0 && (
+                            <Badge variant="secondary" className="text-xs">
+                              {ntaResults.length} result{ntaResults.length > 1 ? 's' : ''}
+                            </Badge>
+                          )}
                         </div>
                         <div className="flex items-center gap-1">
-                          {onOpenInTab && ntaResults.length > 0 && (
+                          {onOpenInTab && (
                             <Button 
                               variant="outline" 
                               size="sm"

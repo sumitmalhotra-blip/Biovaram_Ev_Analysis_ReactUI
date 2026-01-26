@@ -1,0 +1,41 @@
+{
+  "analysis_date": "2026-01-22T11:53:50.107291",
+  "files": {
+    "low": {
+      "file": "Nano Vis Low.fcs",
+      "description": "Small particles (40-150nm)",
+      "expected_range": [
+        40,
+        150
+      ],
+      "event_count": 179465,
+      "valid_events": 166665,
+      "statistics": {
+        "min": 46.0,
+        "max": 150.0,
+        "mean": 111.19736,
+        "median": 150.0,
+        "std": 42.90484645154204,
+        "pct_in_range": 100.0
+      }
+    },
+    "high": {
+      "file": "Nano Vis High.fcs",
+      "description": "Large particles (140-1000nm)",
+      "expected_range": [
+        140,
+        1000
+      ],
+      "event_count": 124189,
+      "valid_events": 108818,
+      "statistics": {
+        "min": 140.0,
+        "max": 1000.0,
+        "mean": 481.04854,
+        "median": 140.0,
+        "std": 391.1651536421265,
+        "pct_in_range": 100.0
+      }
+    }
+  }
+}

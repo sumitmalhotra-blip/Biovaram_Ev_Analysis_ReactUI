@@ -20,7 +20,7 @@ import { useApi } from "@/hooks/use-api"
 import { NTATemperatureSettings } from "./temperature-settings"
 import { NTABestPracticesGuide } from "./best-practices-guide"
 import { NTAAnalysisResults } from "./nta-analysis-results"
-import { ExperimentalConditionsDialog, type ExperimentalConditions } from "@/components/experimental-conditions-dialog"
+import { ExperimentalConditionsDialog, type ExperimentalConditions, type FileMetadata } from "@/components/experimental-conditions-dialog"
 import { cn } from "@/lib/utils"
 
 export function NTATab() {
@@ -180,6 +180,7 @@ export function NTATab() {
           onSave={handleSaveConditions}
           sampleType="NTA"
           sampleId={justUploadedSampleId || undefined}
+          initialMetadata={ntaAnalysis.fileMetadata}
         />
       </div>
     )

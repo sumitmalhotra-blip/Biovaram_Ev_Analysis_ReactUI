@@ -172,6 +172,24 @@ export interface ProcessingJob {
   error_message?: string;
 }
 
+// Metadata extracted from FCS/NTA files for auto-filling experimental conditions
+export interface FileMetadata {
+  operator?: string | null;
+  acquisition_date?: string | null;
+  acquisition_time?: string | null;
+  temperature_celsius?: number | string | null;
+  ph?: number | string | null;
+  dilution_factor?: number | string | null;
+  cytometer?: string | null;
+  instrument?: string | null;
+  sample_name?: string | null;
+  specimen?: string | null;
+  channels?: string[] | null;
+  laser_wavelength_nm?: number | string | null;
+  viscosity?: number | string | null;
+  conductivity?: number | string | null;
+}
+
 export interface UploadResponse {
   success: boolean;
   id: number;
@@ -187,6 +205,7 @@ export interface UploadResponse {
   message: string;
   fcs_results?: FCSResult;
   nta_results?: NTAResult;
+  file_metadata?: FileMetadata;  // Auto-extracted metadata from file
 }
 
 export interface HealthResponse {
@@ -799,7 +818,12 @@ class ApiClient {
     sampleId: string,
     xChannel: string,
     yChannel: string,
-    maxPoints: number = 5000
+    maxPoints: number = 5000,
+    mieParams?: {
+      wavelength_nm?: number;
+      n_particle?: number;
+      n_medium?: number;
+    }
   ): Promise<{
     sample_id: string;
     total_events: number;
@@ -813,6 +837,17 @@ class ApiClient {
         fsc_channel: xChannel,
         ssc_channel: yChannel,
       });
+      
+      // Add Mie parameters if provided
+      if (mieParams?.wavelength_nm) {
+        params.append("wavelength_nm", mieParams.wavelength_nm.toString());
+      }
+      if (mieParams?.n_particle) {
+        params.append("n_particle", mieParams.n_particle.toString());
+      }
+      if (mieParams?.n_medium) {
+        params.append("n_medium", mieParams.n_medium.toString());
+      }
 
       const response = await fetch(
         `${this.baseUrl}/samples/${sampleId}/scatter-data?${params.toString()}`,
@@ -856,6 +891,10 @@ class ApiClient {
       x_channel: string;
       y_channel: string;
       include_diameter_stats?: boolean;
+      // Mie parameters for size calculations
+      wavelength_nm?: number;
+      n_particle?: number;
+      n_medium?: number;
     }
   ): Promise<{
     sample_id: string;
@@ -942,7 +981,14 @@ class ApiClient {
     }
   }
 
-  async getSizeBins(sampleId: string): Promise<{
+  async getSizeBins(
+    sampleId: string,
+    mieParams?: {
+      wavelength_nm?: number;
+      n_particle?: number;
+      n_medium?: number;
+    }
+  ): Promise<{
     sample_id: string;
     total_events: number;
     bins: {
@@ -963,7 +1009,25 @@ class ApiClient {
     };
   }> {
     try {
-      const response = await fetch(`${this.baseUrl}/samples/${sampleId}/size-bins`, {
+      const params = new URLSearchParams();
+      
+      // Add Mie parameters if provided
+      if (mieParams?.wavelength_nm) {
+        params.append("wavelength_nm", mieParams.wavelength_nm.toString());
+      }
+      if (mieParams?.n_particle) {
+        params.append("n_particle", mieParams.n_particle.toString());
+      }
+      if (mieParams?.n_medium) {
+        params.append("n_medium", mieParams.n_medium.toString());
+      }
+      
+      const queryString = params.toString();
+      const url = queryString 
+        ? `${this.baseUrl}/samples/${sampleId}/size-bins?${queryString}`
+        : `${this.baseUrl}/samples/${sampleId}/size-bins`;
+      
+      const response = await fetch(url, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
       });
@@ -1641,6 +1705,210 @@ class ApiClient {
       return this.handleResponse(response);
     } catch (error) {
       console.error("[API] Multi-metric temporal analysis failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  // ============================================================================
+  // Data Split API: Metadata and Values
+  // ============================================================================
+
+  /**
+   * Get FCS file metadata only (no event data)
+   */
+  async getFCSMetadata(sampleId: string): Promise<{
+    sample_id: string;
+    file_info: {
+      file_name: string;
+      file_size_bytes: number;
+      file_size_mb: number;
+    };
+    acquisition: {
+      date: string;
+      time: string;
+      cytometer: string;
+      operator: string;
+      specimen: string;
+    };
+    data_info: {
+      total_events: number;
+      parameter_count: number;
+      channel_count: number;
+      channel_names: string[];
+    };
+    channels: Record<string, { stain: string; range: string; index: number }>;
+    identifiers: {
+      sample_id: string;
+      biological_sample_id: string;
+      measurement_id: string;
+      is_baseline: boolean;
+    };
+  }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/samples/${sampleId}/fcs/metadata`);
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Get FCS metadata failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  /**
+   * Get FCS per-event size values calculated using Mie theory
+   */
+  async getFCSValues(
+    sampleId: string,
+    options?: {
+      wavelength_nm?: number;
+      n_particle?: number;
+      n_medium?: number;
+      max_events?: number;
+      include_raw_channels?: boolean;
+    }
+  ): Promise<{
+    sample_id: string;
+    mie_parameters: {
+      wavelength_nm: number;
+      n_particle: number;
+      n_medium: number;
+    };
+    data_info: {
+      total_events: number;
+      returned_events: number;
+      valid_sizes: number;
+      invalid_sizes: number;
+      sampled: boolean;
+      fsc_channel: string;
+      ssc_channel: string | null;
+    };
+    statistics: {
+      count: number;
+      mean_nm: number;
+      median_nm: number;
+      std_nm: number;
+      min_nm: number;
+      max_nm: number;
+      d10_nm: number;
+      d50_nm: number;
+      d90_nm: number;
+    } | null;
+    size_distribution: Record<string, number> | null;
+    events: Array<{
+      event_id: number;
+      diameter_nm: number | null;
+      valid: boolean;
+      fsc?: number;
+      ssc?: number;
+    }>;
+  }> {
+    try {
+      const params = new URLSearchParams();
+      if (options?.wavelength_nm) params.append("wavelength_nm", options.wavelength_nm.toString());
+      if (options?.n_particle) params.append("n_particle", options.n_particle.toString());
+      if (options?.n_medium) params.append("n_medium", options.n_medium.toString());
+      if (options?.max_events) params.append("max_events", options.max_events.toString());
+      if (options?.include_raw_channels) params.append("include_raw_channels", "true");
+
+      const url = `${this.baseUrl}/samples/${sampleId}/fcs/values${params.toString() ? `?${params}` : ""}`;
+      const response = await fetch(url);
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Get FCS values failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  /**
+   * Get NTA file metadata only (no measurement data)
+   */
+  async getNTAMetadata(sampleId: string): Promise<{
+    sample_id: string;
+    file_info: {
+      file_name: string;
+      file_size_bytes: number;
+      measurement_type: string;
+    };
+    sample_info: {
+      sample_name: string;
+      operator: string;
+      experiment: string;
+      electrolyte: string;
+    };
+    instrument: {
+      instrument_serial: string;
+      cell_serial: string;
+      software_version: string;
+      sop: string;
+    };
+    acquisition: {
+      date: string;
+      time: string;
+      temperature: number | null;
+      viscosity: number | null;
+      ph: number | null;
+      conductivity: number | null;
+    };
+    measurement_params: {
+      num_positions: number | null;
+      num_traces: number | null;
+      sensitivity: number | null;
+      shutter: number | null;
+      laser_wavelength: number | null;
+      dilution: number;
+      conc_correction: number;
+    };
+    quality: {
+      cell_check_result: string;
+      detected_particles: number | null;
+      scattering_intensity: number | null;
+    };
+  }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/samples/${sampleId}/nta/metadata`);
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Get NTA metadata failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  /**
+   * Get NTA size and concentration values
+   */
+  async getNTAValues(sampleId: string): Promise<{
+    sample_id: string;
+    measurement_type: string;
+    data_info: {
+      total_bins: number;
+      size_column: string;
+      concentration_column: string | null;
+    };
+    size_statistics: {
+      count: number;
+      mean_nm: number;
+      weighted_mean_nm: number;
+      median_nm: number;
+      std_nm: number;
+      min_nm: number;
+      max_nm: number;
+      mode_nm: number;
+    };
+    concentration_statistics: {
+      total_particles_ml: number;
+      max_concentration: number;
+      peak_size_nm: number;
+    } | null;
+    values: Array<{
+      bin_id: number;
+      size_nm: number;
+      concentration_particles_ml?: number;
+    }>;
+  }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/samples/${sampleId}/nta/values`);
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Get NTA values failed:", error);
       this.handleNetworkError(error);
     }
   }

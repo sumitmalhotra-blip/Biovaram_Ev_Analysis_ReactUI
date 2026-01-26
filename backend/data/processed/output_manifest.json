@@ -1,6 +1,0 @@
-{
-  "sample_metadata": "C:\\CRM IT Project\\EV (Exosome) Project\\data\\processed\\sample_metadata.parquet",
-  "combined_features": "C:\\CRM IT Project\\EV (Exosome) Project\\data\\processed\\combined_features.parquet",
-  "baseline_comparison": "C:\\CRM IT Project\\EV (Exosome) Project\\data\\processed\\baseline_comparison.parquet",
-  "integration_summary": "C:\\CRM IT Project\\EV (Exosome) Project\\data\\processed\\integration_summary.txt"
-}

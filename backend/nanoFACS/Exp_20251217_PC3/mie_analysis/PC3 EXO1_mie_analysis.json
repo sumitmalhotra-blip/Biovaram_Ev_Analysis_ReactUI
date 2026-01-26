@@ -1,0 +1,36 @@
+{
+  "file": "C:\\Users\\ASUS\\Downloads\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\PC3 EXO1.fcs",
+  "analysis_date": "2026-01-21T13:51:19.605864",
+  "parameters": {
+    "n_particle": 1.4,
+    "n_medium": 1.33,
+    "fsc_channel": "VFSC-H",
+    "fsc_wavelength_nm": 405,
+    "ssc_channels": {
+      "405": "VSSC1-H",
+      "488": "BSSC-H"
+    },
+    "min_diameter": 30.0,
+    "max_diameter": 300.0,
+    "sample_size": 2000
+  },
+  "statistics": {
+    "min_size": 98.0,
+    "max_size": 300.0,
+    "mean_size": 215.06925,
+    "median_size": 219.75,
+    "std_size": 31.05975015091879,
+    "small_count": 1,
+    "medium_count": 84,
+    "large_count": 1915,
+    "ambiguous_count": 1989,
+    "avg_confidence": 0.15433668595366834
+  },
+  "method_counts": {
+    "ratio-disambiguated": 1986,
+    "clamped": 5,
+    "smallest-default": 3,
+    "single-solution": 4,
+    "expanded-tolerance": 2
+  }
+}

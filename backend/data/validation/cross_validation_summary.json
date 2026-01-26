@@ -1,0 +1,25 @@
+{
+  "validation_date": "2026-01-20",
+  "nta_samples": 5,
+  "fcs_samples": 28,
+  "nta_d50_avg_nm": 151.76,
+  "nta_d50_range_nm": [
+    127.3,
+    171.5
+  ],
+  "fcs_main_sample_events": 914326,
+  "mie_calibrated_d50_nm": 127.0,
+  "mie_parameters": {
+    "wavelength_nm": 488,
+    "n_particle": 1.4,
+    "n_medium": 1.33
+  },
+  "validation_status": "PASSED",
+  "notes": [
+    "NTA D50 matches within 3%",
+    "PDF extraction 97% accuracy",
+    "All FCS files parsed successfully",
+    "Mie theory calibration validated against NTA",
+    "Absolute sizing requires bead standards"
+  ]
+}

@@ -14,7 +14,9 @@ import {
   ChevronUp,
   Server,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Play,
+  CheckCircle2
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAnalysisStore, type GatedStatistics, type Gate } from "@/lib/store"
@@ -25,6 +27,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 interface GatedStatisticsPanelProps {
   scatterData: Array<{ x: number; y: number; diameter?: number; index?: number }>
@@ -34,6 +37,7 @@ interface GatedStatisticsPanelProps {
   sampleId?: string | null
   gateCoordinates?: { x1: number; y1: number; x2: number; y2: number } | null
   onExportSelection?: (indices: number[]) => void
+  onApplyGate?: (gate: Gate, indices: number[]) => void
 }
 
 interface PopulationStats {
@@ -121,8 +125,9 @@ export function GatedStatisticsPanel({
   sampleId,
   gateCoordinates,
   onExportSelection,
+  onApplyGate,
 }: GatedStatisticsPanelProps) {
-  const { gatingState, clearAllGates, removeGate, apiConnected } = useAnalysisStore()
+  const { gatingState, clearAllGates, removeGate, setActiveGate, setSelectedIndices, apiConnected } = useAnalysisStore()
   const { analyzeGatedPopulation } = useApi()
   const [isExpanded, setIsExpanded] = useState(true)
   const [serverAnalysis, setServerAnalysis] = useState<{
@@ -172,6 +177,60 @@ export function GatedStatisticsPanel({
       setIsAnalyzing(false)
     }
   }, [sampleId, gateCoordinates, selectedIndices.length, analyzeGatedPopulation, xLabel, yLabel])
+
+  // Apply a saved gate - recalculate which points are inside
+  const handleApplyGate = useCallback((gate: Gate) => {
+    if (!scatterData || scatterData.length === 0) return
+
+    const indices: number[] = []
+    
+    scatterData.forEach((point, idx) => {
+      const pointIndex = point.index ?? idx
+      let isInside = false
+
+      if (gate.shape.type === 'rectangle') {
+        const { x1, y1, x2, y2 } = gate.shape
+        const minX = Math.min(x1, x2)
+        const maxX = Math.max(x1, x2)
+        const minY = Math.min(y1, y2)
+        const maxY = Math.max(y1, y2)
+        isInside = point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY
+      } else if (gate.shape.type === 'ellipse') {
+        const { cx, cy, rx, ry } = gate.shape
+        // Ellipse equation: ((x-h)/a)^2 + ((y-k)/b)^2 <= 1
+        const normalizedX = (point.x - cx) / rx
+        const normalizedY = (point.y - cy) / ry
+        isInside = normalizedX * normalizedX + normalizedY * normalizedY <= 1
+      } else if (gate.shape.type === 'polygon') {
+        // Point-in-polygon using ray casting algorithm
+        const { points } = gate.shape
+        let inside = false
+        for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+          const xi = points[i].x, yi = points[i].y
+          const xj = points[j].x, yj = points[j].y
+          
+          if (((yi > point.y) !== (yj > point.y)) &&
+              (point.x < (xj - xi) * (point.y - yi) / (yj - yi) + xi)) {
+            inside = !inside
+          }
+        }
+        isInside = inside
+      }
+
+      if (isInside) {
+        indices.push(pointIndex)
+      }
+    })
+
+    // Set the active gate and selected indices
+    setActiveGate(gate.id)
+    setSelectedIndices(indices)
+    
+    // Call the callback if provided
+    if (onApplyGate) {
+      onApplyGate(gate, indices)
+    }
+  }, [scatterData, setActiveGate, setSelectedIndices, onApplyGate])
 
   // Calculate statistics for selected population
   const { selectedStats, totalStats } = useMemo(() => {
@@ -465,15 +524,51 @@ export function GatedStatisticsPanel({
                       <Badge variant="outline" className="text-xs capitalize">
                         {gate.shape.type}
                       </Badge>
+                      {gate.isActive && (
+                        <CheckCircle2 className="h-3 w-3 text-green-500" />
+                      )}
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                      onClick={() => removeGate(gate.id)}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className={cn(
+                                "h-6 w-6",
+                                gate.isActive 
+                                  ? "text-green-500 hover:text-green-600" 
+                                  : "text-muted-foreground hover:text-primary"
+                              )}
+                              onClick={() => handleApplyGate(gate)}
+                            >
+                              <Play className="h-3 w-3" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Apply gate to select matching events</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                              onClick={() => removeGate(gate.id)}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Delete gate</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                   </div>
                 ))}
               </div>

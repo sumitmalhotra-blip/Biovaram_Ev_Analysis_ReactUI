@@ -34,6 +34,7 @@ export function useApi() {
     setFCSResults,
     setFCSAnalyzing,
     setFCSError,
+    setFCSFileMetadata,
     setSecondaryFCSFile,
     setSecondaryFCSSampleId,
     setSecondaryFCSResults,
@@ -45,6 +46,7 @@ export function useApi() {
     setNTAResults,
     setNTAAnalyzing,
     setNTAError,
+    setNTAFileMetadata,
     addProcessingJob,
     updateProcessingJob,
     apiConnected,
@@ -386,9 +388,15 @@ export function useApi() {
 
           console.log("[uploadFCS] Upload response:", response)
           console.log("[uploadFCS] FCS results:", response.fcs_results)
+          console.log("[uploadFCS] File metadata:", response.file_metadata)
 
           if (response.fcs_results) {
             setFCSResults(response.fcs_results)
+          }
+          
+          // Store extracted file metadata for auto-filling experimental conditions
+          if (response.file_metadata) {
+            setFCSFileMetadata(response.file_metadata)
           }
 
           // Add to processing jobs
@@ -429,6 +437,7 @@ export function useApi() {
       setFCSError,
       setFCSSampleId,
       setFCSResults,
+      setFCSFileMetadata,
       addProcessingJob,
       fetchSamples,
       toast,
@@ -613,8 +622,16 @@ export function useApi() {
         if (response.success) {
           setNTASampleId(response.sample_id)
 
+          console.log("[uploadNTA] Upload response:", response)
+          console.log("[uploadNTA] File metadata:", response.file_metadata)
+
           if (response.nta_results) {
             setNTAResults(response.nta_results)
+          }
+          
+          // Store extracted file metadata for auto-filling experimental conditions
+          if (response.file_metadata) {
+            setNTAFileMetadata(response.file_metadata)
           }
 
           // Add to processing jobs
@@ -654,6 +671,7 @@ export function useApi() {
       setNTAError,
       setNTASampleId,
       setNTAResults,
+      setNTAFileMetadata,
       addProcessingJob,
       fetchSamples,
       toast,
@@ -1067,8 +1085,16 @@ export function useApi() {
       ) => {
         if (apiClient.offline) return null
         try {
+          // Get Mie parameters from store settings
+          const fcsSettings = useAnalysisStore.getState().fcsAnalysisSettings
+          const mieParams = fcsSettings ? {
+            wavelength_nm: fcsSettings.laserWavelength,
+            n_particle: fcsSettings.particleRI,
+            n_medium: fcsSettings.mediumRI,
+          } : undefined
+          
           return await retryWithBackoff(
-            () => apiClient.getScatterDataWithAxes(sampleId, xChannel, yChannel, maxPoints),
+            () => apiClient.getScatterDataWithAxes(sampleId, xChannel, yChannel, maxPoints, mieParams),
             { maxAttempts: 2 }
           )
         } catch (error) {
@@ -1088,7 +1114,15 @@ export function useApi() {
       async (sampleId: string) => {
         if (apiClient.offline) return null
         try {
-          return await retryWithBackoff(() => apiClient.getSizeBins(sampleId), {
+          // Get Mie parameters from store settings
+          const fcsSettings = useAnalysisStore.getState().fcsAnalysisSettings
+          const mieParams = fcsSettings ? {
+            wavelength_nm: fcsSettings.laserWavelength,
+            n_particle: fcsSettings.particleRI,
+            n_medium: fcsSettings.mediumRI,
+          } : undefined
+          
+          return await retryWithBackoff(() => apiClient.getSizeBins(sampleId, mieParams), {
             maxAttempts: 2,
           })
         } catch (error) {
@@ -1141,8 +1175,22 @@ export function useApi() {
         }
 
         try {
+          // Get Mie parameters from store settings
+          const fcsSettings = useAnalysisStore.getState().fcsAnalysisSettings
+          const mieParams = fcsSettings ? {
+            wavelength_nm: fcsSettings.laserWavelength,
+            n_particle: fcsSettings.particleRI,
+            n_medium: fcsSettings.mediumRI,
+          } : undefined
+          
+          // Merge Mie params into gate config
+          const gateConfigWithMie = {
+            ...gateConfig,
+            ...mieParams,
+          }
+          
           const result = await retryWithBackoff(
-            () => apiClient.analyzeGatedPopulation(sampleId, gateConfig),
+            () => apiClient.analyzeGatedPopulation(sampleId, gateConfigWithMie),
             { maxAttempts: 2 }
           )
           
@@ -1807,6 +1855,143 @@ export function useApi() {
           toast({
             variant: "destructive",
             title: "Multi-metric temporal analysis failed",
+            description: message,
+          })
+          return null
+        }
+      },
+      [toast]
+    ),
+
+    // =========================================================================
+    // Data Split API: Metadata and Values
+    // =========================================================================
+
+    /**
+     * Get FCS file metadata only (no event data)
+     */
+    getFCSMetadata: useCallback(
+      async (sampleId: string) => {
+        if (apiClient.offline) return null
+        try {
+          return await retryWithBackoff(() => apiClient.getFCSMetadata(sampleId), {
+            maxAttempts: 2,
+          })
+        } catch (error) {
+          const message = getUserFriendlyErrorMessage(error)
+          toast({
+            variant: "destructive",
+            title: "Failed to fetch FCS metadata",
+            description: message,
+          })
+          return null
+        }
+      },
+      [toast]
+    ),
+
+    /**
+     * Get FCS per-event size values with Mie calculation
+     */
+    getFCSValues: useCallback(
+      async (
+        sampleId: string,
+        options?: {
+          wavelength_nm?: number;
+          n_particle?: number;
+          n_medium?: number;
+          max_events?: number;
+          include_raw_channels?: boolean;
+        }
+      ) => {
+        if (apiClient.offline) return null
+        try {
+          // Get Mie parameters from store if not provided
+          const fcsSettings = useAnalysisStore.getState().fcsAnalysisSettings
+          const mergedOptions = {
+            wavelength_nm: options?.wavelength_nm ?? fcsSettings?.laserWavelength ?? 488,
+            n_particle: options?.n_particle ?? fcsSettings?.particleRI ?? 1.40,
+            n_medium: options?.n_medium ?? fcsSettings?.mediumRI ?? 1.33,
+            max_events: options?.max_events ?? 50000,
+            include_raw_channels: options?.include_raw_channels ?? false,
+          }
+          
+          const result = await retryWithBackoff(
+            () => apiClient.getFCSValues(sampleId, mergedOptions),
+            { maxAttempts: 2 }
+          )
+          
+          if (result) {
+            toast({
+              title: "✅ FCS Values Loaded",
+              description: `${result.data_info.valid_sizes.toLocaleString()} valid sizes from ${result.data_info.returned_events.toLocaleString()} events`,
+            })
+          }
+          
+          return result
+        } catch (error) {
+          const message = getUserFriendlyErrorMessage(error)
+          toast({
+            variant: "destructive",
+            title: "Failed to fetch FCS values",
+            description: message,
+          })
+          return null
+        }
+      },
+      [toast]
+    ),
+
+    /**
+     * Get NTA file metadata only (no measurement data)
+     */
+    getNTAMetadata: useCallback(
+      async (sampleId: string) => {
+        if (apiClient.offline) return null
+        try {
+          return await retryWithBackoff(() => apiClient.getNTAMetadata(sampleId), {
+            maxAttempts: 2,
+          })
+        } catch (error) {
+          const message = getUserFriendlyErrorMessage(error)
+          toast({
+            variant: "destructive",
+            title: "Failed to fetch NTA metadata",
+            description: message,
+          })
+          return null
+        }
+      },
+      [toast]
+    ),
+
+    /**
+     * Get NTA size and concentration values
+     */
+    getNTAValues: useCallback(
+      async (sampleId: string) => {
+        if (apiClient.offline) return null
+        try {
+          const result = await retryWithBackoff(() => apiClient.getNTAValues(sampleId), {
+            maxAttempts: 2,
+          })
+          
+          if (result) {
+            const totalConc = result.concentration_statistics?.total_particles_ml
+            toast({
+              title: "✅ NTA Values Loaded",
+              description: totalConc 
+                ? `${result.data_info.total_bins} bins, ${(totalConc / 1e6).toFixed(1)}M particles/mL`
+                : `${result.data_info.total_bins} size bins loaded`,
+            })
+          }
+          
+          return result
+        } catch (error) {
+          const message = getUserFriendlyErrorMessage(error)
+          toast({
+            variant: "destructive",
+            title: "Failed to fetch NTA values",
             description: message,
           })
           return null

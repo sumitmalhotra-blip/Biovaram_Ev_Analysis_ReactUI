@@ -1,7 +1,7 @@
-import { create } from "zustand"
+ import { create } from "zustand"
 import { persist, createJSONStorage } from "zustand/middleware"
 import { useState, useEffect } from "react"
-import type { Sample as APISample, FCSResult, NTAResult, ProcessingJob } from "./api-client"
+import type { Sample as APISample, FCSResult, NTAResult, ProcessingJob, FileMetadata } from "./api-client"
 
 export type TabType = "dashboard" | "flow-cytometry" | "nta" | "cross-compare" | "research-chat"
 
@@ -123,6 +123,7 @@ export interface FCSAnalysisState {
   error: string | null
   experimentalConditions: ExperimentalConditions | null
   sizeRanges: SizeRange[]
+  fileMetadata: FileMetadata | null  // Auto-extracted metadata from file
 }
 
 // Scatter data point for charts
@@ -169,6 +170,7 @@ export interface NTAAnalysisState {
   isAnalyzing: boolean
   error: string | null
   experimentalConditions: ExperimentalConditions | null
+  fileMetadata: FileMetadata | null  // Auto-extracted metadata from file
 }
 
 // Secondary NTA Analysis State (for overlay comparison)
@@ -377,6 +379,7 @@ export interface AnalysisState {
   setFCSError: (error: string | null) => void
   setFCSExperimentalConditions: (conditions: ExperimentalConditions | null) => void
   setFCSSizeRanges: (sizeRanges: SizeRange[]) => void
+  setFCSFileMetadata: (metadata: FileMetadata | null) => void
   resetFCSAnalysis: () => void
 
   // Secondary FCS Analysis State (for comparison/overlay)
@@ -404,6 +407,7 @@ export interface AnalysisState {
   setNTAAnalyzing: (analyzing: boolean) => void
   setNTAError: (error: string | null) => void
   setNTAExperimentalConditions: (conditions: ExperimentalConditions | null) => void
+  setNTAFileMetadata: (metadata: FileMetadata | null) => void
   resetNTAAnalysis: () => void
 
   // Secondary NTA Analysis State (for overlay comparison)
@@ -484,6 +488,7 @@ const initialFCSAnalysis: FCSAnalysisState = {
   isAnalyzing: false,
   error: null,
   experimentalConditions: null,
+  fileMetadata: null,  // Will be populated from uploaded file
   sizeRanges: [
     { name: "Small EVs", min: 30, max: 100, color: "#22c55e" },
     { name: "Medium EVs", min: 100, max: 200, color: "#3b82f6" },
@@ -523,6 +528,7 @@ const initialNTAAnalysis: NTAAnalysisState = {
   isAnalyzing: false,
   error: null,
   experimentalConditions: null,
+  fileMetadata: null,  // Will be populated from uploaded file
 }
 
 const initialSecondaryNTAAnalysis: SecondaryNTAAnalysisState = {
@@ -622,6 +628,10 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
     set((state) => ({
       fcsAnalysis: { ...state.fcsAnalysis, sizeRanges },
     })),
+  setFCSFileMetadata: (metadata) =>
+    set((state) => ({
+      fcsAnalysis: { ...state.fcsAnalysis, fileMetadata: metadata },
+    })),
   resetFCSAnalysis: () => set({ fcsAnalysis: initialFCSAnalysis }),
 
   // Secondary FCS Analysis (for comparison/overlay)
@@ -696,6 +706,10 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
   setNTAExperimentalConditions: (conditions) =>
     set((state) => ({
       ntaAnalysis: { ...state.ntaAnalysis, experimentalConditions: conditions },
+    })),
+  setNTAFileMetadata: (metadata) =>
+    set((state) => ({
+      ntaAnalysis: { ...state.ntaAnalysis, fileMetadata: metadata },
     })),
   resetNTAAnalysis: () => set({ ntaAnalysis: initialNTAAnalysis }),
 

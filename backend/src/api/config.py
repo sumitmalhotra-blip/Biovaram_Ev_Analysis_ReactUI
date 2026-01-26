@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     upload_dir: Path = Path("data/uploads")
     parquet_dir: Path = Path("data/parquet")
     temp_dir: Path = Path("data/temp")
-    max_upload_size_mb: int = 100
+    max_upload_size_mb: int = 200  # Increased from 100MB to handle large FCS files
     
     # CORS
     cors_origins: str = "http://localhost:3000,http://localhost:5173,http://localhost:8501"

@@ -279,6 +279,25 @@ class FCSParser(BaseParser):
         logger.info(f"Extracted IDs: biological={self.biological_sample_id}, "
                    f"measurement={self.measurement_id}, baseline={self.is_baseline}")
     
+    def _get_metadata_value(self, key: str, default: Any = None) -> Any:
+        """
+        Get metadata value trying multiple key formats.
+        FCS parsers may return keys as lowercase, uppercase, or with $ prefix.
+        """
+        # Try various key formats
+        key_variants = [
+            key,                    # As provided (e.g., '$TOT')
+            key.lower(),            # Lowercase (e.g., '$tot')
+            key.lstrip('$'),        # Without $ (e.g., 'TOT')
+            key.lstrip('$').lower() # Lowercase without $ (e.g., 'tot')
+        ]
+        
+        for k in key_variants:
+            if k in self.metadata:
+                return self.metadata[k]
+        
+        return default
+    
     def extract_metadata(self) -> Dict[str, Any]:
         """
         Extract relevant metadata from FCS file.
@@ -289,7 +308,15 @@ class FCSParser(BaseParser):
         if not self.metadata:
             raise ValueError("No metadata available. Call parse() first.")
         
-        # Extract key metadata fields
+        # Helper to get int value safely
+        def get_int(key: str, default: int = 0) -> int:
+            val = self._get_metadata_value(key, default)
+            try:
+                return int(val) if val else default
+            except (ValueError, TypeError):
+                return default
+        
+        # Extract key metadata fields (try multiple key formats for compatibility)
         extracted = {
             'sample_id': self.sample_id,
             'biological_sample_id': self.biological_sample_id,
@@ -297,43 +324,47 @@ class FCSParser(BaseParser):
             'is_baseline': self.is_baseline,
             'file_name': self.file_path.name,
             'instrument_type': 'flow_cytometry',
-            'total_events': int(self.metadata.get('$TOT', 0)),
-            'parameters': int(self.metadata.get('$PAR', 0)),
-            'acquisition_date': self.metadata.get('$DATE', 'Unknown'),
-            'acquisition_time': self.metadata.get('$BTIM', 'Unknown'),
-            'cytometer': self.metadata.get('$CYT', 'Unknown'),
-            'operator': self.metadata.get('$OP', 'Unknown'),
-            'specimen': self.metadata.get('$SMNO', 'Unknown'),
+            'total_events': get_int('$TOT', len(self.data) if self.data is not None else 0),
+            'parameters': get_int('$PAR', len(self.channel_names)),
+            'acquisition_date': self._get_metadata_value('$DATE', 'Unknown'),
+            'acquisition_time': self._get_metadata_value('$BTIM', 'Unknown'),
+            'cytometer': self._get_metadata_value('$CYT', 'Unknown'),
+            'operator': self._get_metadata_value('$OP', 'Unknown'),
+            'specimen': self._get_metadata_value('$SMNO', 'Unknown'),
         }
         
-        # Extract channel information
+        # Extract channel information using actual parsed channel names
         channels = {}
-        n_params = int(self.metadata.get('$PAR', 0))
+        n_params = len(self.channel_names) if self.channel_names else get_int('$PAR', 0)
         
-        for i in range(1, n_params + 1):
-            name = self.metadata.get(f'$P{i}N', f'Param{i}')
-            stain = self.metadata.get(f'$P{i}S', 'Unstained')
-            range_val = self.metadata.get(f'$P{i}R', 'Unknown')
+        for i, name in enumerate(self.channel_names):
+            # Try to get stain and range from metadata
+            stain = self._get_metadata_value(f'$P{i+1}S', 'Unstained')
+            range_val = self._get_metadata_value(f'$P{i+1}R', 'Unknown')
             
             channels[name] = {
-                'stain': stain,
-                'range': range_val,
-                'index': i
+                'stain': stain if stain else 'Unstained',
+                'range': range_val if range_val else 'Unknown',
+                'index': i + 1
             }
         
         extracted['channels'] = channels
         extracted['channel_count'] = len(channels)
-        extracted['channel_names'] = list(channels.keys())
+        extracted['channel_names'] = list(channels.keys()) if channels else self.channel_names
         
         # Temperature if available
-        if '$TEMP' in self.metadata:
-            extracted['temperature'] = float(self.metadata['$TEMP'])
+        temp = self._get_metadata_value('$TEMP')
+        if temp:
+            try:
+                extracted['temperature'] = float(temp)
+            except (ValueError, TypeError):
+                pass
         
         return extracted
     
     def _has_compensation_matrix(self) -> bool:
         """Check if compensation matrix is available in metadata."""
-        return '$COMP' in self.metadata or '$SPILLOVER' in self.metadata
+        return '$COMP' in self.metadata or '$SPILLOVER' in self.metadata or 'comp' in self.metadata or 'spillover' in self.metadata
     
     def _apply_compensation(self, data: pd.DataFrame) -> pd.DataFrame:
         """

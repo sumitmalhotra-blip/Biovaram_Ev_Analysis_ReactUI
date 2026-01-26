@@ -1,0 +1,19 @@
+{
+  "calibration": {
+    "log_slope_a": 0.196,
+    "log_intercept_b": 1.3537,
+    "coefficient_k": 22.578755462283677,
+    "formula": "size_nm = 22.5788 \u00d7 SSC^0.1960"
+  },
+  "dilution": {
+    "nta_sample_volume_ul": 1000,
+    "nanofacs_sample_volume_ul": 23,
+    "nanofacs_final_volume_ul": 150,
+    "total_dilution_factor": 283.5538752362949
+  },
+  "reference": {
+    "low_beads": "40-150nm polystyrene (Nano Vis Low)",
+    "high_beads": "140-1000nm polystyrene (Nano Vis High)",
+    "source": "Jan 2026 calibration from Biovaram data"
+  }
+}

@@ -5,20 +5,23 @@ import { FileUploadZone } from "./file-upload-zone"
 import { DualFileUploadZone } from "./dual-file-upload-zone"
 import { OverlayHistogramChart } from "./overlay-histogram-chart"
 import { AnalysisResults } from "./analysis-results"
+import { ComparisonAnalysisView } from "./comparison-analysis-view"
 import { ColumnMapping } from "./column-mapping"
 import { FCSBestPracticesGuide } from "./best-practices-guide"
-import { ExperimentalConditionsDialog, type ExperimentalConditions } from "@/components/experimental-conditions-dialog"
+import { ExperimentalConditionsDialog, type ExperimentalConditions, type FileMetadata } from "@/components/experimental-conditions-dialog"
 import { useAnalysisStore } from "@/lib/store"
 import { useApi } from "@/hooks/use-api"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { AlertCircle, Loader2, Settings2, Layers, FileText } from "lucide-react"
+import { AlertCircle, Loader2, Settings2, Layers, FileText, RotateCcw } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { useToast } from "@/hooks/use-toast"
 
 export function FlowCytometryTab() {
-  const { fcsAnalysis, secondaryFcsAnalysis, overlayConfig, apiConnected, setFCSExperimentalConditions, sidebarCollapsed } = useAnalysisStore()
+  const { fcsAnalysis, secondaryFcsAnalysis, overlayConfig, apiConnected, setFCSExperimentalConditions, sidebarCollapsed, resetFCSAnalysis } = useAnalysisStore()
   const { checkHealth } = useApi()
+  const { toast } = useToast()
   const [showConditionsDialog, setShowConditionsDialog] = useState(false)
   const [justUploadedSampleId, setJustUploadedSampleId] = useState<string | null>(null)
   const [uploadMode, setUploadMode] = useState<"single" | "comparison">("single")
@@ -42,6 +45,14 @@ export function FlowCytometryTab() {
     setShowConditionsDialog(false)
   }
 
+  const handleResetTab = () => {
+    resetFCSAnalysis()
+    toast({
+      title: "Tab Reset",
+      description: "Analysis cleared. Upload a new file to start fresh.",
+    })
+  }
+
   const hasFile = fcsAnalysis.file !== null
   const isAnalyzing = fcsAnalysis.isAnalyzing || secondaryFcsAnalysis.isAnalyzing
   const hasResults = fcsAnalysis.results !== null
@@ -61,14 +72,14 @@ export function FlowCytometryTab() {
       )}
 
       {/* Best Practices Guide - show before upload to help users prepare */}
-      {!hasFile && <FCSBestPracticesGuide />}
+      {!hasFile && !hasResults && <FCSBestPracticesGuide />}
 
-      {/* Upload Mode Toggle */}
+      {/* Upload Mode Toggle with Reset Button */}
       <Card className="card-3d">
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <CardTitle className="text-base">Upload Mode</CardTitle>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <Button
                 variant={uploadMode === "single" ? "default" : "outline"}
                 size="sm"
@@ -86,8 +97,19 @@ export function FlowCytometryTab() {
               >
                 <Layers className="h-4 w-4" />
                 Compare Files
-                <Badge variant="secondary" className="ml-1 text-xs">New</Badge>
               </Button>
+              {/* Reset Tab Button - only show when there are results */}
+              {hasResults && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleResetTab}
+                  className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Reset Tab
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -130,14 +152,12 @@ export function FlowCytometryTab() {
 
       {hasFile && !isAnalyzing && !hasResults && <ColumnMapping />}
 
-      {hasResults && <AnalysisResults />}
-
-      {/* Overlay Chart - show when in comparison mode with both files analyzed */}
-      {uploadMode === "comparison" && hasResults && hasSecondaryResults && overlayConfig.enabled && (
-        <div className="space-y-4">
-          <OverlayHistogramChart title="Size Distribution Overlay (FSC-A)" parameter="FSC-A" />
-          <OverlayHistogramChart title="Granularity Overlay (SSC-A)" parameter="SSC-A" />
-        </div>
+      {/* Show different views based on mode */}
+      {uploadMode === "single" && hasResults && <AnalysisResults />}
+      
+      {/* Comparison Mode - Show tabbed view with Primary/Comparison/Overlay */}
+      {uploadMode === "comparison" && (hasResults || hasSecondaryResults) && (
+        <ComparisonAnalysisView />
       )}
 
       {/* Experimental Conditions Dialog */}
@@ -147,6 +167,7 @@ export function FlowCytometryTab() {
         onSave={handleSaveConditions}
         sampleType="FCS"
         sampleId={justUploadedSampleId || undefined}
+        initialMetadata={fcsAnalysis.fileMetadata}
       />
     </div>
   )

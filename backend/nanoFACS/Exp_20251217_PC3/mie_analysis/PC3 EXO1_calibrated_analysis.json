@@ -1,0 +1,19 @@
+{
+  "file": "nanoFACS\\Exp_20251217_PC3\\PC3 EXO1.fcs",
+  "calibration_factor": 3.0,
+  "analysis_date": "2026-01-21T13:55:52.355680",
+  "statistics": {
+    "n_events": 1980,
+    "mean_size": 220.57676767676767,
+    "median_size": 224.25,
+    "std_size": 33.030823004278375,
+    "small_count": 2,
+    "medium_count": 72,
+    "large_count": 1906,
+    "mean_confidence": 0.8910000000000002
+  },
+  "method_counts": {
+    "single-fsc-solution": 1980,
+    "no-fsc-solution": 20
+  }
+}

@@ -37,6 +37,10 @@ import {
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useApi } from "@/hooks/use-api"
+import { type FileMetadata } from "@/lib/api-client"
+
+// Re-export FileMetadata for consumers
+export type { FileMetadata }
 
 // Experimental conditions interface - TASK-009
 // Matches backend ExperimentalConditions model
@@ -74,6 +78,8 @@ interface ExperimentalConditionsDialogProps {
   onSave: (conditions: ExperimentalConditions) => void
   sampleType: "FCS" | "NTA"
   sampleId?: string
+  /** Metadata extracted from uploaded file for auto-filling fields */
+  initialMetadata?: FileMetadata | null
 }
 
 export function ExperimentalConditionsDialog({
@@ -82,11 +88,12 @@ export function ExperimentalConditionsDialog({
   onSave,
   sampleType,
   sampleId,
+  initialMetadata,
 }: ExperimentalConditionsDialogProps) {
   const { toast } = useToast()
   const { saveExperimentalConditions } = useApi()
   
-  // Form state
+  // Form state - initialized from metadata if available
   const [temperature, setTemperature] = useState<string>("")
   const [buffer, setBuffer] = useState<string>("")
   const [customBuffer, setCustomBuffer] = useState<string>("")
@@ -96,6 +103,70 @@ export function ExperimentalConditionsDialog({
   const [antibodyDetails, setAntibodyDetails] = useState<string>("")
   const [operator, setOperator] = useState<string>("")
   const [notes, setNotes] = useState<string>("")
+  
+  // Track if metadata was auto-filled
+  const [metadataApplied, setMetadataApplied] = useState<boolean>(false)
+  
+  // Auto-fill form from file metadata when dialog opens
+  React.useEffect(() => {
+    if (open && initialMetadata && !metadataApplied) {
+      // Apply extracted metadata to form fields
+      if (initialMetadata.operator) {
+        setOperator(String(initialMetadata.operator))
+      }
+      if (initialMetadata.temperature_celsius) {
+        const temp = parseFloat(String(initialMetadata.temperature_celsius))
+        if (!isNaN(temp)) {
+          setTemperature(String(temp))
+        }
+      }
+      if (initialMetadata.ph) {
+        const phVal = parseFloat(String(initialMetadata.ph))
+        if (!isNaN(phVal)) {
+          setPh(String(phVal))
+        }
+      }
+      // Build notes from additional metadata
+      const noteParts: string[] = []
+      if (initialMetadata.acquisition_date) {
+        noteParts.push(`Acquisition Date: ${initialMetadata.acquisition_date}`)
+      }
+      if (initialMetadata.acquisition_time) {
+        noteParts.push(`Acquisition Time: ${initialMetadata.acquisition_time}`)
+      }
+      if (initialMetadata.cytometer) {
+        noteParts.push(`Cytometer: ${initialMetadata.cytometer}`)
+      }
+      if (initialMetadata.instrument) {
+        noteParts.push(`Instrument: ${initialMetadata.instrument}`)
+      }
+      if (initialMetadata.specimen) {
+        noteParts.push(`Specimen: ${initialMetadata.specimen}`)
+      }
+      if (initialMetadata.laser_wavelength_nm) {
+        noteParts.push(`Laser Wavelength: ${initialMetadata.laser_wavelength_nm} nm`)
+      }
+      if (noteParts.length > 0) {
+        setNotes(noteParts.join("\n"))
+      }
+      
+      setMetadataApplied(true)
+      
+      // Show toast notification that metadata was auto-filled
+      toast({
+        title: "Metadata Auto-Filled",
+        description: "Fields have been pre-filled from the uploaded file. Please review and adjust as needed.",
+        duration: 4000,
+      })
+    }
+  }, [open, initialMetadata, metadataApplied, toast])
+  
+  // Reset metadataApplied flag when dialog closes
+  React.useEffect(() => {
+    if (!open) {
+      setMetadataApplied(false)
+    }
+  }, [open])
   
   // Saving state (TASK-009)
   const [isSaving, setIsSaving] = useState<boolean>(false)

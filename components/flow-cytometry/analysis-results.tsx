@@ -25,6 +25,7 @@ import { InteractiveScatterChart } from "./charts/interactive-scatter-chart"
 import { ScatterAxisSelector } from "./charts/scatter-axis-selector"
 import { TheoryVsMeasuredChart } from "./charts/theory-vs-measured-chart"
 import { DiameterVsSSCChart } from "./charts/diameter-vs-ssc-chart"
+import { EventVsSizeChart } from "./charts/event-vs-size-chart"
 import { FullAnalysisDashboard } from "./full-analysis-dashboard"
 import { StatisticsCards } from "./statistics-cards"
 import { ParticleSizeVisualization } from "./particle-size-visualization"
@@ -50,6 +51,7 @@ export function AnalysisResults() {
   const { 
     pinChart, 
     fcsAnalysis, 
+    fcsAnalysisSettings,
     resetFCSAnalysis, 
     secondaryFcsAnalysis,
     overlayConfig,
@@ -125,6 +127,7 @@ export function AnalysisResults() {
   }, [sampleId])
 
   // Load real scatter data from backend - CRMIT-002: Updated to use custom axes
+  // Also refreshes when Mie settings change (wavelength, RI, etc.)
   useEffect(() => {
     let cancelled = false
     // Only fetch if channels are set and sample exists
@@ -135,6 +138,14 @@ export function AnalysisResults() {
         .then((data) => {
           if (!cancelled && data) {
             setScatterData(data.data)
+            // Debug: Log scatter data with diameters
+            const withDiameters = data.data.filter((p: { diameter?: number }) => p.diameter !== undefined && p.diameter !== null && p.diameter > 0)
+            console.log('[AnalysisResults] Scatter data loaded:', {
+              totalPoints: data.data.length,
+              pointsWithDiameters: withDiameters.length,
+              sampleDiameters: withDiameters.slice(0, 5).map((p: { diameter?: number }) => p.diameter),
+              totalEvents: data.total_events
+            })
           }
         })
         .finally(() => {
@@ -143,7 +154,7 @@ export function AnalysisResults() {
     }
     return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sampleId, results, xChannel, yChannel])
+  }, [sampleId, results, xChannel, yChannel, fcsAnalysisSettings?.laserWavelength, fcsAnalysisSettings?.particleRI, fcsAnalysisSettings?.mediumRI])
   
   // Load secondary scatter data when overlay is enabled
   // Uses fallback channels if primary channels don't exist in secondary file
@@ -209,6 +220,7 @@ export function AnalysisResults() {
   }, [overlayConfig.enabled, secondarySampleId, secondaryResults])
 
   // Load real size bins from backend - PERFORMANCE FIX: Removed callback from deps
+  // Also refreshes when Mie settings or size ranges change
   useEffect(() => {
     let cancelled = false
     if (sampleId && results) {
@@ -225,7 +237,7 @@ export function AnalysisResults() {
     }
     return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sampleId, results])
+  }, [sampleId, results, fcsAnalysisSettings?.laserWavelength, fcsAnalysisSettings?.particleRI, fcsAnalysisSettings?.mediumRI, fcsAnalysis.sizeRanges])
 
   if (!results) {
     return (
@@ -628,7 +640,7 @@ export function AnalysisResults() {
         <ParticleSizeVisualization
           totalEvents={totalEvents}
           medianSize={medianSize}
-          sizeCategories={sizeCategories || undefined}
+          scatterData={scatterData}
         />
       )}
 
@@ -668,23 +680,29 @@ export function AnalysisResults() {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="dashboard" className="space-y-4">
-            <TabsList className="bg-secondary/50 w-full justify-start overflow-x-auto flex-nowrap">
-              <TabsTrigger value="dashboard" className="shrink-0">
-                Full Dashboard
-              </TabsTrigger>
-              <TabsTrigger value="distribution" className="shrink-0">
-                Size Distribution
-              </TabsTrigger>
-              <TabsTrigger value="theory" className="shrink-0">
-                Theory vs Measured
-              </TabsTrigger>
-              <TabsTrigger value="fsc-ssc" className="shrink-0">
-                FSC vs SSC
-              </TabsTrigger>
-              <TabsTrigger value="diameter" className="shrink-0">
-                Diameter vs SSC
-              </TabsTrigger>
-            </TabsList>
+            <div className="relative">
+              <TabsList className="bg-secondary/50 w-full justify-start overflow-x-auto flex-nowrap scrollbar-thin scrollbar-thumb-primary/50 pb-1 flex gap-1">
+                <TabsTrigger value="dashboard" className="shrink-0 text-xs sm:text-sm">
+                  Full Dashboard
+                </TabsTrigger>
+                <TabsTrigger value="event-size" className="shrink-0 text-xs sm:text-sm bg-blue-500/20 border border-blue-500/50 rounded-md">
+                  📊 Event vs Size
+                </TabsTrigger>
+                <TabsTrigger value="distribution" className="shrink-0 text-xs sm:text-sm">
+                  Size Distribution
+                </TabsTrigger>
+                <TabsTrigger value="theory" className="shrink-0 text-xs sm:text-sm">
+                  Theory vs Measured
+                </TabsTrigger>
+                <TabsTrigger value="fsc-ssc" className="shrink-0 text-xs sm:text-sm">
+                  FSC vs SSC
+                </TabsTrigger>
+                <TabsTrigger value="diameter" className="shrink-0 text-xs sm:text-sm">
+                  Diameter vs SSC
+                </TabsTrigger>
+              </TabsList>
+              <div className="absolute right-0 top-0 h-full w-8 bg-gradient-to-l from-background to-transparent pointer-events-none" />
+            </div>
 
             <TabsContent value="dashboard" className="space-y-4">
               {/* Axis Selection for Dashboard - allows changing scatter plot axes */}
@@ -927,6 +945,40 @@ export function AnalysisResults() {
                 }
                 secondaryAnomalousIndices={secondaryAnomalyData?.anomalous_indices || []}
               />
+            </TabsContent>
+
+            <TabsContent value="event-size" className="space-y-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge variant="outline" className="bg-blue-500/20 text-blue-500 border-blue-500/50">
+                    Per-Event Size Analysis
+                  </Badge>
+                </div>
+                <div className="flex gap-1">
+                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <Maximize2 className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => handlePin("Event vs Size", "scatter")}
+                  >
+                    <Pin className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+              {sampleId ? (
+                <EventVsSizeChart
+                  sampleId={sampleId}
+                  onPin={() => handlePin("Event vs Size", "scatter")}
+                  title="Event Number vs Calculated Size"
+                />
+              ) : (
+                <div className="h-[400px] flex items-center justify-center text-muted-foreground border border-dashed rounded-lg">
+                  <p>Upload a sample to see per-event size analysis</p>
+                </div>
+              )}
             </TabsContent>
           </Tabs>
         </CardContent>

@@ -232,11 +232,12 @@ class MieScatterCalculator:
             logger.debug(f"Geometric optics regime (x={x:.3f}): ray tracing applicable")
         
         # Call miepython to calculate Mie coefficients
-        # single_sphere(m, x, n_pole) returns (qext, qsca, qback, g)
+        # single_sphere(m, x, n_pole, e_field) returns (qext, qsca, qback, g)
         # n_pole=0 means include all multipole terms (auto-sized for accuracy)
+        # e_field=True for electric field calculation (standard for scatter)
         # Typical series length: 10-50 terms depending on x
         try:
-            qext, qsca, qback, g = miepython.single_sphere(self.m, x, 0)
+            qext, qsca, qback, g = miepython.single_sphere(self.m, x, 0, True)
         except Exception as e:
             logger.error(f"❌ Mie calculation failed for d={diameter_nm:.1f}nm, x={x:.4f}: {e}")
             raise RuntimeError(f"Mie theory calculation failed: {e}") from e
@@ -459,6 +460,100 @@ class MieScatterCalculator:
         
         return estimated_diameters, success_mask
     
+    def diameters_from_scatter_normalized(
+        self,
+        fsc_intensities: np.ndarray,
+        min_diameter: float = 30.0,
+        max_diameter: float = 500.0,
+        lut_resolution: int = 500
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Calculate particle diameters from FSC intensities with automatic normalization.
+        
+        This method handles the scale mismatch between raw flow cytometer FSC values
+        (typically 10,000 - 1,000,000 arbitrary units) and physical Mie scatter
+        (dimensionless efficiency ~0.01 - 100).
+        
+        The approach:
+        1. Build a lookup table of physical FSC values for the diameter range
+        2. Map the raw FSC range to the physical FSC range (linear normalization)
+        3. Interpolate to find diameters
+        
+        Args:
+            fsc_intensities: Array of raw FSC intensity values from flow cytometer
+            min_diameter: Minimum diameter in lookup table (nm)
+            max_diameter: Maximum diameter in lookup table (nm)
+            lut_resolution: Number of points in lookup table
+            
+        Returns:
+            Tuple of (diameters, success_mask):
+            - diameters: Array of estimated diameters in nm
+            - success_mask: Boolean array indicating valid estimates
+        """
+        fsc_intensities = np.asarray(fsc_intensities, dtype=np.float64)
+        
+        # Filter out invalid values for normalization
+        valid_mask = (fsc_intensities > 0) & np.isfinite(fsc_intensities)
+        
+        if not np.any(valid_mask):
+            return np.zeros_like(fsc_intensities), np.zeros_like(fsc_intensities, dtype=bool)
+        
+        # Build lookup table: diameter -> physical FSC
+        diameters_lut = np.linspace(min_diameter, max_diameter, lut_resolution)
+        physical_fsc_lut = np.zeros(lut_resolution)
+        
+        for i, d in enumerate(diameters_lut):
+            result = self.calculate_scattering_efficiency(d, validate=False)
+            physical_fsc_lut[i] = result.forward_scatter
+        
+        # Ensure monotonicity for interpolation
+        sort_idx = np.argsort(physical_fsc_lut)
+        physical_fsc_sorted = physical_fsc_lut[sort_idx]
+        diameters_sorted = diameters_lut[sort_idx]
+        
+        # Remove duplicates
+        unique_mask = np.diff(physical_fsc_sorted, prepend=-np.inf) > 0
+        physical_fsc_unique = physical_fsc_sorted[unique_mask]
+        diameters_unique = diameters_sorted[unique_mask]
+        
+        if len(physical_fsc_unique) < 2:
+            logger.warning("⚠️ Insufficient unique FSC values in lookup table")
+            return np.zeros_like(fsc_intensities), np.zeros_like(fsc_intensities, dtype=bool)
+        
+        # Normalize raw FSC values to physical FSC range
+        # Map the percentile range of raw FSC to the physical FSC range
+        raw_fsc_valid = fsc_intensities[valid_mask]
+        
+        # Use percentiles to be robust against outliers
+        raw_p5, raw_p95 = np.percentile(raw_fsc_valid, [5, 95])
+        phys_min, phys_max = physical_fsc_unique[0], physical_fsc_unique[-1]
+        
+        # Linear mapping: raw_FSC -> physical_FSC
+        # normalized = phys_min + (raw - raw_p5) / (raw_p95 - raw_p5) * (phys_max - phys_min)
+        raw_range = raw_p95 - raw_p5
+        if raw_range <= 0:
+            raw_range = 1.0  # Avoid division by zero
+        
+        phys_range = phys_max - phys_min
+        normalized_fsc = phys_min + (fsc_intensities - raw_p5) / raw_range * phys_range
+        
+        # Clamp to physical FSC range
+        normalized_fsc_clamped = np.clip(normalized_fsc, phys_min, phys_max)
+        
+        # Interpolate to get diameters
+        estimated_diameters = np.interp(normalized_fsc_clamped, physical_fsc_unique, diameters_unique)
+        
+        # Mark success for values within reasonable range (not extreme outliers)
+        success_mask = valid_mask & (fsc_intensities >= raw_p5 * 0.1) & (fsc_intensities <= raw_p95 * 10)
+        
+        logger.debug(
+            f"📊 Normalized FSC mapping: raw=[{raw_p5:.0f}, {raw_p95:.0f}] → "
+            f"physical=[{phys_min:.2e}, {phys_max:.2e}], "
+            f"valid={np.sum(success_mask)}/{len(fsc_intensities)}"
+        )
+        
+        return estimated_diameters, success_mask
+    
     def calculate_wavelength_response(
         self,
         diameter_nm: float,
@@ -583,6 +678,326 @@ class MieScatterCalculator:
             logger.info(f"✅ Batch calculation complete ({n:,} particles)")
         
         return fsc_values
+
+
+class MultiSolutionMieCalculator:
+    """
+    Multi-Solution Mie Scattering Calculator with Wavelength Disambiguation.
+    
+    PROBLEM SOLVED:
+    ---------------
+    The Mie scattering function is non-monotonic - one scatter value can map to 
+    MULTIPLE particle sizes due to resonances (oscillations in the scattering 
+    efficiency). The single-solution approach picks the first/closest match, which
+    can be wrong by 20-30%.
+    
+    SOLUTION:
+    ---------
+    Use two wavelengths (e.g., 405nm violet and 488nm blue) to disambiguate:
+    - Find ALL candidate sizes that match the measured scatter value
+    - For each candidate, calculate the theoretical VSSC/BSSC ratio
+    - Pick the candidate whose theoretical ratio best matches measured ratio
+    
+    PHYSICS INSIGHT (from Parvesh Reddy, Jan 2026):
+    -----------------------------------------------
+    - Small particles (< 100nm): Rayleigh regime, violet scatters MORE (ratio > 1)
+    - Large particles (> 200nm): Geometric regime, similar scattering (ratio ≈ 1)
+    - This wavelength-dependent behavior uniquely identifies the correct solution
+    
+    Example Usage:
+        >>> calc = MultiSolutionMieCalculator(n_particle=1.40, n_medium=1.33)
+        >>> 
+        >>> # Get both wavelength SSC values from FCS data
+        >>> ssc_blue = data['BSSC-H'].values  # 488nm
+        >>> ssc_violet = data['VSSC-H'].values  # 405nm
+        >>> 
+        >>> # Calculate sizes with disambiguation
+        >>> sizes, num_solutions = calc.calculate_sizes_multi_solution(ssc_blue, ssc_violet)
+        >>> print(f"D50: {np.nanmedian(sizes):.1f} nm")
+        >>> print(f"Events with multiple solutions: {(num_solutions > 1).sum()}")
+    
+    References:
+        - January 2026 meeting with Parvesh Reddy (wavelength ratio disambiguation)
+        - compare_single_vs_multi_solution.py script validation
+    """
+    
+    # Physical constants for wavelengths
+    WAVELENGTH_VIOLET = 405.0  # nm (VSSC channel)
+    WAVELENGTH_BLUE = 488.0    # nm (BSSC channel)
+    
+    def __init__(
+        self,
+        n_particle: float = 1.40,
+        n_medium: float = 1.33,
+        min_diameter: float = 30.0,
+        max_diameter: float = 500.0,
+        lut_resolution: int = 471
+    ):
+        """
+        Initialize multi-solution Mie calculator.
+        
+        Args:
+            n_particle: Refractive index of particles (EVs: 1.37-1.45)
+            n_medium: Refractive index of medium (PBS: 1.33)
+            min_diameter: Minimum diameter in lookup table (nm)
+            max_diameter: Maximum diameter in lookup table (nm)
+            lut_resolution: Number of points in LUT (default 471 = 1nm steps from 30-500)
+        """
+        self.n_particle = n_particle
+        self.n_medium = n_medium
+        self.m = complex(n_particle / n_medium, 0)
+        self.min_diameter = min_diameter
+        self.max_diameter = max_diameter
+        
+        # Build lookup tables for BOTH wavelengths
+        self.lut_diameters = np.linspace(min_diameter, max_diameter, lut_resolution)
+        
+        # Pre-compute SSC for violet (405nm)
+        self.lut_ssc_violet = np.zeros(lut_resolution)
+        for i, d in enumerate(self.lut_diameters):
+            self.lut_ssc_violet[i] = self._calc_ssc(d, self.WAVELENGTH_VIOLET)
+        
+        # Pre-compute SSC for blue (488nm)
+        self.lut_ssc_blue = np.zeros(lut_resolution)
+        for i, d in enumerate(self.lut_diameters):
+            self.lut_ssc_blue[i] = self._calc_ssc(d, self.WAVELENGTH_BLUE)
+        
+        # Pre-compute theoretical VSSC/BSSC ratios
+        with np.errstate(divide='ignore', invalid='ignore'):
+            self.lut_ratio = np.divide(
+                self.lut_ssc_violet, 
+                self.lut_ssc_blue, 
+                out=np.ones_like(self.lut_ssc_violet), 
+                where=self.lut_ssc_blue > 0
+            )
+        
+        logger.info(
+            f"✓ MultiSolutionMie initialized: n={n_particle:.2f}, "
+            f"range={min_diameter:.0f}-{max_diameter:.0f}nm, "
+            f"LUT size={lut_resolution}"
+        )
+    
+    def _calc_ssc(self, diameter_nm: float, wavelength_nm: float) -> float:
+        """
+        Calculate side scatter cross-section for a diameter at specific wavelength.
+        
+        Uses backscatter efficiency (Qback) × geometric cross-section as SSC proxy.
+        This matches what flow cytometers measure at ~90° detection angle.
+        """
+        m = complex(self.n_particle / self.n_medium, 0)
+        try:
+            # miepython.efficiencies returns: (qext, qsca, qback, g)
+            result = miepython.efficiencies(m, diameter_nm, wavelength_nm, n_env=self.n_medium)
+            qback = float(result[2]) if result[2] is not None else 0.0
+            
+            # Geometric cross-section
+            radius = diameter_nm / 2.0
+            cross_section = np.pi * (radius ** 2)
+            
+            return qback * cross_section
+        except Exception:
+            return 0.0
+    
+    def find_all_solutions(
+        self, 
+        target_ssc: float, 
+        wavelength_nm: float = 488.0, 
+        tolerance_pct: float = 15.0
+    ) -> List[float]:
+        """
+        Find ALL diameters that could produce the given SSC value.
+        
+        This is the key difference from single-solution: we find MULTIPLE candidates.
+        
+        Args:
+            target_ssc: Target SSC value to match
+            wavelength_nm: Which wavelength LUT to use (405 or 488)
+            tolerance_pct: Tolerance for matching (15% default accounts for noise)
+            
+        Returns:
+            List of possible diameters (may be empty, 1, or multiple)
+        """
+        if wavelength_nm == 405.0:
+            lut_ssc = self.lut_ssc_violet
+        else:
+            lut_ssc = self.lut_ssc_blue
+        
+        tolerance = abs(target_ssc * tolerance_pct / 100.0)
+        solutions: List[float] = []
+        
+        for i, (d, ssc) in enumerate(zip(self.lut_diameters, lut_ssc)):
+            if abs(ssc - target_ssc) <= tolerance:
+                # Check if this is a new solution (not too close to previous)
+                # Prevents reporting nearby LUT points as separate solutions
+                if not solutions or abs(d - solutions[-1]) > 10.0:
+                    solutions.append(float(d))
+        
+        return solutions
+    
+    def disambiguate_with_ratio(
+        self, 
+        possible_sizes: List[float], 
+        measured_ratio: float
+    ) -> Tuple[float, List[float], int]:
+        """
+        Select best size using wavelength ratio (VSSC/BSSC).
+        
+        PHYSICS:
+        - Small particles: violet scatters more (ratio > 1)
+        - Large particles: similar scattering (ratio ≈ 1)
+        
+        Args:
+            possible_sizes: List of candidate sizes from find_all_solutions()
+            measured_ratio: Actual VSSC/BSSC ratio from flow cytometry data
+            
+        Returns:
+            Tuple of (best_size, theoretical_ratios, best_index)
+        """
+        if not possible_sizes:
+            return np.nan, [], -1
+        
+        if len(possible_sizes) == 1:
+            idx = np.abs(self.lut_diameters - possible_sizes[0]).argmin()
+            return possible_sizes[0], [self.lut_ratio[idx]], 0
+        
+        best_size = possible_sizes[0]
+        best_error = float('inf')
+        best_idx = 0
+        theoretical_ratios: List[float] = []
+        
+        for i, size in enumerate(possible_sizes):
+            idx = np.abs(self.lut_diameters - size).argmin()
+            theoretical_ratio = self.lut_ratio[idx]
+            theoretical_ratios.append(float(theoretical_ratio))
+            
+            error = abs(theoretical_ratio - measured_ratio)
+            if error < best_error:
+                best_error = error
+                best_size = size
+                best_idx = i
+        
+        return best_size, theoretical_ratios, best_idx
+    
+    def calculate_sizes_multi_solution(
+        self,
+        ssc_blue: np.ndarray,
+        ssc_violet: np.ndarray,
+        tolerance_pct: float = 15.0
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Calculate particle sizes using multi-solution disambiguation.
+        
+        This is the PRODUCTION method for accurate sizing when both wavelengths
+        are available. For each event:
+        1. Find ALL sizes that match the blue SSC (within tolerance)
+        2. If multiple solutions, use VSSC/BSSC ratio to pick correct one
+        
+        Args:
+            ssc_blue: Array of blue SSC (488nm) values, shape (n_events,)
+            ssc_violet: Array of violet SSC (405nm) values, shape (n_events,)
+            tolerance_pct: Tolerance for solution matching (default 15%)
+            
+        Returns:
+            Tuple of (sizes, num_solutions):
+            - sizes: Array of estimated diameters in nm, shape (n_events,)
+            - num_solutions: Array of how many solutions were found per event
+        """
+        n_events = len(ssc_blue)
+        sizes = np.zeros(n_events)
+        num_solutions = np.zeros(n_events)
+        
+        for i in range(n_events):
+            if ssc_blue[i] <= 0 or ssc_violet[i] <= 0:
+                sizes[i] = np.nan
+                num_solutions[i] = 0
+                continue
+            
+            # Step 1: Find ALL possible solutions using blue SSC
+            solutions = self.find_all_solutions(
+                ssc_blue[i], 
+                wavelength_nm=488.0, 
+                tolerance_pct=tolerance_pct
+            )
+            num_solutions[i] = len(solutions)
+            
+            if len(solutions) == 0:
+                sizes[i] = np.nan
+            elif len(solutions) == 1:
+                sizes[i] = solutions[0]
+            else:
+                # Step 2: Use wavelength ratio to pick the best solution
+                measured_ratio = ssc_violet[i] / ssc_blue[i]
+                best_size, _, _ = self.disambiguate_with_ratio(solutions, measured_ratio)
+                sizes[i] = best_size
+        
+        return sizes, num_solutions
+    
+    def calculate_sizes_single_solution(
+        self,
+        ssc_values: np.ndarray,
+        wavelength_nm: float = 488.0
+    ) -> np.ndarray:
+        """
+        Calculate particle sizes using simple single-solution approach (for comparison).
+        
+        This picks the FIRST/CLOSEST matching size, which can be wrong for ~89%
+        of events that have multiple possible solutions.
+        
+        Args:
+            ssc_values: Array of SSC values
+            wavelength_nm: Wavelength for lookup table
+            
+        Returns:
+            Array of estimated diameters in nm
+        """
+        if wavelength_nm == 405.0:
+            lut_ssc = self.lut_ssc_violet
+        else:
+            lut_ssc = self.lut_ssc_blue
+        
+        sizes = np.zeros(len(ssc_values))
+        
+        for i, ssc in enumerate(ssc_values):
+            if ssc <= 0:
+                sizes[i] = np.nan
+                continue
+            
+            # Find closest match (picks FIRST/CLOSEST only)
+            errors = np.abs(lut_ssc - ssc)
+            best_idx = np.argmin(errors)
+            sizes[i] = self.lut_diameters[best_idx]
+        
+        return sizes
+    
+    def get_multi_solution_stats(
+        self,
+        ssc_blue: np.ndarray,
+        ssc_violet: np.ndarray
+    ) -> Dict[str, Any]:
+        """
+        Get statistics about multi-solution disambiguation.
+        
+        Useful for understanding how many events had ambiguous sizing.
+        """
+        sizes, num_solutions = self.calculate_sizes_multi_solution(ssc_blue, ssc_violet)
+        
+        valid_mask = ~np.isnan(sizes)
+        valid_sizes = sizes[valid_mask]
+        valid_num_solutions = num_solutions[valid_mask]
+        
+        return {
+            'total_events': len(ssc_blue),
+            'valid_events': int(valid_mask.sum()),
+            'events_with_1_solution': int((valid_num_solutions == 1).sum()),
+            'events_with_2_solutions': int((valid_num_solutions == 2).sum()),
+            'events_with_3plus_solutions': int((valid_num_solutions >= 3).sum()),
+            'avg_solutions_per_event': float(np.mean(valid_num_solutions)) if len(valid_num_solutions) > 0 else 0,
+            'd10': float(np.percentile(valid_sizes, 10)) if len(valid_sizes) > 0 else None,
+            'd50': float(np.percentile(valid_sizes, 50)) if len(valid_sizes) > 0 else None,
+            'd90': float(np.percentile(valid_sizes, 90)) if len(valid_sizes) > 0 else None,
+            'mean': float(np.mean(valid_sizes)) if len(valid_sizes) > 0 else None,
+            'std': float(np.std(valid_sizes)) if len(valid_sizes) > 0 else None,
+        }
 
 
 class FCMPASSCalibrator:

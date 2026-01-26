@@ -1,0 +1,59 @@
+<?xml version="1.0"?>
+<Experiment xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <Tubes>
+    <Tube Name="HPLC FIL Water" SignalStatisticsSettingId="0" />
+    <Tube Name="HPLC FIL Water1" SignalStatisticsSettingId="0" />
+    <Tube Name="HPLC FIL Water2" SignalStatisticsSettingId="0" />
+    <Tube Name="HPLC FIL Water3" SignalStatisticsSettingId="0" />
+    <Tube Name="HPLC FIL Water4" SignalStatisticsSettingId="0" />
+    <Tube Name="HPLC FIL Water10" SignalStatisticsSettingId="0" />
+    <Tube Name="Blank-SampleLine1" SignalStatisticsSettingId="0" />
+    <Tube Name="HPLC WA" SignalStatisticsSettingId="0" />
+    <Tube Name="HPLC WA1" SignalStatisticsSettingId="0" />
+    <Tube Name="HPLC WA2" SignalStatisticsSettingId="0" />
+    <Tube Name="HPLC WA3" SignalStatisticsSettingId="0" />
+    <Tube Name="Blank-SampleLine2" SignalStatisticsSettingId="0" />
+    <Tube Name="HPLC WA4" SignalStatisticsSettingId="0" />
+    <Tube Name="PC3 EXO1" SignalStatisticsSettingId="0" />
+    <Tube Name="CD 81 alone" SignalStatisticsSettingId="0" />
+    <Tube Name="CD 9 alone1" SignalStatisticsSettingId="0" />
+    <Tube Name="Exo+CD 9 +ISOTYPE" SignalStatisticsSettingId="0" />
+    <Tube Name="Exo+CD 81 +ISOTYPE1" SignalStatisticsSettingId="0" />
+    <Tube Name="Exo+CD 81" SignalStatisticsSettingId="0" />
+    <Tube Name="Exo+CD 9" SignalStatisticsSettingId="0" />
+    <Tube Name="cont 2 1ug alone" SignalStatisticsSettingId="0" />
+    <Tube Name="Exo+cont 2 1ug" SignalStatisticsSettingId="0" />
+    <Tube Name="cont 4 1ug Alone" SignalStatisticsSettingId="0" />
+    <Tube Name="Exo+cont 4 1ug" SignalStatisticsSettingId="0" />
+    <Tube Name="Exo+cont 4 50 uM" SignalStatisticsSettingId="0" />
+    <Tube Name="Exo+cont 2 50 uM1" SignalStatisticsSettingId="0" />
+    <Tube Name="cont 4 50 uM2" SignalStatisticsSettingId="0" />
+    <Tube Name="cont 2 50 uM3" SignalStatisticsSettingId="0" />
+  </Tubes>
+  <Plates />
+  <Populations>
+    <Population Name="Noise" />
+    <Population Name="P1" />
+    <Population Name="P2" />
+    <Population Name="P3" />
+  </Populations>
+  <StatisticsSettings>
+    <TubeHeaderItems>
+      <TubeHeaderItem>EventsCount</TubeHeaderItem>
+      <TubeHeaderItem>RecordTime</TubeHeaderItem>
+      <TubeHeaderItem>Volume</TubeHeaderItem>
+      <TubeHeaderItem>AbortRate</TubeHeaderItem>
+    </TubeHeaderItems>
+    <PopulationStatisticsItems>
+      <PopulationStatisticsItem>Count</PopulationStatisticsItem>
+      <PopulationStatisticsItem>PercentOfParent</PopulationStatisticsItem>
+      <PopulationStatisticsItem>PercentOfAll</PopulationStatisticsItem>
+      <PopulationStatisticsItem>Concentration</PopulationStatisticsItem>
+    </PopulationStatisticsItems>
+    <SignalStatisticsSettings>
+      <SignalStatisticsSetting Id="0">
+        <SignalStatisticsSettingInfos />
+      </SignalStatisticsSetting>
+    </SignalStatisticsSettings>
+  </StatisticsSettings>
+</Experiment>

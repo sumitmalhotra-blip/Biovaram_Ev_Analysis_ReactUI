@@ -1,0 +1,48 @@
+{
+  "combined_calibration": {
+    "formula": "size_nm = 10^1.3537 * SSC^0.1960",
+    "log_slope_a": 0.19599508810787514,
+    "log_intercept_b": 1.3537088393656034,
+    "rmse_log": 0.3586297799125182
+  },
+  "individual_calibrations": {
+    "Nano Vis Low": {
+      "log_slope_a": 0.16593155699559403,
+      "log_intercept_b": 1.136877987158044,
+      "p10_ssc": 636.0,
+      "p90_ssc": 1831905.8750000005,
+      "expected_range_nm": [
+        40,
+        150
+      ]
+    },
+    "Nano Vis High": {
+      "log_slope_a": 0.23558308330821398,
+      "log_intercept_b": 1.5318557417218357,
+      "p10_ssc": 405.0,
+      "p90_ssc": 1705923.7000000002,
+      "expected_range_nm": [
+        140,
+        1000
+      ]
+    }
+  },
+  "calibration_points": [
+    {
+      "ssc": 636.0,
+      "size_nm": 40.0
+    },
+    {
+      "ssc": 1831905.8750000005,
+      "size_nm": 150.0
+    },
+    {
+      "ssc": 405.0,
+      "size_nm": 140.0
+    },
+    {
+      "ssc": 1705923.7000000002,
+      "size_nm": 1000.0
+    }
+  ]
+}

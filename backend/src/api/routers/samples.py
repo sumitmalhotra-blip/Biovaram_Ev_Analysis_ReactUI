@@ -511,6 +511,9 @@ async def get_scatter_data(
     max_points: int = Query(5000, ge=100, le=100000, description="Maximum points to return"),
     fsc_channel: Optional[str] = Query(None, description="FSC channel name override (e.g., 'Channel_3')"),
     ssc_channel: Optional[str] = Query(None, description="SSC channel name override (e.g., 'Channel_4')"),
+    wavelength_nm: float = Query(488.0, ge=200, le=800, description="Laser wavelength for Mie calculations"),
+    n_particle: float = Query(1.40, ge=1.0, le=2.0, description="Particle refractive index"),
+    n_medium: float = Query(1.33, ge=1.0, le=2.0, description="Medium refractive index"),
     db: AsyncSession = Depends(get_session)
 ):
     """
@@ -620,47 +623,54 @@ async def get_scatter_data(
             sampled_indices = np.arange(total_events)
         
         # Initialize Mie calculator for diameter estimation
+        # Uses user-provided parameters from sidebar settings
         from src.physics.mie_scatter import MieScatterCalculator
         mie_calc = MieScatterCalculator(
-            wavelength_nm=488.0,
-            n_particle=1.40,
-            n_medium=1.33
+            wavelength_nm=wavelength_nm,
+            n_particle=n_particle,
+            n_medium=n_medium
         )
+        logger.info(f"🔬 Using Mie params: λ={wavelength_nm}nm, n_p={n_particle}, n_m={n_medium}")
         
         # Build scatter data array with diameter calculation
         # Note: Use direct column access instead of itertuples() to handle column names with hyphens
-        scatter_data = []
         fsc_values = sampled_data[fsc_ch].values
         ssc_values = sampled_data[ssc_ch].values
         
+        # Use batch diameter calculation with normalization for performance
+        # The batch method handles the FSC-to-diameter mapping internally
+        try:
+            diameters, success_mask = mie_calc.diameters_from_scatter_normalized(
+                fsc_intensities=fsc_values,
+                min_diameter=20.0,
+                max_diameter=500.0
+            )
+            valid_diameter_count = int(np.sum(success_mask))
+            logger.info(f"📐 Calculated {valid_diameter_count}/{len(fsc_values)} valid diameters via normalized Mie")
+        except Exception as e:
+            logger.warning(f"⚠️ Batch Mie calculation failed, trying fallback: {e}")
+            # Fallback: use relative FSC mapping
+            diameters = np.zeros(len(fsc_values))
+            success_mask = np.zeros(len(fsc_values), dtype=bool)
+        
+        scatter_data = []
         for idx, orig_idx in enumerate(sampled_indices):
             fsc_val = float(fsc_values[idx])
             ssc_val = float(ssc_values[idx])
-            
-            # Calculate diameter from FSC using Mie theory
-            diameter = None
-            try:
-                d, success = mie_calc.diameter_from_scatter(
-                    fsc_intensity=fsc_val,
-                    min_diameter=20.0,
-                    max_diameter=500.0
-                )
-                if success and d > 0:
-                    diameter = round(d, 1)
-            except Exception:
-                pass
             
             point_data = {
                 "x": fsc_val,
                 "y": ssc_val,
                 "index": int(orig_idx)
             }
-            if diameter is not None:
-                point_data["diameter"] = diameter
+            
+            # Add diameter if valid
+            if success_mask[idx] and diameters[idx] > 0:
+                point_data["diameter"] = round(float(diameters[idx]), 1)
             
             scatter_data.append(point_data)
         
-        logger.success(f"✅ Returned {len(scatter_data)} scatter points with diameter for {sample_id}")
+        logger.success(f"✅ Returned {len(scatter_data)} scatter points ({valid_diameter_count} with diameter) for {sample_id}")
         
         return {
             "sample_id": sample_id,
@@ -724,6 +734,10 @@ class GatedAnalysisRequest(BaseModel):
     x_channel: str = Field(..., description="X-axis channel name")
     y_channel: str = Field(..., description="Y-axis channel name")
     include_diameter_stats: bool = Field(default=True, description="Include diameter statistics")
+    # Mie parameters for size calculations
+    wavelength_nm: float = Field(default=488.0, ge=200, le=800, description="Laser wavelength")
+    n_particle: float = Field(default=1.40, ge=1.0, le=2.0, description="Particle refractive index")
+    n_medium: float = Field(default=1.33, ge=1.0, le=2.0, description="Medium refractive index")
 
 
 @router.post("/{sample_id}/gated-analysis", response_model=dict)
@@ -958,10 +972,11 @@ async def analyze_gated_population(
             try:
                 from src.physics.mie_scatter import MieScatterCalculator
                 mie_calc = MieScatterCalculator(
-                    wavelength_nm=488.0,
-                    n_particle=1.40,
-                    n_medium=1.33
+                    wavelength_nm=request.wavelength_nm,
+                    n_particle=request.n_particle,
+                    n_medium=request.n_medium
                 )
+                logger.info(f"🔬 Gated analysis using Mie params: λ={request.wavelength_nm}nm, n_p={request.n_particle}, n_m={request.n_medium}")
                 
                 # Calculate diameters for gated events
                 diameters = []
@@ -1229,6 +1244,9 @@ async def get_recommended_axes(
 async def get_size_bins(
     sample_id: str,
     fsc_channel: Optional[str] = Query(None, description="FSC channel name override (e.g., 'Channel_3')"),
+    wavelength_nm: float = Query(488.0, ge=200, le=800, description="Laser wavelength for Mie calculations"),
+    n_particle: float = Query(1.40, ge=1.0, le=2.0, description="Particle refractive index"),
+    n_medium: float = Query(1.33, ge=1.0, le=2.0, description="Medium refractive index"),
     db: AsyncSession = Depends(get_session)
 ):
     """
@@ -1314,12 +1332,13 @@ async def get_size_bins(
             fsc_ch = channels[0]
             logger.warning(f"⚠️ FSC channel not found for size bins, using first channel: {fsc_ch}")
         
-        # Initialize Mie calculator
+        # Initialize Mie calculator with user-provided parameters
         mie_calc = MieScatterCalculator(
-            wavelength_nm=488.0,
-            n_particle=1.40,
-            n_medium=1.33
+            wavelength_nm=wavelength_nm,
+            n_particle=n_particle,
+            n_medium=n_medium
         )
+        logger.info(f"🔬 Size bins using Mie params: λ={wavelength_nm}nm, n_p={n_particle}, n_m={n_medium}")
         
         total_events = len(parsed_data)
         
@@ -2209,5 +2228,474 @@ async def get_available_channels(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get available channels: {str(e)}"
+        )
+
+
+# ============================================================================
+# FCS Data Split - Metadata and Values (Per-Event Sizes)
+# ============================================================================
+
+@router.get("/{sample_id}/fcs/metadata", response_model=dict)
+async def get_fcs_metadata(
+    sample_id: str,
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    Get FCS file metadata only (no event data).
+    
+    Returns instrument settings, channel info, acquisition details.
+    """
+    try:
+        # Get sample from database
+        result = await db.execute(select(Sample).where(Sample.sample_id == sample_id))
+        sample = result.scalar_one_or_none()
+        
+        if not sample:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Sample {sample_id} not found"
+            )
+        
+        if not sample.file_path_fcs:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No FCS file associated with sample {sample_id}"
+            )
+        
+        # Parse FCS file
+        from src.parsers.fcs_parser import FCSParser
+        parser = FCSParser(sample.file_path_fcs)
+        parser.parse()
+        
+        # Extract metadata
+        metadata = parser.extract_metadata()
+        
+        # Add file-level info
+        import os
+        file_stat = os.stat(sample.file_path_fcs)
+        
+        return {
+            "sample_id": sample_id,
+            "file_info": {
+                "file_name": sample.file_path_fcs.name if hasattr(sample.file_path_fcs, 'name') else str(sample.file_path_fcs).split('/')[-1],
+                "file_size_bytes": file_stat.st_size,
+                "file_size_mb": round(file_stat.st_size / (1024 * 1024), 2),
+            },
+            "acquisition": {
+                "date": metadata.get('acquisition_date', 'Unknown'),
+                "time": metadata.get('acquisition_time', 'Unknown'),
+                "cytometer": metadata.get('cytometer', 'Unknown'),
+                "operator": metadata.get('operator', 'Unknown'),
+                "specimen": metadata.get('specimen', 'Unknown'),
+            },
+            "data_info": {
+                "total_events": metadata.get('total_events', 0),
+                "parameter_count": metadata.get('parameters', 0),
+                "channel_count": metadata.get('channel_count', 0),
+                "channel_names": metadata.get('channel_names', []),
+            },
+            "channels": metadata.get('channels', {}),
+            "identifiers": {
+                "sample_id": metadata.get('sample_id'),
+                "biological_sample_id": metadata.get('biological_sample_id'),
+                "measurement_id": metadata.get('measurement_id'),
+                "is_baseline": metadata.get('is_baseline', False),
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"❌ Failed to get FCS metadata: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get FCS metadata: {str(e)}"
+        )
+
+
+@router.get("/{sample_id}/fcs/values", response_model=dict)
+async def get_fcs_values(
+    sample_id: str,
+    wavelength_nm: float = Query(488.0, description="Laser wavelength in nm"),
+    n_particle: float = Query(1.40, description="Particle refractive index"),
+    n_medium: float = Query(1.33, description="Medium refractive index"),
+    max_events: int = Query(50000, ge=1, le=500000, description="Maximum events to return"),
+    include_raw_channels: bool = Query(False, description="Include raw FSC/SSC channel values"),
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    Get FCS per-event size values calculated using Mie theory.
+    
+    Returns particle diameter (nm) for each event calculated from FSC using Mie scattering.
+    
+    **Parameters:**
+    - wavelength_nm: Laser wavelength (default: 488nm)
+    - n_particle: Particle refractive index (default: 1.40 for EVs)
+    - n_medium: Medium refractive index (default: 1.33 for PBS)
+    - max_events: Maximum number of events to return (default: 50000)
+    - include_raw_channels: If true, include raw FSC/SSC values
+    
+    **Response:**
+    Returns per-event size data and summary statistics.
+    """
+    try:
+        # Get sample from database
+        result = await db.execute(select(Sample).where(Sample.sample_id == sample_id))
+        sample = result.scalar_one_or_none()
+        
+        if not sample:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Sample {sample_id} not found"
+            )
+        
+        if not sample.file_path_fcs:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No FCS file associated with sample {sample_id}"
+            )
+        
+        logger.info(f"📊 Getting FCS values for {sample_id} with Mie params: λ={wavelength_nm}nm, n_p={n_particle}, n_m={n_medium}")
+        
+        # Parse FCS file
+        from src.parsers.fcs_parser import FCSParser
+        from src.physics.mie_scatter import MieScatterCalculator
+        from src.utils.channel_config import ChannelConfig
+        import numpy as np
+        
+        parser = FCSParser(sample.file_path_fcs)
+        parsed_data = parser.parse()
+        
+        # Detect FSC channel
+        config = ChannelConfig()
+        fsc_channel = config.detect_fsc_channel(parser.channel_names)
+        ssc_channel = config.detect_ssc_channel(parser.channel_names)
+        
+        if not fsc_channel:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No FSC channel detected - cannot calculate particle sizes"
+            )
+        
+        # Sample events if needed
+        total_events = len(parsed_data)
+        if total_events > max_events:
+            sampled_data = parsed_data.sample(n=max_events, random_state=42)
+            sampled = True
+        else:
+            sampled_data = parsed_data
+            sampled = False
+        
+        # Get FSC values
+        fsc_values = sampled_data[fsc_channel].values
+        
+        # Initialize Mie calculator with user parameters
+        mie_calc = MieScatterCalculator(
+            wavelength_nm=wavelength_nm,
+            n_particle=n_particle,
+            n_medium=n_medium
+        )
+        
+        # Calculate particle sizes using NORMALIZED method
+        # This handles the scale mismatch between raw FSC and physical scatter
+        sizes, success_mask = mie_calc.diameters_from_scatter_normalized(
+            fsc_values, 
+            min_diameter=20.0, 
+            max_diameter=500.0
+        )
+        
+        # Filter valid sizes
+        valid_sizes = sizes[success_mask]
+        valid_fsc = fsc_values[success_mask]
+        
+        # Build response
+        event_data = []
+        for i, (size, fsc) in enumerate(zip(sizes, fsc_values)):
+            event_entry = {
+                "event_id": i,
+                "diameter_nm": float(size) if success_mask[i] else None,
+                "valid": bool(success_mask[i]),
+            }
+            if include_raw_channels:
+                event_entry["fsc"] = float(fsc)
+                if ssc_channel:
+                    event_entry["ssc"] = float(sampled_data.iloc[i][ssc_channel])
+            event_data.append(event_entry)
+        
+        # Calculate statistics
+        if len(valid_sizes) > 0:
+            size_stats = {
+                "count": int(len(valid_sizes)),
+                "mean_nm": float(np.mean(valid_sizes)),
+                "median_nm": float(np.median(valid_sizes)),
+                "std_nm": float(np.std(valid_sizes)),
+                "min_nm": float(np.min(valid_sizes)),
+                "max_nm": float(np.max(valid_sizes)),
+                "d10_nm": float(np.percentile(valid_sizes, 10)),
+                "d50_nm": float(np.percentile(valid_sizes, 50)),
+                "d90_nm": float(np.percentile(valid_sizes, 90)),
+            }
+            
+            # Size distribution bins
+            bins = [0, 50, 100, 150, 200, 300, 500, 1000]
+            bin_labels = ["<50", "50-100", "100-150", "150-200", "200-300", "300-500", ">500"]
+            hist, _ = np.histogram(valid_sizes, bins=bins)
+            size_distribution = {label: int(count) for label, count in zip(bin_labels, hist)}
+        else:
+            size_stats = None
+            size_distribution = None
+        
+        return {
+            "sample_id": sample_id,
+            "mie_parameters": {
+                "wavelength_nm": wavelength_nm,
+                "n_particle": n_particle,
+                "n_medium": n_medium,
+            },
+            "data_info": {
+                "total_events": total_events,
+                "returned_events": len(sampled_data),
+                "valid_sizes": int(np.sum(success_mask)),
+                "invalid_sizes": int(np.sum(~success_mask)),
+                "sampled": sampled,
+                "fsc_channel": fsc_channel,
+                "ssc_channel": ssc_channel,
+            },
+            "statistics": size_stats,
+            "size_distribution": size_distribution,
+            "events": event_data,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"❌ Failed to get FCS values: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get FCS values: {str(e)}"
+        )
+
+
+# ============================================================================
+# NTA Data Split - Metadata and Values (Size/Concentration)
+# ============================================================================
+
+@router.get("/{sample_id}/nta/metadata", response_model=dict)
+async def get_nta_metadata(
+    sample_id: str,
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    Get NTA file metadata only (no measurement data).
+    
+    Returns instrument settings, acquisition parameters, sample info.
+    """
+    try:
+        # Get sample from database
+        result = await db.execute(select(Sample).where(Sample.sample_id == sample_id))
+        sample = result.scalar_one_or_none()
+        
+        if not sample:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Sample {sample_id} not found"
+            )
+        
+        if not sample.file_path_nta:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No NTA file associated with sample {sample_id}"
+            )
+        
+        # Parse NTA file
+        from src.parsers.nta_parser import NTAParser
+        parser = NTAParser(sample.file_path_nta)
+        parser.parse()
+        
+        # Get raw metadata
+        raw_metadata = parser.raw_metadata
+        
+        # Add file-level info
+        import os
+        file_stat = os.stat(sample.file_path_nta)
+        
+        return {
+            "sample_id": sample_id,
+            "file_info": {
+                "file_name": sample.file_path_nta.name if hasattr(sample.file_path_nta, 'name') else str(sample.file_path_nta).split('/')[-1],
+                "file_size_bytes": file_stat.st_size,
+                "measurement_type": parser.measurement_type,
+            },
+            "sample_info": {
+                "sample_name": raw_metadata.get('sample_name', 'Unknown'),
+                "operator": raw_metadata.get('operator', 'Unknown'),
+                "experiment": raw_metadata.get('experiment', 'Unknown'),
+                "electrolyte": raw_metadata.get('electrolyte', 'Unknown'),
+            },
+            "instrument": {
+                "instrument_serial": raw_metadata.get('instrument_serial', 'Unknown'),
+                "cell_serial": raw_metadata.get('cell_serial', 'Unknown'),
+                "software_version": raw_metadata.get('software_version', 'Unknown'),
+                "sop": raw_metadata.get('sop', 'Unknown'),
+            },
+            "acquisition": {
+                "date": raw_metadata.get('date', 'Unknown'),
+                "time": raw_metadata.get('time', 'Unknown'),
+                "temperature": float(raw_metadata.get('temperature', 0)) if raw_metadata.get('temperature') else None,
+                "viscosity": float(raw_metadata.get('viscosity', 0)) if raw_metadata.get('viscosity') else None,
+                "ph": float(raw_metadata.get('ph', 0)) if raw_metadata.get('ph') else None,
+                "conductivity": float(raw_metadata.get('conductivity', 0)) if raw_metadata.get('conductivity') else None,
+            },
+            "measurement_params": {
+                "num_positions": int(raw_metadata.get('num_positions', 0)) if raw_metadata.get('num_positions') else None,
+                "num_traces": int(raw_metadata.get('num_traces', 0)) if raw_metadata.get('num_traces') else None,
+                "sensitivity": float(raw_metadata.get('sensitivity', 0)) if raw_metadata.get('sensitivity') else None,
+                "shutter": float(raw_metadata.get('shutter', 0)) if raw_metadata.get('shutter') else None,
+                "laser_wavelength": float(raw_metadata.get('laser_wavelength', 0)) if raw_metadata.get('laser_wavelength') else None,
+                "dilution": float(raw_metadata.get('dilution', 1)) if raw_metadata.get('dilution') else 1,
+                "conc_correction": float(raw_metadata.get('conc_correction', 1)) if raw_metadata.get('conc_correction') else 1,
+            },
+            "quality": {
+                "cell_check_result": raw_metadata.get('cell_check_result', 'Unknown'),
+                "detected_particles": int(raw_metadata.get('detected_particles', 0)) if raw_metadata.get('detected_particles') else None,
+                "scattering_intensity": float(raw_metadata.get('scattering_intensity', 0)) if raw_metadata.get('scattering_intensity') else None,
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"❌ Failed to get NTA metadata: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get NTA metadata: {str(e)}"
+        )
+
+
+@router.get("/{sample_id}/nta/values", response_model=dict)
+async def get_nta_values(
+    sample_id: str,
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    Get NTA size and concentration values.
+    
+    Returns size distribution data with size (nm) and concentration (particles/mL).
+    
+    **Response:**
+    Returns per-bin size and concentration data along with summary statistics.
+    """
+    try:
+        # Get sample from database
+        result = await db.execute(select(Sample).where(Sample.sample_id == sample_id))
+        sample = result.scalar_one_or_none()
+        
+        if not sample:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Sample {sample_id} not found"
+            )
+        
+        if not sample.file_path_nta:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No NTA file associated with sample {sample_id}"
+            )
+        
+        logger.info(f"📊 Getting NTA values for {sample_id}")
+        
+        # Parse NTA file
+        from src.parsers.nta_parser import NTAParser
+        import numpy as np
+        
+        parser = NTAParser(sample.file_path_nta)
+        parsed_data = parser.parse()
+        
+        # Extract size and concentration columns
+        size_col = None
+        conc_col = None
+        
+        # Find size column
+        for col in ['size_nm', 'Size (nm)', 'Diameter', 'diameter_nm']:
+            if col in parsed_data.columns:
+                size_col = col
+                break
+        
+        # Find concentration column
+        for col in ['concentration_particles_ml', 'Concentration (particles/mL)', 'concentration_particles_cm3', 'Conc.']:
+            if col in parsed_data.columns:
+                conc_col = col
+                break
+        
+        if not size_col:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No size column found in NTA data"
+            )
+        
+        # Get values
+        sizes = parsed_data[size_col].values
+        concentrations = parsed_data[conc_col].values if conc_col else None
+        
+        # Build per-bin data
+        values_data = []
+        for i in range(len(sizes)):
+            entry = {
+                "bin_id": i,
+                "size_nm": float(sizes[i]),
+            }
+            if concentrations is not None:
+                entry["concentration_particles_ml"] = float(concentrations[i])
+            values_data.append(entry)
+        
+        # Calculate statistics
+        valid_sizes = sizes[~np.isnan(sizes)]
+        if conc_col:
+            valid_conc = concentrations[~np.isnan(concentrations)]
+            # Weight sizes by concentration for proper mean
+            total_particles = np.sum(valid_conc)
+            if total_particles > 0:
+                weighted_mean = np.sum(valid_sizes * valid_conc) / total_particles
+            else:
+                weighted_mean = np.mean(valid_sizes)
+        else:
+            valid_conc = None
+            weighted_mean = np.mean(valid_sizes)
+        
+        size_stats = {
+            "count": int(len(valid_sizes)),
+            "mean_nm": float(np.mean(valid_sizes)),
+            "weighted_mean_nm": float(weighted_mean),
+            "median_nm": float(np.median(valid_sizes)),
+            "std_nm": float(np.std(valid_sizes)),
+            "min_nm": float(np.min(valid_sizes)),
+            "max_nm": float(np.max(valid_sizes)),
+            "mode_nm": float(valid_sizes[np.argmax(valid_conc)]) if valid_conc is not None and len(valid_conc) > 0 else float(np.median(valid_sizes)),
+        }
+        
+        conc_stats = None
+        if valid_conc is not None:
+            conc_stats = {
+                "total_particles_ml": float(np.sum(valid_conc)),
+                "max_concentration": float(np.max(valid_conc)),
+                "peak_size_nm": float(valid_sizes[np.argmax(valid_conc)]),
+            }
+        
+        return {
+            "sample_id": sample_id,
+            "measurement_type": parser.measurement_type,
+            "data_info": {
+                "total_bins": len(parsed_data),
+                "size_column": size_col,
+                "concentration_column": conc_col,
+            },
+            "size_statistics": size_stats,
+            "concentration_statistics": conc_stats,
+            "values": values_data,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"❌ Failed to get NTA values: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get NTA values: {str(e)}"
         )
 

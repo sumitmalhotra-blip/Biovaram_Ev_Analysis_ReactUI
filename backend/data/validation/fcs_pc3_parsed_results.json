@@ -1,0 +1,4258 @@
+[
+  {
+    "file": "PC3 EXO1.fcs",
+    "status": "success",
+    "total_events": 914326,
+    "sample_id": "PC3 EXO1",
+    "channels": [
+      "VFSC-H",
+      "VFSC-A",
+      "VSSC1-H",
+      "VSSC1-A",
+      "VSSC2-H",
+      "VSSC2-A",
+      "BSSC-H",
+      "BSSC-A",
+      "YSSC-H",
+      "YSSC-A",
+      "RSSC-H",
+      "RSSC-A",
+      "V447-H",
+      "V447-A",
+      "B531-H",
+      "B531-A",
+      "Y595-H",
+      "Y595-A",
+      "R670-H",
+      "R670-A",
+      "R710-H",
+      "R710-A",
+      "R792-H",
+      "R792-A",
+      "VSSC1-Width",
+      "Time"
+    ],
+    "num_channels": 26,
+    "scatter_stats": {
+      "VFSC-H": {
+        "description": "Forward Scatter Height",
+        "min": 0.0,
+        "max": 3611531.0,
+        "mean": 1123.8261387270047,
+        "median": 623.7999877929688,
+        "std": 24030.05057158225,
+        "positive_events": 811588,
+        "positive_pct": 88.76
+      },
+      "VFSC-A": {
+        "description": "Forward Scatter Area",
+        "min": -6722.10009765625,
+        "max": 4301339.0,
+        "mean": 397.5737968720435,
+        "median": 10.149999618530273,
+        "std": 20992.939566725207,
+        "positive_events": 461567,
+        "positive_pct": 50.48
+      },
+      "VSSC1-H": {
+        "description": "Violet Side Scatter Height",
+        "min": 13.199999809265137,
+        "max": 5378694.5,
+        "mean": 23355.925528117412,
+        "median": 2286.39990234375,
+        "std": 175315.63028704326,
+        "positive_events": 914326,
+        "positive_pct": 100.0
+      },
+      "VSSC1-A": {
+        "description": "Violet Side Scatter Area",
+        "min": -409.2250061035156,
+        "max": 20366904.0,
+        "mean": 19500.805176945683,
+        "median": 1689.2750244140625,
+        "std": 175560.40539661047,
+        "positive_events": 914272,
+        "positive_pct": 99.99
+      },
+      "VSSC2-H": {
+        "description": "Side Scatter 2 Height",
+        "min": 0.0,
+        "max": 5620374.5,
+        "mean": 481.0063142075903,
+        "median": 92.0,
+        "std": 7823.754012349752,
+        "positive_events": 879312,
+        "positive_pct": 96.17
+      },
+      "BSSC-H": {
+        "description": "Blue Side Scatter Height",
+        "min": 0.0,
+        "max": 5352976.0,
+        "mean": 7685.151605778521,
+        "median": 472.5,
+        "std": 85031.85433266548,
+        "positive_events": 910398,
+        "positive_pct": 99.57
+      }
+    },
+    "fluorescence_stats": {
+      "V447-H": {
+        "min": 0.0,
+        "max": 6858.5,
+        "mean": 65.71053497301111,
+        "median": 64.9000015258789,
+        "positive_events": 869860,
+        "positive_pct": 95.14
+      },
+      "B531-H": {
+        "min": 0.0,
+        "max": 7361.0,
+        "mean": 63.73358560764195,
+        "median": 62.599998474121094,
+        "positive_events": 869095,
+        "positive_pct": 95.05
+      },
+      "Y595-H": {
+        "min": 0.0,
+        "max": 3570.10009765625,
+        "mean": 65.46556545304321,
+        "median": 64.69999694824219,
+        "positive_events": 869226,
+        "positive_pct": 95.07
+      },
+      "R670-H": {
+        "min": 0.0,
+        "max": 3144.5,
+        "mean": 59.601578651315435,
+        "median": 59.599998474121094,
+        "positive_events": 864142,
+        "positive_pct": 94.51
+      },
+      "R710-H": {
+        "min": 0.0,
+        "max": 3496.39990234375,
+        "mean": 58.834615335224726,
+        "median": 57.70000076293945,
+        "positive_events": 867089,
+        "positive_pct": 94.83
+      },
+      "R792-H": {
+        "min": 0.0,
+        "max": 2839.39990234375,
+        "mean": 57.50834068126673,
+        "median": 57.400001525878906,
+        "positive_events": 861340,
+        "positive_pct": 94.2
+      }
+    },
+    "data_shape": [
+      914326,
+      33
+    ],
+    "category": "main_sample"
+  },
+  {
+    "file": "Exo+CD 81 +ISOTYPE1.fcs",
+    "status": "success",
+    "total_events": 1187417,
+    "sample_id": "Exo+CD 81 +ISOTYPE1",
+    "channels": [
+      "VFSC-H",
+      "VFSC-A",
+      "VSSC1-H",
+      "VSSC1-A",
+      "VSSC2-H",
+      "VSSC2-A",
+      "BSSC-H",
+      "BSSC-A",
+      "YSSC-H",
+      "YSSC-A",
+      "RSSC-H",
+      "RSSC-A",
+      "V447-H",
+      "V447-A",
+      "B531-H",
+      "B531-A",
+      "Y595-H",
+      "Y595-A",
+      "R670-H",
+      "R670-A",
+      "R710-H",
+      "R710-A",
+      "R792-H",
+      "R792-A",
+      "VSSC1-Width",
+      "Time"
+    ],
+    "num_channels": 26,
+    "scatter_stats": {
+      "VFSC-H": {
+        "description": "Forward Scatter Height",
+        "min": 0.0,
+        "max": 3684907.25,
+        "mean": 1114.0310048822062,
+        "median": 649.9000244140625,
+        "std": 22590.06845206533,
+        "positive_events": 1061929,
+        "positive_pct": 89.43
+      },
+      "VFSC-A": {
+        "description": "Forward Scatter Area",
+        "min": -12299.5498046875,
+        "max": 5093629.5,
+        "mean": 377.3021492209025,
+        "median": 10.824999809265137,
+        "std": 20761.586894510114,
+        "positive_events": 599780,
+        "positive_pct": 50.51
+      },
+      "VSSC1-H": {
+        "description": "Violet Side Scatter Height",
+        "min": 0.0,
+        "max": 5378022.0,
+        "mean": 23609.334506382733,
+        "median": 2498.0,
+        "std": 175732.06202914438,
+        "positive_events": 1187405,
+        "positive_pct": 100.0
+      },
+      "VSSC1-A": {
+        "description": "Violet Side Scatter Area",
+        "min": -1067.4000244140625,
+        "max": 28941950.0,
+        "mean": 19781.766990249882,
+        "median": 1737.0,
+        "std": 181358.99359809211,
+        "positive_events": 1186148,
+        "positive_pct": 99.89
+      },
+      "VSSC2-H": {
+        "description": "Side Scatter 2 Height",
+        "min": 0.0,
+        "max": 2262435.5,
+        "mean": 479.3940393139013,
+        "median": 94.30000305175781,
+        "std": 5521.6015586773965,
+        "positive_events": 1137750,
+        "positive_pct": 95.82
+      },
+      "BSSC-H": {
+        "description": "Blue Side Scatter Height",
+        "min": 0.0,
+        "max": 5351953.5,
+        "mean": 7792.303425101016,
+        "median": 517.9000244140625,
+        "std": 86610.91861226536,
+        "positive_events": 1178177,
+        "positive_pct": 99.22
+      }
+    },
+    "fluorescence_stats": {
+      "V447-H": {
+        "min": 0.0,
+        "max": 2546.300048828125,
+        "mean": 66.48150818271172,
+        "median": 65.69999694824219,
+        "positive_events": 1128790,
+        "positive_pct": 95.06
+      },
+      "B531-H": {
+        "min": 0.0,
+        "max": 8771.0,
+        "mean": 63.96351307250152,
+        "median": 62.900001525878906,
+        "positive_events": 1127482,
+        "positive_pct": 94.95
+      },
+      "Y595-H": {
+        "min": 0.0,
+        "max": 5028.10009765625,
+        "mean": 64.03215517608731,
+        "median": 63.29999923706055,
+        "positive_events": 1126654,
+        "positive_pct": 94.88
+      },
+      "R670-H": {
+        "min": 0.0,
+        "max": 10030.099609375,
+        "mean": 70.59020748228637,
+        "median": 68.30000305175781,
+        "positive_events": 1090243,
+        "positive_pct": 91.82
+      },
+      "R710-H": {
+        "min": 0.0,
+        "max": 5397.60009765625,
+        "mean": 60.371604838096154,
+        "median": 60.0,
+        "positive_events": 1118152,
+        "positive_pct": 94.17
+      },
+      "R792-H": {
+        "min": 0.0,
+        "max": 2149.60009765625,
+        "mean": 59.28248113464988,
+        "median": 58.900001525878906,
+        "positive_events": 1117737,
+        "positive_pct": 94.13
+      }
+    },
+    "data_shape": [
+      1187417,
+      33
+    ],
+    "category": "markers"
+  },
+  {
+    "file": "Exo+CD 81.fcs",
+    "status": "success",
+    "total_events": 475250,
+    "sample_id": "Exo+CD 81",
+    "channels": [
+      "VFSC-H",
+      "VFSC-A",
+      "VSSC1-H",
+      "VSSC1-A",
+      "VSSC2-H",
+      "VSSC2-A",
+      "BSSC-H",
+      "BSSC-A",
+      "YSSC-H",
+      "YSSC-A",
+      "RSSC-H",
+      "RSSC-A",
+      "V447-H",
+      "V447-A",
+      "B531-H",
+      "B531-A",
+      "Y595-H",
+      "Y595-A",
+      "R670-H",
+      "R670-A",
+      "R710-H",
+      "R710-A",
+      "R792-H",
+      "R792-A",
+      "VSSC1-Width",
+      "Time"
+    ],
+    "num_channels": 26,
+    "scatter_stats": {
+      "VFSC-H": {
+        "description": "Forward Scatter Height",
+        "min": 0.0,
+        "max": 3707290.25,
+        "mean": 9298.131466988734,
+        "median": 643.0999755859375,
+        "std": 111546.27571274672,
+        "positive_events": 422281,
+        "positive_pct": 88.85
+      },
+      "VFSC-A": {
+        "description": "Forward Scatter Area",
+        "min": -10568.5751953125,
+        "max": 7136906.0,
+        "mean": 8080.112453216106,
+        "median": 42.29999923706055,
+        "std": 111099.47583354446,
+        "positive_events": 247239,
+        "positive_pct": 52.02
+      },
+      "VSSC1-H": {
+        "description": "Violet Side Scatter Height",
+        "min": 362.3999938964844,
+        "max": 5381264.5,
+        "mean": 136077.88222331842,
+        "median": 1681.0,
+        "std": 698091.0523348143,
+        "positive_events": 475250,
+        "positive_pct": 100.0
+      },
+      "VSSC1-A": {
+        "description": "Violet Side Scatter Area",
+        "min": 114.375,
+        "max": 47217772.0,
+        "mean": 170010.09386942946,
+        "median": 1273.125,
+        "std": 1103976.8489298818,
+        "positive_events": 475250,
+        "positive_pct": 100.0
+      },
+      "VSSC2-H": {
+        "description": "Side Scatter 2 Height",
+        "min": 0.0,
+        "max": 5371504.5,
+        "mean": 7706.450440764387,
+        "median": 87.5999984741211,
+        "std": 109132.30011078635,
+        "positive_events": 458249,
+        "positive_pct": 96.42
+      },
+      "BSSC-H": {
+        "description": "Blue Side Scatter Height",
+        "min": 0.0,
+        "max": 5352718.5,
+        "mean": 68976.29093846846,
+        "median": 381.29998779296875,
+        "std": 467444.5568727227,
+        "positive_events": 474226,
+        "positive_pct": 99.78
+      }
+    },
+    "fluorescence_stats": {
+      "V447-H": {
+        "min": 0.0,
+        "max": 13979.599609375,
+        "mean": 66.29733740163338,
+        "median": 64.5,
+        "positive_events": 451303,
+        "positive_pct": 94.96
+      },
+      "B531-H": {
+        "min": 0.0,
+        "max": 58465.80078125,
+        "mean": 70.32206459960857,
+        "median": 64.69999694824219,
+        "positive_events": 450295,
+        "positive_pct": 94.75
+      },
+      "Y595-H": {
+        "min": 0.0,
+        "max": 82111.296875,
+        "mean": 67.54338958170939,
+        "median": 63.900001525878906,
+        "positive_events": 450767,
+        "positive_pct": 94.85
+      },
+      "R670-H": {
+        "min": 0.0,
+        "max": 81037.6015625,
+        "mean": 61.070372221246885,
+        "median": 59.5,
+        "positive_events": 446078,
+        "positive_pct": 93.86
+      },
+      "R710-H": {
+        "min": 0.0,
+        "max": 115578.0,
+        "mean": 59.43741987351403,
+        "median": 58.099998474121094,
+        "positive_events": 447700,
+        "positive_pct": 94.2
+      },
+      "R792-H": {
+        "min": 0.0,
+        "max": 187822.203125,
+        "mean": 60.03270975255189,
+        "median": 58.5,
+        "positive_events": 446064,
+        "positive_pct": 93.86
+      }
+    },
+    "data_shape": [
+      475250,
+      33
+    ],
+    "category": "markers"
+  },
+  {
+    "file": "Exo+CD 9 +ISOTYPE.fcs",
+    "status": "success",
+    "total_events": 1160753,
+    "sample_id": "Exo+CD 9 +ISOTYPE",
+    "channels": [
+      "VFSC-H",
+      "VFSC-A",
+      "VSSC1-H",
+      "VSSC1-A",
+      "VSSC2-H",
+      "VSSC2-A",
+      "BSSC-H",
+      "BSSC-A",
+      "YSSC-H",
+      "YSSC-A",
+      "RSSC-H",
+      "RSSC-A",
+      "V447-H",
+      "V447-A",
+      "B531-H",
+      "B531-A",
+      "Y595-H",
+      "Y595-A",
+      "R670-H",
+      "R670-A",
+      "R710-H",
+      "R710-A",
+      "R792-H",
+      "R792-A",
+      "VSSC1-Width",
+      "Time"
+    ],
+    "num_channels": 26,
+    "scatter_stats": {
+      "VFSC-H": {
+        "description": "Forward Scatter Height",
+        "min": 0.0,
+        "max": 3698033.0,
+        "mean": 1140.747626065762,
+        "median": 651.9000244140625,
+        "std": 23954.061929138497,
+        "positive_events": 1039776,
+        "positive_pct": 89.58
+      },
+      "VFSC-A": {
+        "description": "Forward Scatter Area",
+        "min": -12463.1748046875,
+        "max": 24076770.0,
+        "mean": 427.4976560508521,
+        "median": 7.650000095367432,
+        "std": 33397.62164931973,
+        "positive_events": 584588,
+        "positive_pct": 50.36
+      },
+      "VSSC1-H": {
+        "description": "Violet Side Scatter Height",
+        "min": 0.0,
+        "max": 5395486.0,
+        "mean": 23253.990540107265,
+        "median": 2457.699951171875,
+        "std": 177131.74257012657,
+        "positive_events": 1160744,
+        "positive_pct": 100.0
+      },
+      "VSSC1-A": {
+        "description": "Violet Side Scatter Area",
+        "min": -1060.574951171875,
+        "max": 51573724.0,
+        "mean": 19793.069647525303,
+        "median": 1722.7249755859375,
+        "std": 205344.61842279366,
+        "positive_events": 1159789,
+        "positive_pct": 99.92
+      },
+      "VSSC2-H": {
+        "description": "Side Scatter 2 Height",
+        "min": 0.0,
+        "max": 5371107.0,
+        "mean": 514.9193309040772,
+        "median": 94.0,
+        "std": 13828.960442208778,
+        "positive_events": 1112207,
+        "positive_pct": 95.82
+      },
+      "BSSC-H": {
+        "description": "Blue Side Scatter Height",
+        "min": 0.0,
+        "max": 5373816.0,
+        "mean": 7851.820948656491,
+        "median": 517.2000122070312,
+        "std": 90519.72519749257,
+        "positive_events": 1152698,
+        "positive_pct": 99.31
+      }
+    },
+    "fluorescence_stats": {
+      "V447-H": {
+        "min": 0.0,
+        "max": 1327547.25,
+        "mean": 67.780803364491,
+        "median": 65.80000305175781,
+        "positive_events": 1104062,
+        "positive_pct": 95.12
+      },
+      "B531-H": {
+        "min": 0.0,
+        "max": 647498.375,
+        "mean": 64.6375110585425,
+        "median": 63.20000076293945,
+        "positive_events": 1100870,
+        "positive_pct": 94.84
+      },
+      "Y595-H": {
+        "min": 0.0,
+        "max": 281388.09375,
+        "mean": 64.32800138634121,
+        "median": 62.900001525878906,
+        "positive_events": 1103359,
+        "positive_pct": 95.06
+      },
+      "R670-H": {
+        "min": 0.0,
+        "max": 295950.8125,
+        "mean": 119.51909744371035,
+        "median": 113.4000015258789,
+        "positive_events": 1029424,
+        "positive_pct": 88.69
+      },
+      "R710-H": {
+        "min": 0.0,
+        "max": 301341.59375,
+        "mean": 73.89474090890802,
+        "median": 72.0,
+        "positive_events": 1074880,
+        "positive_pct": 92.6
+      },
+      "R792-H": {
+        "min": 0.0,
+        "max": 279286.1875,
+        "mean": 117.71217105124688,
+        "median": 110.0999984741211,
+        "positive_events": 1020112,
+        "positive_pct": 87.88
+      }
+    },
+    "data_shape": [
+      1160753,
+      33
+    ],
+    "category": "markers"
+  },
+  {
+    "file": "Exo+CD 9.fcs",
+    "status": "success",
+    "total_events": 1190557,
+    "sample_id": "Exo+CD 9",
+    "channels": [
+      "VFSC-H",
+      "VFSC-A",
+      "VSSC1-H",
+      "VSSC1-A",
+      "VSSC2-H",
+      "VSSC2-A",
+      "BSSC-H",
+      "BSSC-A",
+      "YSSC-H",
+      "YSSC-A",
+      "RSSC-H",
+      "RSSC-A",
+      "V447-H",
+      "V447-A",
+      "B531-H",
+      "B531-A",
+      "Y595-H",
+      "Y595-A",
+      "R670-H",
+      "R670-A",
+      "R710-H",
+      "R710-A",
+      "R792-H",
+      "R792-A",
+      "VSSC1-Width",
+      "Time"
+    ],
+    "num_channels": 26,
+    "scatter_stats": {
+      "VFSC-H": {
+        "description": "Forward Scatter Height",
+        "min": 0.0,
+        "max": 3709722.25,
+        "mean": 5133.806167331937,
+        "median": 647.2999877929688,
+        "std": 84323.65754441603,
+        "positive_events": 1058058,
+        "positive_pct": 88.87
+      },
+      "VFSC-A": {
+        "description": "Forward Scatter Area",
+        "min": -19029.775390625,
+        "max": 15820809.0,
+        "mean": 3976.2303861805917,
+        "median": 21.375,
+        "std": 82893.20807285505,
+        "positive_events": 607262,
+        "positive_pct": 51.01
+      },
+      "VSSC1-H": {
+        "description": "Violet Side Scatter Height",
+        "min": 0.0,
+        "max": 5398649.0,
+        "mean": 92201.71421193403,
+        "median": 1991.300048828125,
+        "std": 535030.6579979652,
+        "positive_events": 1190553,
+        "positive_pct": 100.0
+      },
+      "VSSC1-A": {
+        "description": "Violet Side Scatter Area",
+        "min": -663.125,
+        "max": 29366116.0,
+        "mean": 99081.32207413194,
+        "median": 1406.2750244140625,
+        "std": 737121.3570383335,
+        "positive_events": 1189948,
+        "positive_pct": 99.95
+      },
+      "VSSC2-H": {
+        "description": "Side Scatter 2 Height",
+        "min": 0.0,
+        "max": 5371812.0,
+        "mean": 3751.56587722036,
+        "median": 89.30000305175781,
+        "std": 64348.169456253636,
+        "positive_events": 1137172,
+        "positive_pct": 95.52
+      },
+      "BSSC-H": {
+        "description": "Blue Side Scatter Height",
+        "min": 0.0,
+        "max": 5353249.0,
+        "mean": 41372.07902946908,
+        "median": 393.79998779296875,
+        "std": 334025.6119844229,
+        "positive_events": 1182563,
+        "positive_pct": 99.33
+      }
+    },
+    "fluorescence_stats": {
+      "V447-H": {
+        "min": 0.0,
+        "max": 285043.09375,
+        "mean": 67.95613615294589,
+        "median": 65.0,
+        "positive_events": 1130712,
+        "positive_pct": 94.97
+      },
+      "B531-H": {
+        "min": 0.0,
+        "max": 83176.1015625,
+        "mean": 70.7937417519737,
+        "median": 65.9000015258789,
+        "positive_events": 1129428,
+        "positive_pct": 94.87
+      },
+      "Y595-H": {
+        "min": 0.0,
+        "max": 71315.203125,
+        "mean": 68.3266134303202,
+        "median": 65.30000305175781,
+        "positive_events": 1130834,
+        "positive_pct": 94.98
+      },
+      "R670-H": {
+        "min": 0.0,
+        "max": 64566.80078125,
+        "mean": 60.49576618313482,
+        "median": 58.400001525878906,
+        "positive_events": 1124986,
+        "positive_pct": 94.49
+      },
+      "R710-H": {
+        "min": 0.0,
+        "max": 89182.0,
+        "mean": 59.22318368743333,
+        "median": 57.29999923706055,
+        "positive_events": 1126903,
+        "positive_pct": 94.65
+      },
+      "R792-H": {
+        "min": 0.0,
+        "max": 140549.203125,
+        "mean": 58.59555603040135,
+        "median": 57.400001525878906,
+        "positive_events": 1117241,
+        "positive_pct": 93.84
+      }
+    },
+    "data_shape": [
+      1190557,
+      33
+    ],
+    "category": "markers"
+  },
+  {
+    "file": "CD 81 alone.fcs",
+    "status": "success",
+    "total_events": 472426,
+    "sample_id": "CD 81 alone",
+    "channels": [
+      "VFSC-H",
+      "VFSC-A",
+      "VSSC1-H",
+      "VSSC1-A",
+      "VSSC2-H",
+      "VSSC2-A",
+      "BSSC-H",
+      "BSSC-A",
+      "YSSC-H",
+      "YSSC-A",
+      "RSSC-H",
+      "RSSC-A",
+      "V447-H",
+      "V447-A",
+      "B531-H",
+      "B531-A",
+      "Y595-H",
+      "Y595-A",
+      "R670-H",
+      "R670-A",
+      "R710-H",
+      "R710-A",
+      "R792-H",
+      "R792-A",
+      "VSSC1-Width",
+      "Time"
+    ],
+    "num_channels": 26,
+    "scatter_stats": {
+      "VFSC-H": {
+        "description": "Forward Scatter Height",
+        "min": 0.0,
+        "max": 3630506.25,
+        "mean": 780.5089528104448,
+        "median": 615.4000244140625,
+        "std": 15630.82578482787,
+        "positive_events": 415260,
+        "positive_pct": 87.9
+      },
+      "VFSC-A": {
+        "description": "Forward Scatter Area",
+        "min": -5047.22509765625,
+        "max": 5160192.5,
+        "mean": 132.79064575900847,
+        "median": 4.675000190734863,
+        "std": 17035.091074030854,
+        "positive_events": 237348,
+        "positive_pct": 50.24
+      },
+      "VSSC1-H": {
+        "description": "Violet Side Scatter Height",
+        "min": 377.5,
+        "max": 5378593.5,
+        "mean": 7300.564884986268,
+        "median": 1286.5499877929688,
+        "std": 92061.55388874905,
+        "positive_events": 472426,
+        "positive_pct": 100.0
+      },
+      "VSSC1-A": {
+        "description": "Violet Side Scatter Area",
+        "min": 133.25,
+        "max": 19240230.0,
+        "mean": 6476.33611384811,
+        "median": 969.3499755859375,
+        "std": 126195.99039630307,
+        "positive_events": 472426,
+        "positive_pct": 100.0
+      },
+      "VSSC2-H": {
+        "description": "Side Scatter 2 Height",
+        "min": 0.0,
+        "max": 5159783.5,
+        "mean": 223.6171530738845,
+        "median": 80.9000015258789,
+        "std": 10974.159656508982,
+        "positive_events": 453396,
+        "positive_pct": 95.97
+      },
+      "BSSC-H": {
+        "description": "Blue Side Scatter Height",
+        "min": 0.0,
+        "max": 5352630.0,
+        "mean": 2241.884142698583,
+        "median": 279.29998779296875,
+        "std": 54259.00354888759,
+        "positive_events": 471149,
+        "positive_pct": 99.73
+      }
+    },
+    "fluorescence_stats": {
+      "V447-H": {
+        "min": 0.0,
+        "max": 9681.2998046875,
+        "mean": 62.833304256977094,
+        "median": 61.5,
+        "positive_events": 445372,
+        "positive_pct": 94.27
+      },
+      "B531-H": {
+        "min": 0.0,
+        "max": 43631.80078125,
+        "mean": 61.375448222857045,
+        "median": 60.099998474121094,
+        "positive_events": 443599,
+        "positive_pct": 93.9
+      },
+      "Y595-H": {
+        "min": 0.0,
+        "max": 34346.30078125,
+        "mean": 62.8478047358088,
+        "median": 61.70000076293945,
+        "positive_events": 445351,
+        "positive_pct": 94.27
+      },
+      "R670-H": {
+        "min": 0.0,
+        "max": 244694.59375,
+        "mean": 106.0492603882932,
+        "median": 90.9000015258789,
+        "positive_events": 440635,
+        "positive_pct": 93.27
+      },
+      "R710-H": {
+        "min": 0.0,
+        "max": 91122.796875,
+        "mean": 70.88781925111189,
+        "median": 66.0999984741211,
+        "positive_events": 448227,
+        "positive_pct": 94.88
+      },
+      "R792-H": {
+        "min": 0.0,
+        "max": 22967.099609375,
+        "mean": 58.468810353098625,
+        "median": 56.79999923706055,
+        "positive_events": 448218,
+        "positive_pct": 94.88
+      }
+    },
+    "data_shape": [
+      472426,
+      33
+    ],
+    "category": "controls"
+  },
+  {
+    "file": "CD 9 alone1.fcs",
+    "status": "success",
+    "total_events": 428492,
+    "sample_id": "CD 9 alone1",
+    "channels": [
+      "VFSC-H",
+      "VFSC-A",
+      "VSSC1-H",
+      "VSSC1-A",
+      "VSSC2-H",
+      "VSSC2-A",
+      "BSSC-H",
+      "BSSC-A",
+      "YSSC-H",
+      "YSSC-A",
+      "RSSC-H",
+      "RSSC-A",
+      "V447-H",
+      "V447-A",
+      "B531-H",
+      "B531-A",
+      "Y595-H",
+      "Y595-A",
+      "R670-H",
+      "R670-A",
+      "R710-H",
+      "R710-A",
+      "R792-H",
+      "R792-A",
+      "VSSC1-Width",
+      "Time"
+    ],
+    "num_channels": 26,
+    "scatter_stats": {
+      "VFSC-H": {
+        "description": "Forward Scatter Height",
+        "min": 0.0,
+        "max": 3701173.0,
+        "mean": 1796.0329114429296,
+        "median": 626.0,
+        "std": 36180.442648527634,
+        "positive_events": 377066,
+        "positive_pct": 88.0
+      },
+      "VFSC-A": {
+        "description": "Forward Scatter Area",
+        "min": -13725.6748046875,
+        "max": 15632369.0,
+        "mean": 1523.914552688958,
+        "median": 19.325000762939453,
+        "std": 69417.63895800011,
+        "positive_events": 218407,
+        "positive_pct": 50.97
+      },
+      "VSSC1-H": {
+        "description": "Violet Side Scatter Height",
+        "min": 356.20001220703125,
+        "max": 5378016.5,
+        "mean": 31130.505826860244,
+        "median": 1217.0999755859375,
+        "std": 291294.3204534543,
+        "positive_events": 428492,
+        "positive_pct": 100.0
+      },
+      "VSSC1-A": {
+        "description": "Violet Side Scatter Area",
+        "min": 81.32499694824219,
+        "max": 64932048.0,
+        "mean": 38365.32411931664,
+        "median": 919.7999877929688,
+        "std": 582314.2427793567,
+        "positive_events": 428492,
+        "positive_pct": 100.0
+      },
+      "VSSC2-H": {
+        "description": "Side Scatter 2 Height",
+        "min": 0.0,
+        "max": 5370375.5,
+        "mean": 1439.4137876382208,
+        "median": 80.69999694824219,
+        "std": 41387.614809737956,
+        "positive_events": 410788,
+        "positive_pct": 95.87
+      },
+      "BSSC-H": {
+        "description": "Blue Side Scatter Height",
+        "min": 0.0,
+        "max": 5352239.5,
+        "mean": 12953.045720037479,
+        "median": 279.79998779296875,
+        "std": 182946.76756430426,
+        "positive_events": 427354,
+        "positive_pct": 99.73
+      }
+    },
+    "fluorescence_stats": {
+      "V447-H": {
+        "min": 0.0,
+        "max": 106257.1015625,
+        "mean": 64.12429240983744,
+        "median": 62.79999923706055,
+        "positive_events": 402841,
+        "positive_pct": 94.01
+      },
+      "B531-H": {
+        "min": 0.0,
+        "max": 46480.30078125,
+        "mean": 62.83016579835074,
+        "median": 61.20000076293945,
+        "positive_events": 402336,
+        "positive_pct": 93.9
+      },
+      "Y595-H": {
+        "min": 0.0,
+        "max": 20942.69921875,
+        "mean": 62.358172612308515,
+        "median": 60.79999923706055,
+        "positive_events": 403223,
+        "positive_pct": 94.1
+      },
+      "R670-H": {
+        "min": 0.0,
+        "max": 56235.6015625,
+        "mean": 89.6317534568771,
+        "median": 82.9000015258789,
+        "positive_events": 389526,
+        "positive_pct": 90.91
+      },
+      "R710-H": {
+        "min": 0.0,
+        "max": 36027.6015625,
+        "mean": 68.57198220388418,
+        "median": 64.69999694824219,
+        "positive_events": 399628,
+        "positive_pct": 93.26
+      },
+      "R792-H": {
+        "min": 0.0,
+        "max": 283372.6875,
+        "mean": 210.18010088563324,
+        "median": 181.1999969482422,
+        "positive_events": 369415,
+        "positive_pct": 86.21
+      }
+    },
+    "data_shape": [
+      428492,
+      33
+    ],
+    "category": "controls"
+  },
+  {
+    "file": "cont 2 1ug alone.fcs",
+    "status": "success",
+    "total_events": 103253,
+    "sample_id": "cont 2 1ug alone",
+    "channels": [
+      "VFSC-H",
+      "VFSC-A",
+      "VSSC1-H",
+      "VSSC1-A",
+      "VSSC2-H",
+      "VSSC2-A",
+      "BSSC-H",
+      "BSSC-A",
+      "YSSC-H",
+      "YSSC-A",
+      "RSSC-H",
+      "RSSC-A",
+      "V447-H",
+      "V447-A",
+      "B531-H",
+      "B531-A",
+      "Y595-H",
+      "Y595-A",
+      "R670-H",
+      "R670-A",
+      "R710-H",
+      "R710-A",
+      "R792-H",
+      "R792-A",
+      "VSSC1-Width",
+      "Time"
+    ],
+    "num_channels": 26,
+    "scatter_stats": {
+      "VFSC-H": {
+        "description": "Forward Scatter Height",
+        "min": 0.0,
+        "max": 3630273.75,
+        "mean": 1619.8198649217543,
+        "median": 677.7999877929688,
+        "std": 38795.73270258808,
+        "positive_events": 93573,
+        "positive_pct": 90.62
+      },
+      "VFSC-A": {
+        "description": "Forward Scatter Area",
+        "min": -6115.52490234375,
+        "max": 6907662.5,
+        "mean": 1090.6952793598011,
+        "median": 22.924999237060547,
+        "std": 53550.14026488965,
+        "positive_events": 52695,
+        "positive_pct": 51.03
+      },
+      "VSSC1-H": {
+        "description": "Violet Side Scatter Height",
+        "min": 452.6000061035156,
+        "max": 5379171.0,
+        "mean": 50193.11149514337,
+        "median": 4598.7001953125,
+        "std": 257565.70941358106,
+        "positive_events": 103253,
+        "positive_pct": 100.0
+      },
+      "VSSC1-A": {
+        "description": "Violet Side Scatter Area",
+        "min": 207.9250030517578,
+        "max": 26811554.0,
+        "mean": 47776.564317799806,
+        "median": 3580.375,
+        "std": 436514.9882923551,
+        "positive_events": 103253,
+        "positive_pct": 100.0
+      },
+      "VSSC2-H": {
+        "description": "Side Scatter 2 Height",
+        "min": 0.0,
+        "max": 5333552.0,
+        "mean": 1604.3204327020887,
+        "median": 127.4000015258789,
+        "std": 43524.0623272639,
+        "positive_events": 101204,
+        "positive_pct": 98.02
+      },
+      "BSSC-H": {
+        "description": "Blue Side Scatter Height",
+        "min": 0.0,
+        "max": 5353302.5,
+        "mean": 17770.003873505157,
+        "median": 1236.5,
+        "std": 156061.26936647587,
+        "positive_events": 103187,
+        "positive_pct": 99.94
+      }
+    },
+    "fluorescence_stats": {
+      "V447-H": {
+        "min": 0.0,
+        "max": 10513.5,
+        "mean": 67.29209806296272,
+        "median": 66.0999984741211,
+        "positive_events": 99263,
+        "positive_pct": 96.14
+      },
+      "B531-H": {
+        "min": 0.0,
+        "max": 81087.1015625,
+        "mean": 131.39290973423962,
+        "median": 87.5,
+        "positive_events": 100174,
+        "positive_pct": 97.02
+      },
+      "Y595-H": {
+        "min": 0.0,
+        "max": 54828.5,
+        "mean": 89.74106416734321,
+        "median": 75.9000015258789,
+        "positive_events": 99758,
+        "positive_pct": 96.62
+      },
+      "R670-H": {
+        "min": 0.0,
+        "max": 22478.30078125,
+        "mean": 64.82070061522565,
+        "median": 63.20000076293945,
+        "positive_events": 98763,
+        "positive_pct": 95.65
+      },
+      "R710-H": {
+        "min": 0.0,
+        "max": 19330.19921875,
+        "mean": 62.93860902484506,
+        "median": 60.20000076293945,
+        "positive_events": 99327,
+        "positive_pct": 96.2
+      },
+      "R792-H": {
+        "min": 0.0,
+        "max": 11178.7001953125,
+        "mean": 61.06035852816019,
+        "median": 60.79999923706055,
+        "positive_events": 98139,
+        "positive_pct": 95.05
+      }
+    },
+    "data_shape": [
+      103253,
+      33
+    ],
+    "category": "controls"
+  },
+  {
+    "file": "cont 2 50 uM3.fcs",
+    "status": "success",
+    "total_events": 1488655,
+    "sample_id": "cont 2 50 uM3",
+    "channels": [
+      "VFSC-H",
+      "VFSC-A",
+      "VSSC1-H",
+      "VSSC1-A",
+      "VSSC2-H",
+      "VSSC2-A",
+      "BSSC-H",
+      "BSSC-A",
+      "YSSC-H",
+      "YSSC-A",
+      "RSSC-H",
+      "RSSC-A",
+      "V447-H",
+      "V447-A",
+      "B531-H",
+      "B531-A",
+      "Y595-H",
+      "Y595-A",
+      "R670-H",
+      "R670-A",
+      "R710-H",
+      "R710-A",
+      "R792-H",
+      "R792-A",
+      "VSSC1-Width",
+      "Time"
+    ],
+    "num_channels": 26,
+    "scatter_stats": {
+      "VFSC-H": {
+        "description": "Forward Scatter Height",
+        "min": 0.0,
+        "max": 3709826.0,
+        "mean": 9255.494608463718,
+        "median": 689.5999755859375,
+        "std": 112828.81375908018,
+        "positive_events": 1321502,
+        "positive_pct": 88.77
+      },
+      "VFSC-A": {
+        "description": "Forward Scatter Area",
+        "min": -256366.90625,
+        "max": 21219684.0,
+        "mean": 7507.241440929515,
+        "median": 87.5999984741211,
+        "std": 114845.94187972037,
+        "positive_events": 799653,
+        "positive_pct": 53.72
+      },
+      "VSSC1-H": {
+        "description": "Violet Side Scatter Height",
+        "min": 0.0,
+        "max": 5367070.5,
+        "mean": 439821.2659442266,
+        "median": 83317.796875,
+        "std": 939989.2031724744,
+        "positive_events": 1482555,
+        "positive_pct": 99.59
+      },
+      "VSSC1-A": {
+        "description": "Violet Side Scatter Area",
+        "min": -83756.0,
+        "max": 46384368.0,
+        "mean": 388053.1686027556,
+        "median": 46253.3515625,
+        "std": 1056449.8359139783,
+        "positive_events": 1199531,
+        "positive_pct": 80.58
+      },
+      "VSSC2-H": {
+        "description": "Side Scatter 2 Height",
+        "min": 0.0,
+        "max": 5373822.0,
+        "mean": 10127.837846554314,
+        "median": 1483.5,
+        "std": 66568.98043328854,
+        "positive_events": 1472355,
+        "positive_pct": 98.91
+      },
+      "BSSC-H": {
+        "description": "Blue Side Scatter Height",
+        "min": 0.0,
+        "max": 5366466.5,
+        "mean": 152600.81466927344,
+        "median": 16620.599609375,
+        "std": 472242.3420788472,
+        "positive_events": 1336992,
+        "positive_pct": 89.81
+      }
+    },
+    "fluorescence_stats": {
+      "V447-H": {
+        "min": 0.0,
+        "max": 699203.125,
+        "mean": 73.34038722867379,
+        "median": 66.30000305175781,
+        "positive_events": 1420112,
+        "positive_pct": 95.4
+      },
+      "B531-H": {
+        "min": 0.0,
+        "max": 5367219.5,
+        "mean": 1226.4609172793992,
+        "median": 697.7000122070312,
+        "positive_events": 1312808,
+        "positive_pct": 88.19
+      },
+      "Y595-H": {
+        "min": 0.0,
+        "max": 5388902.0,
+        "mean": 312.848252573055,
+        "median": 185.10000610351562,
+        "positive_events": 1376827,
+        "positive_pct": 92.49
+      },
+      "R670-H": {
+        "min": 0.0,
+        "max": 2727693.0,
+        "mean": 84.60633193779614,
+        "median": 68.80000305175781,
+        "positive_events": 1419067,
+        "positive_pct": 95.33
+      },
+      "R710-H": {
+        "min": 0.0,
+        "max": 1218686.875,
+        "mean": 72.31134266400488,
+        "median": 64.0,
+        "positive_events": 1414439,
+        "positive_pct": 95.01
+      },
+      "R792-H": {
+        "min": 0.0,
+        "max": 1368373.25,
+        "mean": 66.96755875964348,
+        "median": 62.599998474121094,
+        "positive_events": 1409479,
+        "positive_pct": 94.68
+      }
+    },
+    "data_shape": [
+      1488655,
+      33
+    ],
+    "category": "controls"
+  },
+  {
+    "file": "cont 4 1ug Alone.fcs",
+    "status": "success",
+    "total_events": 100432,
+    "sample_id": "cont 4 1ug Alone",
+    "channels": [
+      "VFSC-H",
+      "VFSC-A",
+      "VSSC1-H",
+      "VSSC1-A",
+      "VSSC2-H",
+      "VSSC2-A",
+      "BSSC-H",
+      "BSSC-A",
+      "YSSC-H",
+      "YSSC-A",
+      "RSSC-H",
+      "RSSC-A",
+      "V447-H",
+      "V447-A",
+      "B531-H",
+      "B531-A",
+      "Y595-H",
+      "Y595-A",
+      "R670-H",
+      "R670-A",
+      "R710-H",
+      "R710-A",
+      "R792-H",
+      "R792-A",
+      "VSSC1-Width",
+      "Time"
+    ],
+    "num_channels": 26,
+    "scatter_stats": {
+      "VFSC-H": {
+        "description": "Forward Scatter Height",
+        "min": 0.0,
+        "max": 3672207.5,
+        "mean": 1692.844823291903,
+        "median": 656.2999877929688,
+        "std": 36384.20368210307,
+        "positive_events": 89893,
+        "positive_pct": 89.51
+      },
+      "VFSC-A": {
+        "description": "Forward Scatter Area",
+        "min": -7777.2001953125,
+        "max": 5866985.0,
+        "mean": 1094.3266535161824,
+        "median": 26.700000762939453,
+        "std": 44880.7280277818,
+        "positive_events": 51446,
+        "positive_pct": 51.22
+      },
+      "VSSC1-H": {
+        "description": "Violet Side Scatter Height",
+        "min": 456.6000061035156,
+        "max": 5379436.0,
+        "mean": 32384.879745267353,
+        "median": 2458.10009765625,
+        "std": 262178.91578106926,
+        "positive_events": 100432,
+        "positive_pct": 100.0
+      },
+      "VSSC1-A": {
+        "description": "Violet Side Scatter Area",
+        "min": 222.35000610351562,
+        "max": 30939068.0,
+        "mean": 34944.83834197078,
+        "median": 1894.800048828125,
+        "std": 460292.1452494757,
+        "positive_events": 100432,
+        "positive_pct": 100.0
+      },
+      "VSSC2-H": {
+        "description": "Side Scatter 2 Height",
+        "min": 0.0,
+        "max": 4943846.5,
+        "mean": 1233.0708787645601,
+        "median": 96.80000305175781,
+        "std": 34179.53280134704,
+        "positive_events": 97947,
+        "positive_pct": 97.53
+      },
+      "BSSC-H": {
+        "description": "Blue Side Scatter Height",
+        "min": 0.0,
+        "max": 5353482.0,
+        "mean": 12451.574831990834,
+        "median": 597.5499877929688,
+        "std": 165440.54067116097,
+        "positive_events": 100377,
+        "positive_pct": 99.95
+      }
+    },
+    "fluorescence_stats": {
+      "V447-H": {
+        "min": 0.0,
+        "max": 14555.099609375,
+        "mean": 65.31010433909466,
+        "median": 64.19999694824219,
+        "positive_events": 95632,
+        "positive_pct": 95.22
+      },
+      "B531-H": {
+        "min": 0.0,
+        "max": 58106.0,
+        "mean": 106.1464642429781,
+        "median": 94.69999694824219,
+        "positive_events": 95892,
+        "positive_pct": 95.48
+      },
+      "Y595-H": {
+        "min": 0.0,
+        "max": 39155.69921875,
+        "mean": 72.68571569848558,
+        "median": 68.0999984741211,
+        "positive_events": 96178,
+        "positive_pct": 95.76
+      },
+      "R670-H": {
+        "min": 0.0,
+        "max": 15601.2001953125,
+        "mean": 58.406440178917265,
+        "median": 55.79999923706055,
+        "positive_events": 95840,
+        "positive_pct": 95.43
+      },
+      "R710-H": {
+        "min": 0.0,
+        "max": 13307.099609375,
+        "mean": 58.89053190520791,
+        "median": 56.79999923706055,
+        "positive_events": 95573,
+        "positive_pct": 95.16
+      },
+      "R792-H": {
+        "min": 0.0,
+        "max": 13702.900390625,
+        "mean": 58.01312430736383,
+        "median": 58.099998474121094,
+        "positive_events": 94701,
+        "positive_pct": 94.29
+      }
+    },
+    "data_shape": [
+      100432,
+      33
+    ],
+    "category": "controls"
+  },
+  {
+    "file": "cont 4 50 uM2.fcs",
+    "status": "success",
+    "total_events": 1459431,
+    "sample_id": "cont 4 50 uM2",
+    "channels": [
+      "VFSC-H",
+      "VFSC-A",
+      "VSSC1-H",
+      "VSSC1-A",
+      "VSSC2-H",
+      "VSSC2-A",
+      "BSSC-H",
+      "BSSC-A",
+      "YSSC-H",
+      "YSSC-A",
+      "RSSC-H",
+      "RSSC-A",
+      "V447-H",
+      "V447-A",
+      "B531-H",
+      "B531-A",
+      "Y595-H",
+      "Y595-A",
+      "R670-H",
+      "R670-A",
+      "R710-H",
+      "R710-A",
+      "R792-H",
+      "R792-A",
+      "VSSC1-Width",
+      "Time"
+    ],
+    "num_channels": 26,
+    "scatter_stats": {
+      "VFSC-H": {
+        "description": "Forward Scatter Height",
+        "min": 0.0,
+        "max": 3687232.25,
+        "mean": 5370.498802969558,
+        "median": 668.4000244140625,
+        "std": 87051.39781298106,
+        "positive_events": 1300763,
+        "positive_pct": 89.13
+      },
+      "VFSC-A": {
+        "description": "Forward Scatter Area",
+        "min": -347885.6875,
+        "max": 25900160.0,
+        "mean": 4286.45050792812,
+        "median": 54.375,
+        "std": 101931.70774203917,
+        "positive_events": 764846,
+        "positive_pct": 52.41
+      },
+      "VSSC1-H": {
+        "description": "Violet Side Scatter Height",
+        "min": 0.0,
+        "max": 5385777.0,
+        "mean": 267546.3800992609,
+        "median": 43953.69921875,
+        "std": 703074.3391184442,
+        "positive_events": 1454808,
+        "positive_pct": 99.68
+      },
+      "VSSC1-A": {
+        "description": "Violet Side Scatter Area",
+        "min": -40854.9765625,
+        "max": 72055600.0,
+        "mean": 229646.09750528348,
+        "median": 25115.150390625,
+        "std": 748882.318987989,
+        "positive_events": 1212534,
+        "positive_pct": 83.08
+      },
+      "VSSC2-H": {
+        "description": "Side Scatter 2 Height",
+        "min": 0.0,
+        "max": 5373604.0,
+        "mean": 5969.878475225293,
+        "median": 785.2000122070312,
+        "std": 55903.612937679565,
+        "positive_events": 1435882,
+        "positive_pct": 98.39
+      },
+      "BSSC-H": {
+        "description": "Blue Side Scatter Height",
+        "min": 0.0,
+        "max": 5355614.0,
+        "mean": 91557.61104906484,
+        "median": 9014.2001953125,
+        "std": 349733.6911145744,
+        "positive_events": 1346057,
+        "positive_pct": 92.23
+      }
+    },
+    "fluorescence_stats": {
+      "V447-H": {
+        "min": 0.0,
+        "max": 4620800.5,
+        "mean": 82.76682992751412,
+        "median": 67.19999694824219,
+        "positive_events": 1394106,
+        "positive_pct": 95.52
+      },
+      "B531-H": {
+        "min": 0.0,
+        "max": 4870669.5,
+        "mean": 3053.2706989989383,
+        "median": 2317.60009765625,
+        "positive_events": 1199057,
+        "positive_pct": 82.16
+      },
+      "Y595-H": {
+        "min": 0.0,
+        "max": 5301908.5,
+        "mean": 621.7912762177062,
+        "median": 481.1000061035156,
+        "positive_events": 1257394,
+        "positive_pct": 86.16
+      },
+      "R670-H": {
+        "min": 0.0,
+        "max": 1467465.0,
+        "mean": 111.80006229479983,
+        "median": 99.0999984741211,
+        "positive_events": 1385548,
+        "positive_pct": 94.94
+      },
+      "R710-H": {
+        "min": 0.0,
+        "max": 608950.375,
+        "mean": 82.79515297692677,
+        "median": 76.19999694824219,
+        "positive_events": 1393471,
+        "positive_pct": 95.48
+      },
+      "R792-H": {
+        "min": 0.0,
+        "max": 333781.1875,
+        "mean": 64.2817429349851,
+        "median": 60.70000076293945,
+        "positive_events": 1391762,
+        "positive_pct": 95.36
+      }
+    },
+    "data_shape": [
+      1459431,
+      33
+    ],
+    "category": "controls"
+  },
+  {
+    "file": "Exo+cont 2 1ug.fcs",
+    "status": "success",
+    "total_events": 825171,
+    "sample_id": "Exo+cont 2 1ug",
+    "channels": [
+      "VFSC-H",
+      "VFSC-A",
+      "VSSC1-H",
+      "VSSC1-A",
+      "VSSC2-H",
+      "VSSC2-A",
+      "BSSC-H",
+      "BSSC-A",
+      "YSSC-H",
+      "YSSC-A",
+      "RSSC-H",
+      "RSSC-A",
+      "V447-H",
+      "V447-A",
+      "B531-H",
+      "B531-A",
+      "Y595-H",
+      "Y595-A",
+      "R670-H",
+      "R670-A",
+      "R710-H",
+      "R710-A",
+      "R792-H",
+      "R792-A",
+      "VSSC1-Width",
+      "Time"
+    ],
+    "num_channels": 26,
+    "scatter_stats": {
+      "VFSC-H": {
+        "description": "Forward Scatter Height",
+        "min": 0.0,
+        "max": 3699134.0,
+        "mean": 1504.2138486736271,
+        "median": 652.0,
+        "std": 31782.99523827969,
+        "positive_events": 736091,
+        "positive_pct": 89.2
+      },
+      "VFSC-A": {
+        "description": "Forward Scatter Area",
+        "min": -35794.44921875,
+        "max": 44717424.0,
+        "mean": 959.5569048624507,
+        "median": 12.324999809265137,
+        "std": 66438.9973143374,
+        "positive_events": 417230,
+        "positive_pct": 50.56
+      },
+      "VSSC1-H": {
+        "description": "Violet Side Scatter Height",
+        "min": 49.70000076293945,
+        "max": 5379038.5,
+        "mean": 29676.473989145026,
+        "median": 2206.39990234375,
+        "std": 239382.22335644072,
+        "positive_events": 825171,
+        "positive_pct": 100.0
+      },
+      "VSSC1-A": {
+        "description": "Violet Side Scatter Area",
+        "min": -85524624.0,
+        "max": 128973784.0,
+        "mean": 31673.066063607865,
+        "median": 1643.699951171875,
+        "std": 537298.7475946101,
+        "positive_events": 825153,
+        "positive_pct": 100.0
+      },
+      "VSSC2-H": {
+        "description": "Side Scatter 2 Height",
+        "min": 0.0,
+        "max": 5370033.0,
+        "mean": 733.3763959454149,
+        "median": 91.69999694824219,
+        "std": 16426.067446810976,
+        "positive_events": 794363,
+        "positive_pct": 96.27
+      },
+      "BSSC-H": {
+        "description": "Blue Side Scatter Height",
+        "min": 0.0,
+        "max": 5353245.0,
+        "mean": 10659.675503263285,
+        "median": 456.6000061035156,
+        "std": 130120.37867795974,
+        "positive_events": 822286,
+        "positive_pct": 99.65
+      }
+    },
+    "fluorescence_stats": {
+      "V447-H": {
+        "min": 0.0,
+        "max": 49567.5,
+        "mean": 65.54667977743284,
+        "median": 64.4000015258789,
+        "positive_events": 786246,
+        "positive_pct": 95.28
+      },
+      "B531-H": {
+        "min": 0.0,
+        "max": 1643213.875,
+        "mean": 191.35355965067535,
+        "median": 76.4000015258789,
+        "positive_events": 783547,
+        "positive_pct": 94.96
+      },
+      "Y595-H": {
+        "min": 0.0,
+        "max": 354321.8125,
+        "mean": 88.0314484207152,
+        "median": 67.69999694824219,
+        "positive_events": 784786,
+        "positive_pct": 95.11
+      },
+      "R670-H": {
+        "min": 0.0,
+        "max": 208594.0,
+        "mean": 59.024675133903045,
+        "median": 56.599998474121094,
+        "positive_events": 785767,
+        "positive_pct": 95.22
+      },
+      "R710-H": {
+        "min": 0.0,
+        "max": 87025.296875,
+        "mean": 59.86306546943301,
+        "median": 59.5,
+        "positive_events": 780016,
+        "positive_pct": 94.53
+      },
+      "R792-H": {
+        "min": 0.0,
+        "max": 16596.099609375,
+        "mean": 56.52189800826433,
+        "median": 55.20000076293945,
+        "positive_events": 787634,
+        "positive_pct": 95.45
+      }
+    },
+    "data_shape": [
+      825171,
+      33
+    ],
+    "category": "controls"
+  },
+  {
+    "file": "Exo+cont 2 50 uM1.fcs",
+    "status": "success",
+    "total_events": 704905,
+    "sample_id": "Exo+cont 2 50 uM1",
+    "channels": [
+      "VFSC-H",
+      "VFSC-A",
+      "VSSC1-H",
+      "VSSC1-A",
+      "VSSC2-H",
+      "VSSC2-A",
+      "BSSC-H",
+      "BSSC-A",
+      "YSSC-H",
+      "YSSC-A",
+      "RSSC-H",
+      "RSSC-A",
+      "V447-H",
+      "V447-A",
+      "B531-H",
+      "B531-A",
+      "Y595-H",
+      "Y595-A",
+      "R670-H",
+      "R670-A",
+      "R710-H",
+      "R710-A",
+      "R792-H",
+      "R792-A",
+      "VSSC1-Width",
+      "Time"
+    ],
+    "num_channels": 26,
+    "scatter_stats": {
+      "VFSC-H": {
+        "description": "Forward Scatter Height",
+        "min": 0.0,
+        "max": 3711071.25,
+        "mean": 5897.935018625509,
+        "median": 643.7000122070312,
+        "std": 83149.39427392652,
+        "positive_events": 625028,
+        "positive_pct": 88.67
+      },
+      "VFSC-A": {
+        "description": "Forward Scatter Area",
+        "min": -16843.224609375,
+        "max": 9229729.0,
+        "mean": 4895.7251139369655,
+        "median": 27.450000762939453,
+        "std": 84057.06518729115,
+        "positive_events": 361624,
+        "positive_pct": 51.3
+      },
+      "VSSC1-H": {
+        "description": "Violet Side Scatter Height",
+        "min": 169.6999969482422,
+        "max": 5378713.5,
+        "mean": 84185.0656004776,
+        "median": 1762.5,
+        "std": 549092.8046615527,
+        "positive_events": 704905,
+        "positive_pct": 100.0
+      },
+      "VSSC1-A": {
+        "description": "Violet Side Scatter Area",
+        "min": -177.0,
+        "max": 26242312.0,
+        "mean": 105514.63039606993,
+        "median": 1307.9000244140625,
+        "std": 873892.1202159033,
+        "positive_events": 704904,
+        "positive_pct": 100.0
+      },
+      "VSSC2-H": {
+        "description": "Side Scatter 2 Height",
+        "min": 0.0,
+        "max": 5370336.5,
+        "mean": 4844.196429279431,
+        "median": 85.4000015258789,
+        "std": 85248.49081046456,
+        "positive_events": 679415,
+        "positive_pct": 96.38
+      },
+      "BSSC-H": {
+        "description": "Blue Side Scatter Height",
+        "min": 0.0,
+        "max": 5352724.0,
+        "mean": 43009.31097876108,
+        "median": 412.3999938964844,
+        "std": 370066.8129621018,
+        "positive_events": 702467,
+        "positive_pct": 99.65
+      }
+    },
+    "fluorescence_stats": {
+      "V447-H": {
+        "min": 0.0,
+        "max": 8651.400390625,
+        "mean": 65.38423716765583,
+        "median": 64.0999984741211,
+        "positive_events": 669121,
+        "positive_pct": 94.92
+      },
+      "B531-H": {
+        "min": 0.0,
+        "max": 447465.09375,
+        "mean": 149.57144293625757,
+        "median": 74.30000305175781,
+        "positive_events": 667549,
+        "positive_pct": 94.7
+      },
+      "Y595-H": {
+        "min": 0.0,
+        "max": 199606.40625,
+        "mean": 83.65374725723399,
+        "median": 64.69999694824219,
+        "positive_events": 668117,
+        "positive_pct": 94.78
+      },
+      "R670-H": {
+        "min": 0.0,
+        "max": 25348.599609375,
+        "mean": 60.89406275072649,
+        "median": 58.400001525878906,
+        "positive_events": 667435,
+        "positive_pct": 94.68
+      },
+      "R710-H": {
+        "min": 0.0,
+        "max": 33051.30078125,
+        "mean": 58.50112228364332,
+        "median": 56.0,
+        "positive_events": 670231,
+        "positive_pct": 95.08
+      },
+      "R792-H": {
+        "min": 0.0,
+        "max": 47690.8984375,
+        "mean": 57.20470857978964,
+        "median": 55.20000076293945,
+        "positive_events": 669408,
+        "positive_pct": 94.96
+      }
+    },
+    "data_shape": [
+      704905,
+      33
+    ],
+    "category": "controls"
+  },
+  {
+    "file": "Exo+cont 4 1ug.fcs",
+    "status": "success",
+    "total_events": 1264381,
+    "sample_id": "Exo+cont 4 1ug",
+    "channels": [
+      "VFSC-H",
+      "VFSC-A",
+      "VSSC1-H",
+      "VSSC1-A",
+      "VSSC2-H",
+      "VSSC2-A",
+      "BSSC-H",
+      "BSSC-A",
+      "YSSC-H",
+      "YSSC-A",
+      "RSSC-H",
+      "RSSC-A",
+      "V447-H",
+      "V447-A",
+      "B531-H",
+      "B531-A",
+      "Y595-H",
+      "Y595-A",
+      "R670-H",
+      "R670-A",
+      "R710-H",
+      "R710-A",
+      "R792-H",
+      "R792-A",
+      "VSSC1-Width",
+      "Time"
+    ],
+    "num_channels": 26,
+    "scatter_stats": {
+      "VFSC-H": {
+        "description": "Forward Scatter Height",
+        "min": 0.0,
+        "max": 3653084.5,
+        "mean": 1309.6372493892175,
+        "median": 660.0999755859375,
+        "std": 23559.048569194812,
+        "positive_events": 1127957,
+        "positive_pct": 89.21
+      },
+      "VFSC-A": {
+        "description": "Forward Scatter Area",
+        "min": -9549.3251953125,
+        "max": 13190942.0,
+        "mean": 681.9016511433392,
+        "median": 10.475000381469727,
+        "std": 32768.40233614569,
+        "positive_events": 638507,
+        "positive_pct": 50.5
+      },
+      "VSSC1-H": {
+        "description": "Violet Side Scatter Height",
+        "min": 0.0,
+        "max": 5378603.5,
+        "mean": 26650.192868207432,
+        "median": 2571.0,
+        "std": 219800.95931555235,
+        "positive_events": 1264360,
+        "positive_pct": 100.0
+      },
+      "VSSC1-A": {
+        "description": "Violet Side Scatter Area",
+        "min": -1281.0,
+        "max": 75603384.0,
+        "mean": 26940.23231731713,
+        "median": 1722.574951171875,
+        "std": 402837.50868721784,
+        "positive_events": 1261655,
+        "positive_pct": 99.78
+      },
+      "VSSC2-H": {
+        "description": "Side Scatter 2 Height",
+        "min": 0.0,
+        "max": 5016366.0,
+        "mean": 637.1953859426509,
+        "median": 93.0,
+        "std": 11733.370658713962,
+        "positive_events": 1213080,
+        "positive_pct": 95.94
+      },
+      "BSSC-H": {
+        "description": "Blue Side Scatter Height",
+        "min": 0.0,
+        "max": 5352771.5,
+        "mean": 9247.598575733444,
+        "median": 592.2000122070312,
+        "std": 116552.89121839822,
+        "positive_events": 1250958,
+        "positive_pct": 98.94
+      }
+    },
+    "fluorescence_stats": {
+      "V447-H": {
+        "min": 0.0,
+        "max": 18997.19921875,
+        "mean": 65.56913865586284,
+        "median": 64.5999984741211,
+        "positive_events": 1201160,
+        "positive_pct": 95.0
+      },
+      "B531-H": {
+        "min": 0.0,
+        "max": 98743.5,
+        "mean": 154.1331963171832,
+        "median": 142.10000610351562,
+        "positive_events": 1180060,
+        "positive_pct": 93.33
+      },
+      "Y595-H": {
+        "min": 0.0,
+        "max": 26096.30078125,
+        "mean": 76.24479038030807,
+        "median": 73.9000015258789,
+        "positive_events": 1200633,
+        "positive_pct": 94.96
+      },
+      "R670-H": {
+        "min": 0.0,
+        "max": 7714.60009765625,
+        "mean": 59.115816278126694,
+        "median": 57.400001525878906,
+        "positive_events": 1200102,
+        "positive_pct": 94.92
+      },
+      "R710-H": {
+        "min": 0.0,
+        "max": 11917.900390625,
+        "mean": 58.61899380329015,
+        "median": 57.099998474121094,
+        "positive_events": 1198190,
+        "positive_pct": 94.76
+      },
+      "R792-H": {
+        "min": 0.0,
+        "max": 22408.900390625,
+        "mean": 56.93500005605194,
+        "median": 56.400001525878906,
+        "positive_events": 1187589,
+        "positive_pct": 93.93
+      }
+    },
+    "data_shape": [
+      1264381,
+      33
+    ],
+    "category": "controls"
+  },
+  {
+    "file": "Exo+cont 4 50 uM.fcs",
+    "status": "success",
+    "total_events": 149024,
+    "sample_id": "Exo+cont 4 50 uM",
+    "channels": [
+      "VFSC-H",
+      "VFSC-A",
+      "VSSC1-H",
+      "VSSC1-A",
+      "VSSC2-H",
+      "VSSC2-A",
+      "BSSC-H",
+      "BSSC-A",
+      "YSSC-H",
+      "YSSC-A",
+      "RSSC-H",
+      "RSSC-A",
+      "V447-H",
+      "V447-A",
+      "B531-H",
+      "B531-A",
+      "Y595-H",
+      "Y595-A",
+      "R670-H",
+      "R670-A",
+      "R710-H",
+      "R710-A",
+      "R792-H",
+      "R792-A",
+      "VSSC1-Width",
+      "Time"
+    ],
+    "num_channels": 26,
+    "scatter_stats": {
+      "VFSC-H": {
+        "description": "Forward Scatter Height",
+        "min": 0.0,
+        "max": 3706674.0,
+        "mean": 18610.297148033365,
+        "median": 659.0999755859375,
+        "std": 159641.40738918755,
+        "positive_events": 131745,
+        "positive_pct": 88.41
+      },
+      "VFSC-A": {
+        "description": "Forward Scatter Area",
+        "min": -7326.10009765625,
+        "max": 11558934.0,
+        "mean": 16304.212667695501,
+        "median": 72.07499694824219,
+        "std": 156751.7140299318,
+        "positive_events": 79683,
+        "positive_pct": 53.47
+      },
+      "VSSC1-H": {
+        "description": "Violet Side Scatter Height",
+        "min": 370.3999938964844,
+        "max": 5390438.0,
+        "mean": 227950.63617499958,
+        "median": 1244.199951171875,
+        "std": 929289.0197606649,
+        "positive_events": 149024,
+        "positive_pct": 100.0
+      },
+      "VSSC1-A": {
+        "description": "Violet Side Scatter Area",
+        "min": 208.5500030517578,
+        "max": 23999888.0,
+        "mean": 299279.4457110787,
+        "median": 940.4624938964844,
+        "std": 1500848.8389325186,
+        "positive_events": 149024,
+        "positive_pct": 100.0
+      },
+      "VSSC2-H": {
+        "description": "Side Scatter 2 Height",
+        "min": 0.0,
+        "max": 5371992.0,
+        "mean": 16512.146297995594,
+        "median": 86.5,
+        "std": 178106.40500947076,
+        "positive_events": 143218,
+        "positive_pct": 96.1
+      },
+      "BSSC-H": {
+        "description": "Blue Side Scatter Height",
+        "min": 0.0,
+        "max": 5361208.5,
+        "mean": 125336.88239491906,
+        "median": 266.5,
+        "std": 653136.4087995648,
+        "positive_events": 148715,
+        "positive_pct": 99.79
+      }
+    },
+    "fluorescence_stats": {
+      "V447-H": {
+        "min": 0.0,
+        "max": 14605.0,
+        "mean": 66.31420979740821,
+        "median": 63.79999923706055,
+        "positive_events": 140638,
+        "positive_pct": 94.37
+      },
+      "B531-H": {
+        "min": 0.0,
+        "max": 1121029.625,
+        "mean": 295.3413960887417,
+        "median": 78.30000305175781,
+        "positive_events": 140567,
+        "positive_pct": 94.33
+      },
+      "Y595-H": {
+        "min": 0.0,
+        "max": 484398.6875,
+        "mean": 156.18243365400923,
+        "median": 65.80000305175781,
+        "positive_events": 141274,
+        "positive_pct": 94.8
+      },
+      "R670-H": {
+        "min": 0.0,
+        "max": 37723.8984375,
+        "mean": 67.21277847861127,
+        "median": 59.400001525878906,
+        "positive_events": 139841,
+        "positive_pct": 93.84
+      },
+      "R710-H": {
+        "min": 0.0,
+        "max": 18115.599609375,
+        "mean": 61.65852682614675,
+        "median": 56.900001525878906,
+        "positive_events": 139865,
+        "positive_pct": 93.85
+      },
+      "R792-H": {
+        "min": 0.0,
+        "max": 14228.599609375,
+        "mean": 57.615818931107,
+        "median": 55.5,
+        "positive_events": 139075,
+        "positive_pct": 93.32
+      }
+    },
+    "data_shape": [
+      149024,
+      33
+    ],
+    "category": "controls"
+  },
+  {
+    "file": "Blank-SampleLine1.fcs",
+    "status": "success",
+    "total_events": 2446,
+    "sample_id": "Blank-SampleLine1",
+    "channels": [
+      "VFSC-H",
+      "VFSC-A",
+      "VSSC1-H",
+      "VSSC1-A",
+      "VSSC2-H",
+      "VSSC2-A",
+      "BSSC-H",
+      "BSSC-A",
+      "YSSC-H",
+      "YSSC-A",
+      "RSSC-H",
+      "RSSC-A",
+      "V447-H",
+      "V447-A",
+      "B531-H",
+      "B531-A",
+      "Y595-H",
+      "Y595-A",
+      "R670-H",
+      "R670-A",
+      "R710-H",
+      "R710-A",
+      "R792-H",
+      "R792-A",
+      "VSSC1-Width",
+      "Time"
+    ],
+    "num_channels": 26,
+    "scatter_stats": {
+      "VFSC-H": {
+        "description": "Forward Scatter Height",
+        "min": 0.0,
+        "max": 56499.8984375,
+        "mean": 512.4959519223316,
+        "median": 430.40000915527344,
+        "std": 1213.7317515049863,
+        "positive_events": 1929,
+        "positive_pct": 78.86
+      },
+      "VFSC-A": {
+        "description": "Forward Scatter Area",
+        "min": -2201.02490234375,
+        "max": 57754.55078125,
+        "mean": 28.468663345525865,
+        "median": -4.974999904632568,
+        "std": 1279.146160321685,
+        "positive_events": 1206,
+        "positive_pct": 49.3
+      },
+      "VSSC1-H": {
+        "description": "Violet Side Scatter Height",
+        "min": 328.1000061035156,
+        "max": 719959.8125,
+        "mean": 937.5865976828001,
+        "median": 363.1000061035156,
+        "std": 15917.032835572127,
+        "positive_events": 2446,
+        "positive_pct": 100.0
+      },
+      "VSSC1-A": {
+        "description": "Violet Side Scatter Area",
+        "min": 102.44999694824219,
+        "max": 578623.5,
+        "mean": 677.5051825142062,
+        "median": 217.625,
+        "std": 12713.123122968822,
+        "positive_events": 2446,
+        "positive_pct": 100.0
+      },
+      "VSSC2-H": {
+        "description": "Side Scatter 2 Height",
+        "min": 0.0,
+        "max": 12584.900390625,
+        "mean": 66.4552740964944,
+        "median": 55.69999885559082,
+        "std": 279.60742087729824,
+        "positive_events": 2175,
+        "positive_pct": 88.92
+      },
+      "BSSC-H": {
+        "description": "Blue Side Scatter Height",
+        "min": 0.0,
+        "max": 177265.09375,
+        "mean": 177.83887738471915,
+        "median": 65.45000076293945,
+        "std": 3668.2521652394444,
+        "positive_events": 2204,
+        "positive_pct": 90.11
+      }
+    },
+    "fluorescence_stats": {
+      "V447-H": {
+        "min": 0.0,
+        "max": 198.3000030517578,
+        "mean": 52.011897004050304,
+        "median": 49.79999923706055,
+        "positive_events": 2155,
+        "positive_pct": 88.1
+      },
+      "B531-H": {
+        "min": 0.0,
+        "max": 196.1999969482422,
+        "mean": 51.18479152946129,
+        "median": 49.900001525878906,
+        "positive_events": 2152,
+        "positive_pct": 87.98
+      },
+      "Y595-H": {
+        "min": 0.0,
+        "max": 212.8000030517578,
+        "mean": 53.79603427526703,
+        "median": 51.099998474121094,
+        "positive_events": 2186,
+        "positive_pct": 89.37
+      },
+      "R670-H": {
+        "min": 0.0,
+        "max": 160.3000030517578,
+        "mean": 45.38487323658055,
+        "median": 42.79999923706055,
+        "positive_events": 2108,
+        "positive_pct": 86.18
+      },
+      "R710-H": {
+        "min": 0.0,
+        "max": 154.60000610351562,
+        "mean": 46.38789864124476,
+        "median": 44.0,
+        "positive_events": 2148,
+        "positive_pct": 87.82
+      },
+      "R792-H": {
+        "min": 0.0,
+        "max": 158.8000030517578,
+        "mean": 45.9847914780736,
+        "median": 45.35000038146973,
+        "positive_events": 2128,
+        "positive_pct": 87.0
+      }
+    },
+    "data_shape": [
+      2446,
+      33
+    ],
+    "category": "blanks"
+  },
+  {
+    "file": "Blank-SampleLine2.fcs",
+    "status": "success",
+    "total_events": 2527,
+    "sample_id": "Blank-SampleLine2",
+    "channels": [
+      "VFSC-H",
+      "VFSC-A",
+      "VSSC1-H",
+      "VSSC1-A",
+      "VSSC2-H",
+      "VSSC2-A",
+      "BSSC-H",
+      "BSSC-A",
+      "YSSC-H",
+      "YSSC-A",
+      "RSSC-H",
+      "RSSC-A",
+      "V447-H",
+      "V447-A",
+      "B531-H",
+      "B531-A",
+      "Y595-H",
+      "Y595-A",
+      "R670-H",
+      "R670-A",
+      "R710-H",
+      "R710-A",
+      "R792-H",
+      "R792-A",
+      "VSSC1-Width",
+      "Time"
+    ],
+    "num_channels": 26,
+    "scatter_stats": {
+      "VFSC-H": {
+        "description": "Forward Scatter Height",
+        "min": 0.0,
+        "max": 2350.89990234375,
+        "mean": 511.8533826634777,
+        "median": 448.1000061035156,
+        "std": 445.11554865852384,
+        "positive_events": 2021,
+        "positive_pct": 79.98
+      },
+      "VFSC-A": {
+        "description": "Forward Scatter Area",
+        "min": -2505.050048828125,
+        "max": 1681.375,
+        "mean": 12.749178900981567,
+        "median": 17.549999237060547,
+        "std": 537.3460095075785,
+        "positive_events": 1290,
+        "positive_pct": 51.05
+      },
+      "VSSC1-H": {
+        "description": "Violet Side Scatter Height",
+        "min": 328.20001220703125,
+        "max": 133488.296875,
+        "mean": 437.4248902019324,
+        "median": 362.8999938964844,
+        "std": 2675.7870008677214,
+        "positive_events": 2527,
+        "positive_pct": 100.0
+      },
+      "VSSC1-A": {
+        "description": "Violet Side Scatter Area",
+        "min": 102.625,
+        "max": 105020.9765625,
+        "mean": 278.1370701670977,
+        "median": 218.60000610351562,
+        "std": 2106.7358638928104,
+        "positive_events": 2527,
+        "positive_pct": 100.0
+      },
+      "VSSC2-H": {
+        "description": "Side Scatter 2 Height",
+        "min": 0.0,
+        "max": 2271.39990234375,
+        "mean": 56.889354923189416,
+        "median": 53.70000076293945,
+        "std": 57.75228617025449,
+        "positive_events": 2250,
+        "positive_pct": 89.04
+      },
+      "BSSC-H": {
+        "description": "Blue Side Scatter Height",
+        "min": 0.0,
+        "max": 39826.3984375,
+        "mean": 86.21448295994809,
+        "median": 64.9000015258789,
+        "std": 795.5322910287323,
+        "positive_events": 2261,
+        "positive_pct": 89.47
+      }
+    },
+    "fluorescence_stats": {
+      "V447-H": {
+        "min": 0.0,
+        "max": 174.39999389648438,
+        "mean": 51.306806520930756,
+        "median": 49.20000076293945,
+        "positive_events": 2204,
+        "positive_pct": 87.22
+      },
+      "B531-H": {
+        "min": 0.0,
+        "max": 212.8000030517578,
+        "mean": 50.78155916521188,
+        "median": 48.5,
+        "positive_events": 2237,
+        "positive_pct": 88.52
+      },
+      "Y595-H": {
+        "min": 0.0,
+        "max": 200.10000610351562,
+        "mean": 53.299723029278184,
+        "median": 51.5,
+        "positive_events": 2232,
+        "positive_pct": 88.33
+      },
+      "R670-H": {
+        "min": 0.0,
+        "max": 173.89999389648438,
+        "mean": 46.39540955536348,
+        "median": 45.099998474121094,
+        "positive_events": 2255,
+        "positive_pct": 89.24
+      },
+      "R710-H": {
+        "min": 0.0,
+        "max": 172.39999389648438,
+        "mean": 47.80197860565306,
+        "median": 46.79999923706055,
+        "positive_events": 2199,
+        "positive_pct": 87.02
+      },
+      "R792-H": {
+        "min": 0.0,
+        "max": 164.5,
+        "mean": 46.106964798562366,
+        "median": 44.599998474121094,
+        "positive_events": 2219,
+        "positive_pct": 87.81
+      }
+    },
+    "data_shape": [
+      2527,
+      33
+    ],
+    "category": "blanks"
+  },
+  {
+    "file": "HPLC FIL Water.fcs",
+    "status": "success",
+    "total_events": 2879,
+    "sample_id": "HPLC FIL Water",
+    "channels": [
+      "VFSC-H",
+      "VFSC-A",
+      "VSSC1-H",
+      "VSSC1-A",
+      "VSSC2-H",
+      "VSSC2-A",
+      "BSSC-H",
+      "BSSC-A",
+      "YSSC-H",
+      "YSSC-A",
+      "RSSC-H",
+      "RSSC-A",
+      "V447-H",
+      "V447-A",
+      "B531-H",
+      "B531-A",
+      "Y595-H",
+      "Y595-A",
+      "R670-H",
+      "R670-A",
+      "R710-H",
+      "R710-A",
+      "R792-H",
+      "R792-A",
+      "VSSC1-Width",
+      "Time"
+    ],
+    "num_channels": 26,
+    "scatter_stats": {
+      "VFSC-H": {
+        "description": "Forward Scatter Height",
+        "min": 0.0,
+        "max": 3165474.25,
+        "mean": 1645.3916121675306,
+        "median": 471.5,
+        "std": 58981.21885556564,
+        "positive_events": 2348,
+        "positive_pct": 81.56
+      },
+      "VFSC-A": {
+        "description": "Forward Scatter Area",
+        "min": -4896.5,
+        "max": 5669002.0,
+        "mean": 1980.065214417365,
+        "median": -2.5,
+        "std": 105638.23521232398,
+        "positive_events": 1437,
+        "positive_pct": 49.91
+      },
+      "VSSC1-H": {
+        "description": "Violet Side Scatter Height",
+        "min": 328.5,
+        "max": 5379846.0,
+        "mean": 12789.79965215261,
+        "median": 371.29998779296875,
+        "std": 159373.08134702046,
+        "positive_events": 2879,
+        "positive_pct": 100.0
+      },
+      "VSSC1-A": {
+        "description": "Violet Side Scatter Area",
+        "min": 121.19999694824219,
+        "max": 19585384.0,
+        "mean": 15353.97527588304,
+        "median": 232.6750030517578,
+        "std": 377761.9384952818,
+        "positive_events": 2879,
+        "positive_pct": 100.0
+      },
+      "VSSC2-H": {
+        "description": "Side Scatter 2 Height",
+        "min": 0.0,
+        "max": 3865892.5,
+        "mean": 1578.9033347759532,
+        "median": 59.099998474121094,
+        "std": 72063.9928243664,
+        "positive_events": 2587,
+        "positive_pct": 89.86
+      },
+      "BSSC-H": {
+        "description": "Blue Side Scatter Height",
+        "min": 0.0,
+        "max": 5355604.5,
+        "mean": 5325.71090537055,
+        "median": 77.30000305175781,
+        "std": 110939.95174531739,
+        "positive_events": 2631,
+        "positive_pct": 91.39
+      }
+    },
+    "fluorescence_stats": {
+      "V447-H": {
+        "min": 0.0,
+        "max": 231.89999389648438,
+        "mean": 53.8746439409405,
+        "median": 51.400001525878906,
+        "positive_events": 2586,
+        "positive_pct": 89.82
+      },
+      "B531-H": {
+        "min": 0.0,
+        "max": 823.2000122070312,
+        "mean": 54.98155603279625,
+        "median": 53.099998474121094,
+        "positive_events": 2581,
+        "positive_pct": 89.65
+      },
+      "Y595-H": {
+        "min": 0.0,
+        "max": 501.79998779296875,
+        "mean": 55.14480718716684,
+        "median": 53.20000076293945,
+        "positive_events": 2608,
+        "positive_pct": 90.59
+      },
+      "R670-H": {
+        "min": 0.0,
+        "max": 184.89999389648438,
+        "mean": 49.69176796386125,
+        "median": 49.20000076293945,
+        "positive_events": 2581,
+        "positive_pct": 89.65
+      },
+      "R710-H": {
+        "min": 0.0,
+        "max": 171.3000030517578,
+        "mean": 50.3939214897222,
+        "median": 48.79999923706055,
+        "positive_events": 2551,
+        "positive_pct": 88.61
+      },
+      "R792-H": {
+        "min": 0.0,
+        "max": 169.60000610351562,
+        "mean": 49.70736372723435,
+        "median": 47.29999923706055,
+        "positive_events": 2569,
+        "positive_pct": 89.23
+      }
+    },
+    "data_shape": [
+      2879,
+      33
+    ],
+    "category": "water"
+  },
+  {
+    "file": "HPLC FIL Water1.fcs",
+    "status": "success",
+    "total_events": 12374,
+    "sample_id": "HPLC FIL Water1",
+    "channels": [
+      "VFSC-H",
+      "VFSC-A",
+      "VSSC1-H",
+      "VSSC1-A",
+      "VSSC2-H",
+      "VSSC2-A",
+      "BSSC-H",
+      "BSSC-A",
+      "YSSC-H",
+      "YSSC-A",
+      "RSSC-H",
+      "RSSC-A",
+      "V447-H",
+      "V447-A",
+      "B531-H",
+      "B531-A",
+      "Y595-H",
+      "Y595-A",
+      "R670-H",
+      "R670-A",
+      "R710-H",
+      "R710-A",
+      "R792-H",
+      "R792-A",
+      "VSSC1-Width",
+      "Time"
+    ],
+    "num_channels": 26,
+    "scatter_stats": {
+      "VFSC-H": {
+        "description": "Forward Scatter Height",
+        "min": 0.0,
+        "max": 3538800.0,
+        "mean": 4012.312517519893,
+        "median": 608.2000122070312,
+        "std": 81723.58219634087,
+        "positive_events": 11100,
+        "positive_pct": 89.7
+      },
+      "VFSC-A": {
+        "description": "Forward Scatter Area",
+        "min": -3097.0,
+        "max": 4284011.0,
+        "mean": 3091.2116076246457,
+        "median": 23.33750057220459,
+        "std": 81354.3146119364,
+        "positive_events": 6344,
+        "positive_pct": 51.27
+      },
+      "VSSC1-H": {
+        "description": "Violet Side Scatter Height",
+        "min": 962.2000122070312,
+        "max": 5380923.5,
+        "mean": 77958.92972544597,
+        "median": 4540.699951171875,
+        "std": 435188.9962214862,
+        "positive_events": 12374,
+        "positive_pct": 100.0
+      },
+      "VSSC1-A": {
+        "description": "Violet Side Scatter Area",
+        "min": 583.4500122070312,
+        "max": 18327316.0,
+        "mean": 74787.05640624586,
+        "median": 3531.2125244140625,
+        "std": 553110.9595077147,
+        "positive_events": 12374,
+        "positive_pct": 100.0
+      },
+      "VSSC2-H": {
+        "description": "Side Scatter 2 Height",
+        "min": 0.0,
+        "max": 5245340.5,
+        "mean": 2512.217349506762,
+        "median": 125.80000305175781,
+        "std": 53983.11921217633,
+        "positive_events": 12204,
+        "positive_pct": 98.63
+      },
+      "BSSC-H": {
+        "description": "Blue Side Scatter Height",
+        "min": 0.0,
+        "max": 5355127.0,
+        "mean": 31870.89205013039,
+        "median": 1061.8999633789062,
+        "std": 265628.1191980048,
+        "positive_events": 12373,
+        "positive_pct": 99.99
+      }
+    },
+    "fluorescence_stats": {
+      "V447-H": {
+        "min": 0.0,
+        "max": 148171.703125,
+        "mean": 84.91341550473118,
+        "median": 62.20000076293945,
+        "positive_events": 11802,
+        "positive_pct": 95.38
+      },
+      "B531-H": {
+        "min": 0.0,
+        "max": 56302.3984375,
+        "mean": 79.19127195479123,
+        "median": 62.5,
+        "positive_events": 11758,
+        "positive_pct": 95.02
+      },
+      "Y595-H": {
+        "min": 0.0,
+        "max": 17636.900390625,
+        "mean": 67.48643121215318,
+        "median": 61.79999923706055,
+        "positive_events": 11796,
+        "positive_pct": 95.33
+      },
+      "R670-H": {
+        "min": 0.0,
+        "max": 5169.39990234375,
+        "mean": 56.38867792074334,
+        "median": 53.64999961853027,
+        "positive_events": 11661,
+        "positive_pct": 94.24
+      },
+      "R710-H": {
+        "min": 0.0,
+        "max": 3751.10009765625,
+        "mean": 60.36242119484077,
+        "median": 59.70000076293945,
+        "positive_events": 11655,
+        "positive_pct": 94.19
+      },
+      "R792-H": {
+        "min": 0.0,
+        "max": 1755.5,
+        "mean": 59.15371747137908,
+        "median": 57.099998474121094,
+        "positive_events": 11711,
+        "positive_pct": 94.64
+      }
+    },
+    "data_shape": [
+      12374,
+      33
+    ],
+    "category": "water"
+  },
+  {
+    "file": "HPLC FIL Water10.fcs",
+    "status": "success",
+    "total_events": 3063,
+    "sample_id": "HPLC FIL Water10",
+    "channels": [
+      "VFSC-H",
+      "VFSC-A",
+      "VSSC1-H",
+      "VSSC1-A",
+      "VSSC2-H",
+      "VSSC2-A",
+      "BSSC-H",
+      "BSSC-A",
+      "YSSC-H",
+      "YSSC-A",
+      "RSSC-H",
+      "RSSC-A",
+      "V447-H",
+      "V447-A",
+      "B531-H",
+      "B531-A",
+      "Y595-H",
+      "Y595-A",
+      "R670-H",
+      "R670-A",
+      "R710-H",
+      "R710-A",
+      "R792-H",
+      "R792-A",
+      "VSSC1-Width",
+      "Time"
+    ],
+    "num_channels": 26,
+    "scatter_stats": {
+      "VFSC-H": {
+        "description": "Forward Scatter Height",
+        "min": 0.0,
+        "max": 885327.3125,
+        "mean": 1169.1947542156925,
+        "median": 449.0,
+        "std": 18691.451565299514,
+        "positive_events": 2463,
+        "positive_pct": 80.41
+      },
+      "VFSC-A": {
+        "description": "Forward Scatter Area",
+        "min": -3216.125,
+        "max": 675126.25,
+        "mean": 562.8843203684692,
+        "median": -4.699999809265137,
+        "std": 16087.444457895623,
+        "positive_events": 1525,
+        "positive_pct": 49.79
+      },
+      "VSSC1-H": {
+        "description": "Violet Side Scatter Height",
+        "min": 328.1000061035156,
+        "max": 5379829.0,
+        "mean": 28551.300807622847,
+        "median": 370.5,
+        "std": 307433.524355658,
+        "positive_events": 3063,
+        "positive_pct": 100.0
+      },
+      "VSSC1-A": {
+        "description": "Violet Side Scatter Area",
+        "min": 118.2750015258789,
+        "max": 14373300.0,
+        "mean": 30585.272407043536,
+        "median": 232.39999389648438,
+        "std": 427505.7879769286,
+        "positive_events": 3063,
+        "positive_pct": 100.0
+      },
+      "VSSC2-H": {
+        "description": "Side Scatter 2 Height",
+        "min": 0.0,
+        "max": 586430.3125,
+        "mean": 934.4301032879911,
+        "median": 61.5,
+        "std": 15793.644753211267,
+        "positive_events": 2767,
+        "positive_pct": 90.34
+      },
+      "BSSC-H": {
+        "description": "Blue Side Scatter Height",
+        "min": 0.0,
+        "max": 5352636.5,
+        "mean": 12448.267690450275,
+        "median": 79.5999984741211,
+        "std": 187171.16418210784,
+        "positive_events": 2771,
+        "positive_pct": 90.47
+      }
+    },
+    "fluorescence_stats": {
+      "V447-H": {
+        "min": 0.0,
+        "max": 2045.5,
+        "mean": 56.018054255386836,
+        "median": 54.20000076293945,
+        "positive_events": 2728,
+        "positive_pct": 89.06
+      },
+      "B531-H": {
+        "min": 0.0,
+        "max": 8554.2998046875,
+        "mean": 58.49663725936097,
+        "median": 52.70000076293945,
+        "positive_events": 2747,
+        "positive_pct": 89.68
+      },
+      "Y595-H": {
+        "min": 0.0,
+        "max": 6062.2998046875,
+        "mean": 59.94413964031492,
+        "median": 55.900001525878906,
+        "positive_events": 2774,
+        "positive_pct": 90.56
+      },
+      "R670-H": {
+        "min": 0.0,
+        "max": 2404.0,
+        "mean": 50.894939613466825,
+        "median": 49.20000076293945,
+        "positive_events": 2698,
+        "positive_pct": 88.08
+      },
+      "R710-H": {
+        "min": 0.0,
+        "max": 1883.4000244140625,
+        "mean": 49.56604634738615,
+        "median": 47.099998474121094,
+        "positive_events": 2688,
+        "positive_pct": 87.76
+      },
+      "R792-H": {
+        "min": 0.0,
+        "max": 1024.5999755859375,
+        "mean": 49.707868109954326,
+        "median": 49.20000076293945,
+        "positive_events": 2692,
+        "positive_pct": 87.89
+      }
+    },
+    "data_shape": [
+      3063,
+      33
+    ],
+    "category": "water"
+  },
+  {
+    "file": "HPLC FIL Water2.fcs",
+    "status": "success",
+    "total_events": 7242,
+    "sample_id": "HPLC FIL Water2",
+    "channels": [
+      "VFSC-H",
+      "VFSC-A",
+      "VSSC1-H",
+      "VSSC1-A",
+      "VSSC2-H",
+      "VSSC2-A",
+      "BSSC-H",
+      "BSSC-A",
+      "YSSC-H",
+      "YSSC-A",
+      "RSSC-H",
+      "RSSC-A",
+      "V447-H",
+      "V447-A",
+      "B531-H",
+      "B531-A",
+      "Y595-H",
+      "Y595-A",
+      "R670-H",
+      "R670-A",
+      "R710-H",
+      "R710-A",
+      "R792-H",
+      "R792-A",
+      "VSSC1-Width",
+      "Time"
+    ],
+    "num_channels": 26,
+    "scatter_stats": {
+      "VFSC-H": {
+        "description": "Forward Scatter Height",
+        "min": 0.0,
+        "max": 3662057.25,
+        "mean": 4762.995892817854,
+        "median": 602.1999816894531,
+        "std": 103950.97644963191,
+        "positive_events": 6443,
+        "positive_pct": 88.97
+      },
+      "VFSC-A": {
+        "description": "Forward Scatter Area",
+        "min": -3354.300048828125,
+        "max": 4614978.5,
+        "mean": 4007.7957256148447,
+        "median": 24.912500381469727,
+        "std": 107594.07159940607,
+        "positive_events": 3689,
+        "positive_pct": 50.94
+      },
+      "VSSC1-H": {
+        "description": "Violet Side Scatter Height",
+        "min": 473.20001220703125,
+        "max": 5379429.5,
+        "mean": 49425.46408731692,
+        "median": 2550.9000244140625,
+        "std": 322421.5262206424,
+        "positive_events": 7242,
+        "positive_pct": 100.0
+      },
+      "VSSC1-A": {
+        "description": "Violet Side Scatter Area",
+        "min": 243.3249969482422,
+        "max": 17899790.0,
+        "mean": 50085.73366714347,
+        "median": 1968.7125244140625,
+        "std": 491739.4947872221,
+        "positive_events": 7242,
+        "positive_pct": 100.0
+      },
+      "VSSC2-H": {
+        "description": "Side Scatter 2 Height",
+        "min": 0.0,
+        "max": 5364428.5,
+        "mean": 2938.8967151519378,
+        "median": 102.30000305175781,
+        "std": 92101.81046364235,
+        "positive_events": 7074,
+        "positive_pct": 97.68
+      },
+      "BSSC-H": {
+        "description": "Blue Side Scatter Height",
+        "min": 0.0,
+        "max": 5353164.0,
+        "mean": 20817.186624152593,
+        "median": 580.0999755859375,
+        "std": 228802.09328183476,
+        "positive_events": 7240,
+        "positive_pct": 99.97
+      }
+    },
+    "fluorescence_stats": {
+      "V447-H": {
+        "min": 0.0,
+        "max": 47576.5,
+        "mean": 78.2531482710492,
+        "median": 65.0999984741211,
+        "positive_events": 6907,
+        "positive_pct": 95.37
+      },
+      "B531-H": {
+        "min": 0.0,
+        "max": 158913.796875,
+        "mean": 101.65146329764403,
+        "median": 62.70000076293945,
+        "positive_events": 6925,
+        "positive_pct": 95.62
+      },
+      "Y595-H": {
+        "min": 0.0,
+        "max": 66051.3984375,
+        "mean": 80.55237480449071,
+        "median": 62.5,
+        "positive_events": 6886,
+        "positive_pct": 95.08
+      },
+      "R670-H": {
+        "min": 0.0,
+        "max": 19590.599609375,
+        "mean": 64.38816623943217,
+        "median": 58.70000076293945,
+        "positive_events": 6873,
+        "positive_pct": 94.9
+      },
+      "R710-H": {
+        "min": 0.0,
+        "max": 14447.2998046875,
+        "mean": 62.883623353225424,
+        "median": 58.70000076293945,
+        "positive_events": 6841,
+        "positive_pct": 94.46
+      },
+      "R792-H": {
+        "min": 0.0,
+        "max": 7072.89990234375,
+        "mean": 59.79508420967391,
+        "median": 58.400001525878906,
+        "positive_events": 6833,
+        "positive_pct": 94.35
+      }
+    },
+    "data_shape": [
+      7242,
+      33
+    ],
+    "category": "water"
+  },
+  {
+    "file": "HPLC FIL Water3.fcs",
+    "status": "success",
+    "total_events": 3822,
+    "sample_id": "HPLC FIL Water3",
+    "channels": [
+      "VFSC-H",
+      "VFSC-A",
+      "VSSC1-H",
+      "VSSC1-A",
+      "VSSC2-H",
+      "VSSC2-A",
+      "BSSC-H",
+      "BSSC-A",
+      "YSSC-H",
+      "YSSC-A",
+      "RSSC-H",
+      "RSSC-A",
+      "V447-H",
+      "V447-A",
+      "B531-H",
+      "B531-A",
+      "Y595-H",
+      "Y595-A",
+      "R670-H",
+      "R670-A",
+      "R710-H",
+      "R710-A",
+      "R792-H",
+      "R792-A",
+      "VSSC1-Width",
+      "Time"
+    ],
+    "num_channels": 26,
+    "scatter_stats": {
+      "VFSC-H": {
+        "description": "Forward Scatter Height",
+        "min": 0.0,
+        "max": 557928.125,
+        "mean": 873.7968711820589,
+        "median": 511.6000061035156,
+        "std": 11355.541952311127,
+        "positive_events": 3209,
+        "positive_pct": 83.96
+      },
+      "VFSC-A": {
+        "description": "Forward Scatter Area",
+        "min": -3048.5,
+        "max": 446530.9375,
+        "mean": 271.889096285678,
+        "median": 13.974999904632568,
+        "std": 9051.701821176946,
+        "positive_events": 1949,
+        "positive_pct": 50.99
+      },
+      "VSSC1-H": {
+        "description": "Violet Side Scatter Height",
+        "min": 325.1000061035156,
+        "max": 5379153.5,
+        "mean": 22277.60939381997,
+        "median": 381.8999938964844,
+        "std": 258257.51587396464,
+        "positive_events": 3822,
+        "positive_pct": 100.0
+      },
+      "VSSC1-A": {
+        "description": "Violet Side Scatter Area",
+        "min": 104.5,
+        "max": 9584620.0,
+        "mean": 19620.25379073913,
+        "median": 253.48749542236328,
+        "std": 260292.30773381563,
+        "positive_events": 3822,
+        "positive_pct": 100.0
+      },
+      "VSSC2-H": {
+        "description": "Side Scatter 2 Height",
+        "min": 0.0,
+        "max": 283899.09375,
+        "mean": 509.80360937617576,
+        "median": 66.69999694824219,
+        "std": 6626.039973878009,
+        "positive_events": 3518,
+        "positive_pct": 92.05
+      },
+      "BSSC-H": {
+        "description": "Blue Side Scatter Height",
+        "min": 0.0,
+        "max": 5063043.5,
+        "mean": 8351.852212924598,
+        "median": 98.0,
+        "std": 126120.847850089,
+        "positive_events": 3575,
+        "positive_pct": 93.54
+      }
+    },
+    "fluorescence_stats": {
+      "V447-H": {
+        "min": 0.0,
+        "max": 888.5999755859375,
+        "mean": 58.60954998551333,
+        "median": 56.04999923706055,
+        "positive_events": 3491,
+        "positive_pct": 91.34
+      },
+      "B531-H": {
+        "min": 0.0,
+        "max": 3761.10009765625,
+        "mean": 58.066902153408385,
+        "median": 54.45000076293945,
+        "positive_events": 3448,
+        "positive_pct": 90.21
+      },
+      "Y595-H": {
+        "min": 0.0,
+        "max": 2626.5,
+        "mean": 59.43587125451823,
+        "median": 55.599998474121094,
+        "positive_events": 3483,
+        "positive_pct": 91.13
+      },
+      "R670-H": {
+        "min": 0.0,
+        "max": 945.5999755859375,
+        "mean": 51.794348500399984,
+        "median": 50.70000076293945,
+        "positive_events": 3440,
+        "positive_pct": 90.01
+      },
+      "R710-H": {
+        "min": 0.0,
+        "max": 777.7999877929688,
+        "mean": 51.57959190131107,
+        "median": 50.54999923706055,
+        "positive_events": 3411,
+        "positive_pct": 89.25
+      },
+      "R792-H": {
+        "min": 0.0,
+        "max": 391.6000061035156,
+        "mean": 48.372292007594005,
+        "median": 46.400001525878906,
+        "positive_events": 3478,
+        "positive_pct": 91.0
+      }
+    },
+    "data_shape": [
+      3822,
+      33
+    ],
+    "category": "water"
+  },
+  {
+    "file": "HPLC FIL Water4.fcs",
+    "status": "success",
+    "total_events": 3355,
+    "sample_id": "HPLC FIL Water4",
+    "channels": [
+      "VFSC-H",
+      "VFSC-A",
+      "VSSC1-H",
+      "VSSC1-A",
+      "VSSC2-H",
+      "VSSC2-A",
+      "BSSC-H",
+      "BSSC-A",
+      "YSSC-H",
+      "YSSC-A",
+      "RSSC-H",
+      "RSSC-A",
+      "V447-H",
+      "V447-A",
+      "B531-H",
+      "B531-A",
+      "Y595-H",
+      "Y595-A",
+      "R670-H",
+      "R670-A",
+      "R710-H",
+      "R710-A",
+      "R792-H",
+      "R792-A",
+      "VSSC1-Width",
+      "Time"
+    ],
+    "num_channels": 26,
+    "scatter_stats": {
+      "VFSC-H": {
+        "description": "Forward Scatter Height",
+        "min": 0.0,
+        "max": 465570.09375,
+        "mean": 806.083126877104,
+        "median": 495.8999938964844,
+        "std": 8645.515225463454,
+        "positive_events": 2779,
+        "positive_pct": 82.83
+      },
+      "VFSC-A": {
+        "description": "Forward Scatter Area",
+        "min": -2898.925048828125,
+        "max": 370372.65625,
+        "mean": 236.45755853276316,
+        "median": 26.774999618530273,
+        "std": 6912.048478738558,
+        "positive_events": 1730,
+        "positive_pct": 51.56
+      },
+      "VSSC1-H": {
+        "description": "Violet Side Scatter Height",
+        "min": 328.6000061035156,
+        "max": 5365063.5,
+        "mean": 13724.740718390156,
+        "median": 377.0,
+        "std": 197699.01228601742,
+        "positive_events": 3355,
+        "positive_pct": 100.0
+      },
+      "VSSC1-A": {
+        "description": "Violet Side Scatter Area",
+        "min": 106.4000015258789,
+        "max": 6533192.5,
+        "mean": 12580.725367379793,
+        "median": 244.1750030517578,
+        "std": 206897.59359083994,
+        "positive_events": 3355,
+        "positive_pct": 100.0
+      },
+      "VSSC2-H": {
+        "description": "Side Scatter 2 Height",
+        "min": 0.0,
+        "max": 168746.5,
+        "mean": 339.68611064490193,
+        "median": 64.4000015258789,
+        "std": 4981.266872091813,
+        "positive_events": 3068,
+        "positive_pct": 91.45
+      },
+      "BSSC-H": {
+        "description": "Blue Side Scatter Height",
+        "min": 0.0,
+        "max": 3926905.25,
+        "mean": 5720.473073227963,
+        "median": 87.5,
+        "std": 109536.82497371138,
+        "positive_events": 3114,
+        "positive_pct": 92.82
+      }
+    },
+    "fluorescence_stats": {
+      "V447-H": {
+        "min": 0.0,
+        "max": 4476.0,
+        "mean": 58.0273919408261,
+        "median": 55.0,
+        "positive_events": 3007,
+        "positive_pct": 89.63
+      },
+      "B531-H": {
+        "min": 0.0,
+        "max": 1812.0,
+        "mean": 55.28915047027315,
+        "median": 52.5,
+        "positive_events": 3008,
+        "positive_pct": 89.66
+      },
+      "Y595-H": {
+        "min": 0.0,
+        "max": 753.0,
+        "mean": 57.016333850911764,
+        "median": 56.0,
+        "positive_events": 3024,
+        "positive_pct": 90.13
+      },
+      "R670-H": {
+        "min": 0.0,
+        "max": 526.2999877929688,
+        "mean": 49.520357683127756,
+        "median": 47.29999923706055,
+        "positive_events": 3024,
+        "positive_pct": 90.13
+      },
+      "R710-H": {
+        "min": 0.0,
+        "max": 305.6000061035156,
+        "mean": 49.573532078625014,
+        "median": 47.29999923706055,
+        "positive_events": 3026,
+        "positive_pct": 90.19
+      },
+      "R792-H": {
+        "min": 0.0,
+        "max": 221.5,
+        "mean": 48.089746593469656,
+        "median": 45.0,
+        "positive_events": 3002,
+        "positive_pct": 89.48
+      }
+    },
+    "data_shape": [
+      3355,
+      33
+    ],
+    "category": "water"
+  },
+  {
+    "file": "HPLC WA.fcs",
+    "status": "success",
+    "total_events": 2817,
+    "sample_id": "HPLC WA",
+    "channels": [
+      "VFSC-H",
+      "VFSC-A",
+      "VSSC1-H",
+      "VSSC1-A",
+      "VSSC2-H",
+      "VSSC2-A",
+      "BSSC-H",
+      "BSSC-A",
+      "YSSC-H",
+      "YSSC-A",
+      "RSSC-H",
+      "RSSC-A",
+      "V447-H",
+      "V447-A",
+      "B531-H",
+      "B531-A",
+      "Y595-H",
+      "Y595-A",
+      "R670-H",
+      "R670-A",
+      "R710-H",
+      "R710-A",
+      "R792-H",
+      "R792-A",
+      "VSSC1-Width",
+      "Time"
+    ],
+    "num_channels": 26,
+    "scatter_stats": {
+      "VFSC-H": {
+        "description": "Forward Scatter Height",
+        "min": 0.0,
+        "max": 438083.1875,
+        "mean": 841.9555481439115,
+        "median": 494.0,
+        "std": 9008.083866086472,
+        "positive_events": 2343,
+        "positive_pct": 83.17
+      },
+      "VFSC-A": {
+        "description": "Forward Scatter Area",
+        "min": -2855.550048828125,
+        "max": 348993.71875,
+        "mean": 268.9315121168569,
+        "median": 4.050000190734863,
+        "std": 7274.096614636708,
+        "positive_events": 1418,
+        "positive_pct": 50.34
+      },
+      "VSSC1-H": {
+        "description": "Violet Side Scatter Height",
+        "min": 331.79998779296875,
+        "max": 5363443.5,
+        "mean": 19922.655490473055,
+        "median": 389.1000061035156,
+        "std": 222505.2444435048,
+        "positive_events": 2817,
+        "positive_pct": 100.0
+      },
+      "VSSC1-A": {
+        "description": "Violet Side Scatter Area",
+        "min": 121.25,
+        "max": 7080337.0,
+        "mean": 17388.57508092846,
+        "median": 256.42498779296875,
+        "std": 223586.84156026345,
+        "positive_events": 2817,
+        "positive_pct": 100.0
+      },
+      "VSSC2-H": {
+        "description": "Side Scatter 2 Height",
+        "min": 0.0,
+        "max": 139532.5,
+        "mean": 430.07401980683443,
+        "median": 68.4000015258789,
+        "std": 4852.113506404435,
+        "positive_events": 2603,
+        "positive_pct": 92.4
+      },
+      "BSSC-H": {
+        "description": "Blue Side Scatter Height",
+        "min": 0.0,
+        "max": 4031156.5,
+        "mean": 7965.943341388235,
+        "median": 99.30000305175781,
+        "std": 119264.16231821217,
+        "positive_events": 2634,
+        "positive_pct": 93.5
+      }
+    },
+    "fluorescence_stats": {
+      "V447-H": {
+        "min": 0.0,
+        "max": 199.39999389648438,
+        "mean": 58.21948879561528,
+        "median": 57.20000076293945,
+        "positive_events": 2556,
+        "positive_pct": 90.73
+      },
+      "B531-H": {
+        "min": 0.0,
+        "max": 898.7000122070312,
+        "mean": 55.56851261018395,
+        "median": 53.400001525878906,
+        "positive_events": 2569,
+        "positive_pct": 91.2
+      },
+      "Y595-H": {
+        "min": 0.0,
+        "max": 481.5,
+        "mean": 58.086830005774395,
+        "median": 56.79999923706055,
+        "positive_events": 2554,
+        "positive_pct": 90.66
+      },
+      "R670-H": {
+        "min": 0.0,
+        "max": 169.10000610351562,
+        "mean": 50.03404324774967,
+        "median": 47.29999923706055,
+        "positive_events": 2544,
+        "positive_pct": 90.31
+      },
+      "R710-H": {
+        "min": 0.0,
+        "max": 164.3000030517578,
+        "mean": 50.09794106549475,
+        "median": 48.79999923706055,
+        "positive_events": 2511,
+        "positive_pct": 89.14
+      },
+      "R792-H": {
+        "min": 0.0,
+        "max": 165.60000610351562,
+        "mean": 50.801100476650554,
+        "median": 50.400001525878906,
+        "positive_events": 2562,
+        "positive_pct": 90.95
+      }
+    },
+    "data_shape": [
+      2817,
+      33
+    ],
+    "category": "water"
+  },
+  {
+    "file": "HPLC WA1.fcs",
+    "status": "success",
+    "total_events": 2324,
+    "sample_id": "HPLC WA1",
+    "channels": [
+      "VFSC-H",
+      "VFSC-A",
+      "VSSC1-H",
+      "VSSC1-A",
+      "VSSC2-H",
+      "VSSC2-A",
+      "BSSC-H",
+      "BSSC-A",
+      "YSSC-H",
+      "YSSC-A",
+      "RSSC-H",
+      "RSSC-A",
+      "V447-H",
+      "V447-A",
+      "B531-H",
+      "B531-A",
+      "Y595-H",
+      "Y595-A",
+      "R670-H",
+      "R670-A",
+      "R710-H",
+      "R710-A",
+      "R792-H",
+      "R792-A",
+      "VSSC1-Width",
+      "Time"
+    ],
+    "num_channels": 26,
+    "scatter_stats": {
+      "VFSC-H": {
+        "description": "Forward Scatter Height",
+        "min": 0.0,
+        "max": 3028984.5,
+        "mean": 3431.1833076653506,
+        "median": 584.2999877929688,
+        "std": 87352.15328446115,
+        "positive_events": 2004,
+        "positive_pct": 86.23
+      },
+      "VFSC-A": {
+        "description": "Forward Scatter Area",
+        "min": -4611.8251953125,
+        "max": 2672278.75,
+        "mean": 2445.342415623136,
+        "median": 12.550000190734863,
+        "std": 76112.39525329797,
+        "positive_events": 1179,
+        "positive_pct": 50.73
+      },
+      "VSSC1-H": {
+        "description": "Violet Side Scatter Height",
+        "min": 376.20001220703125,
+        "max": 5379098.0,
+        "mean": 37241.7210510963,
+        "median": 1811.5,
+        "std": 286830.5212017877,
+        "positive_events": 2324,
+        "positive_pct": 100.0
+      },
+      "VSSC1-A": {
+        "description": "Violet Side Scatter Area",
+        "min": 171.35000610351562,
+        "max": 9847893.0,
+        "mean": 37206.55917722797,
+        "median": 1393.9124755859375,
+        "std": 397321.6556284822,
+        "positive_events": 2324,
+        "positive_pct": 100.0
+      },
+      "VSSC2-H": {
+        "description": "Side Scatter 2 Height",
+        "min": 0.0,
+        "max": 377563.5,
+        "mean": 1018.4027181291334,
+        "median": 89.69999694824219,
+        "std": 12824.34982902678,
+        "positive_events": 2227,
+        "positive_pct": 95.83
+      },
+      "BSSC-H": {
+        "description": "Blue Side Scatter Height",
+        "min": 0.0,
+        "max": 5352477.0,
+        "mean": 17131.773155959665,
+        "median": 407.6000061035156,
+        "std": 214799.82734912177,
+        "positive_events": 2304,
+        "positive_pct": 99.14
+      }
+    },
+    "fluorescence_stats": {
+      "V447-H": {
+        "min": 0.0,
+        "max": 612.9000244140625,
+        "mean": 64.42375220489174,
+        "median": 62.400001525878906,
+        "positive_events": 2190,
+        "positive_pct": 94.23
+      },
+      "B531-H": {
+        "min": 0.0,
+        "max": 2248.60009765625,
+        "mean": 61.66833054629537,
+        "median": 59.0,
+        "positive_events": 2179,
+        "positive_pct": 93.76
+      },
+      "Y595-H": {
+        "min": 0.0,
+        "max": 832.0,
+        "mean": 64.15503439763737,
+        "median": 63.5,
+        "positive_events": 2186,
+        "positive_pct": 94.06
+      },
+      "R670-H": {
+        "min": 0.0,
+        "max": 321.3999938964844,
+        "mean": 55.669664337384724,
+        "median": 54.54999923706055,
+        "positive_events": 2143,
+        "positive_pct": 92.21
+      },
+      "R710-H": {
+        "min": 0.0,
+        "max": 195.1999969482422,
+        "mean": 58.330292572458106,
+        "median": 57.5,
+        "positive_events": 2186,
+        "positive_pct": 94.06
+      },
+      "R792-H": {
+        "min": 0.0,
+        "max": 167.39999389648438,
+        "mean": 54.54698792094823,
+        "median": 53.099998474121094,
+        "positive_events": 2219,
+        "positive_pct": 95.48
+      }
+    },
+    "data_shape": [
+      2324,
+      33
+    ],
+    "category": "water"
+  },
+  {
+    "file": "HPLC WA2.fcs",
+    "status": "success",
+    "total_events": 2934,
+    "sample_id": "HPLC WA2",
+    "channels": [
+      "VFSC-H",
+      "VFSC-A",
+      "VSSC1-H",
+      "VSSC1-A",
+      "VSSC2-H",
+      "VSSC2-A",
+      "BSSC-H",
+      "BSSC-A",
+      "YSSC-H",
+      "YSSC-A",
+      "RSSC-H",
+      "RSSC-A",
+      "V447-H",
+      "V447-A",
+      "B531-H",
+      "B531-A",
+      "Y595-H",
+      "Y595-A",
+      "R670-H",
+      "R670-A",
+      "R710-H",
+      "R710-A",
+      "R792-H",
+      "R792-A",
+      "VSSC1-Width",
+      "Time"
+    ],
+    "num_channels": 26,
+    "scatter_stats": {
+      "VFSC-H": {
+        "description": "Forward Scatter Height",
+        "min": 0.0,
+        "max": 3608695.0,
+        "mean": 4349.69069864446,
+        "median": 565.2000122070312,
+        "std": 99838.20020774983,
+        "positive_events": 2536,
+        "positive_pct": 86.43
+      },
+      "VFSC-A": {
+        "description": "Forward Scatter Area",
+        "min": -3345.949951171875,
+        "max": 4092919.0,
+        "mean": 3669.8764432219923,
+        "median": -13.174999713897705,
+        "std": 104421.7794699218,
+        "positive_events": 1444,
+        "positive_pct": 49.22
+      },
+      "VSSC1-H": {
+        "description": "Violet Side Scatter Height",
+        "min": 376.70001220703125,
+        "max": 5379452.5,
+        "mean": 53277.27575507811,
+        "median": 1032.9500122070312,
+        "std": 404598.7049018043,
+        "positive_events": 2934,
+        "positive_pct": 100.0
+      },
+      "VSSC1-A": {
+        "description": "Violet Side Scatter Area",
+        "min": 161.60000610351562,
+        "max": 11088436.0,
+        "mean": 52622.99347778819,
+        "median": 770.9375,
+        "std": 493400.53615979943,
+        "positive_events": 2934,
+        "positive_pct": 100.0
+      },
+      "VSSC2-H": {
+        "description": "Side Scatter 2 Height",
+        "min": 0.0,
+        "max": 1061590.75,
+        "mean": 1651.882734735888,
+        "median": 80.80000305175781,
+        "std": 24028.523524884757,
+        "positive_events": 2813,
+        "positive_pct": 95.88
+      },
+      "BSSC-H": {
+        "description": "Blue Side Scatter Height",
+        "min": 0.0,
+        "max": 5353463.0,
+        "mean": 22404.147704439743,
+        "median": 240.1999969482422,
+        "std": 244525.84399333206,
+        "positive_events": 2888,
+        "positive_pct": 98.43
+      }
+    },
+    "fluorescence_stats": {
+      "V447-H": {
+        "min": 0.0,
+        "max": 9133.099609375,
+        "mean": 69.631322294819,
+        "median": 62.20000076293945,
+        "positive_events": 2769,
+        "positive_pct": 94.38
+      },
+      "B531-H": {
+        "min": 0.0,
+        "max": 70355.296875,
+        "mean": 113.12832251160667,
+        "median": 59.79999923706055,
+        "positive_events": 2748,
+        "positive_pct": 93.66
+      },
+      "Y595-H": {
+        "min": 0.0,
+        "max": 33434.30078125,
+        "mean": 95.02430152795554,
+        "median": 61.400001525878906,
+        "positive_events": 2765,
+        "positive_pct": 94.24
+      },
+      "R670-H": {
+        "min": 0.0,
+        "max": 11585.2001953125,
+        "mean": 66.0753239418425,
+        "median": 55.70000076293945,
+        "positive_events": 2714,
+        "positive_pct": 92.5
+      },
+      "R710-H": {
+        "min": 0.0,
+        "max": 9852.7998046875,
+        "mean": 64.70671433108797,
+        "median": 56.099998474121094,
+        "positive_events": 2713,
+        "positive_pct": 92.47
+      },
+      "R792-H": {
+        "min": 0.0,
+        "max": 5631.89990234375,
+        "mean": 59.174948824939065,
+        "median": 50.79999923706055,
+        "positive_events": 2758,
+        "positive_pct": 94.0
+      }
+    },
+    "data_shape": [
+      2934,
+      33
+    ],
+    "category": "water"
+  },
+  {
+    "file": "HPLC WA3.fcs",
+    "status": "success",
+    "total_events": 4560,
+    "sample_id": "HPLC WA3",
+    "channels": [
+      "VFSC-H",
+      "VFSC-A",
+      "VSSC1-H",
+      "VSSC1-A",
+      "VSSC2-H",
+      "VSSC2-A",
+      "BSSC-H",
+      "BSSC-A",
+      "YSSC-H",
+      "YSSC-A",
+      "RSSC-H",
+      "RSSC-A",
+      "V447-H",
+      "V447-A",
+      "B531-H",
+      "B531-A",
+      "Y595-H",
+      "Y595-A",
+      "R670-H",
+      "R670-A",
+      "R710-H",
+      "R710-A",
+      "R792-H",
+      "R792-A",
+      "VSSC1-Width",
+      "Time"
+    ],
+    "num_channels": 26,
+    "scatter_stats": {
+      "VFSC-H": {
+        "description": "Forward Scatter Height",
+        "min": 0.0,
+        "max": 2809784.0,
+        "mean": 2158.272189543958,
+        "median": 611.8999938964844,
+        "std": 56859.51434947308,
+        "positive_events": 4024,
+        "positive_pct": 88.25
+      },
+      "VFSC-A": {
+        "description": "Forward Scatter Area",
+        "min": -3448.375,
+        "max": 3322846.0,
+        "mean": 1695.412466298279,
+        "median": 16.16249990463257,
+        "std": 67749.3469642628,
+        "positive_events": 2310,
+        "positive_pct": 50.66
+      },
+      "VSSC1-H": {
+        "description": "Violet Side Scatter Height",
+        "min": 376.29998779296875,
+        "max": 5377615.5,
+        "mean": 42580.614399357844,
+        "median": 1867.7999877929688,
+        "std": 331128.08499163686,
+        "positive_events": 4560,
+        "positive_pct": 100.0
+      },
+      "VSSC1-A": {
+        "description": "Violet Side Scatter Area",
+        "min": 156.5500030517578,
+        "max": 19037138.0,
+        "mean": 44697.095173213354,
+        "median": 1446.125,
+        "std": 524538.7528588028,
+        "positive_events": 4560,
+        "positive_pct": 100.0
+      },
+      "VSSC2-H": {
+        "description": "Side Scatter 2 Height",
+        "min": 0.0,
+        "max": 3318827.0,
+        "mean": 2038.0500893005153,
+        "median": 89.75,
+        "std": 56981.951639465886,
+        "positive_events": 4400,
+        "positive_pct": 96.49
+      },
+      "BSSC-H": {
+        "description": "Blue Side Scatter Height",
+        "min": 0.0,
+        "max": 5352882.0,
+        "mean": 17278.340526383803,
+        "median": 439.25,
+        "std": 203703.8761611727,
+        "positive_events": 4518,
+        "positive_pct": 99.08
+      }
+    },
+    "fluorescence_stats": {
+      "V447-H": {
+        "min": 0.0,
+        "max": 1018.7999877929688,
+        "mean": 65.47486843749097,
+        "median": 64.19999694824219,
+        "positive_events": 4314,
+        "positive_pct": 94.61
+      },
+      "B531-H": {
+        "min": 0.0,
+        "max": 4499.5,
+        "mean": 68.45995610450443,
+        "median": 62.900001525878906,
+        "positive_events": 4329,
+        "positive_pct": 94.93
+      },
+      "Y595-H": {
+        "min": 0.0,
+        "max": 3436.800048828125,
+        "mean": 68.21646933576517,
+        "median": 63.75,
+        "positive_events": 4335,
+        "positive_pct": 95.07
+      },
+      "R670-H": {
+        "min": 0.0,
+        "max": 1275.800048828125,
+        "mean": 59.458706104127984,
+        "median": 56.599998474121094,
+        "positive_events": 4347,
+        "positive_pct": 95.33
+      },
+      "R710-H": {
+        "min": 0.0,
+        "max": 1036.5,
+        "mean": 59.93140356498852,
+        "median": 58.70000076293945,
+        "positive_events": 4321,
+        "positive_pct": 94.76
+      },
+      "R792-H": {
+        "min": 0.0,
+        "max": 595.7000122070312,
+        "mean": 55.73046049151504,
+        "median": 53.95000076293945,
+        "positive_events": 4338,
+        "positive_pct": 95.13
+      }
+    },
+    "data_shape": [
+      4560,
+      33
+    ],
+    "category": "water"
+  },
+  {
+    "file": "HPLC WA4.fcs",
+    "status": "success",
+    "total_events": 3140,
+    "sample_id": "HPLC WA4",
+    "channels": [
+      "VFSC-H",
+      "VFSC-A",
+      "VSSC1-H",
+      "VSSC1-A",
+      "VSSC2-H",
+      "VSSC2-A",
+      "BSSC-H",
+      "BSSC-A",
+      "YSSC-H",
+      "YSSC-A",
+      "RSSC-H",
+      "RSSC-A",
+      "V447-H",
+      "V447-A",
+      "B531-H",
+      "B531-A",
+      "Y595-H",
+      "Y595-A",
+      "R670-H",
+      "R670-A",
+      "R710-H",
+      "R710-A",
+      "R792-H",
+      "R792-A",
+      "VSSC1-Width",
+      "Time"
+    ],
+    "num_channels": 26,
+    "scatter_stats": {
+      "VFSC-H": {
+        "description": "Forward Scatter Height",
+        "min": 0.0,
+        "max": 1309825.375,
+        "mean": 2622.7204840556833,
+        "median": 484.40000915527344,
+        "std": 38465.062226166745,
+        "positive_events": 2534,
+        "positive_pct": 80.7
+      },
+      "VFSC-A": {
+        "description": "Forward Scatter Area",
+        "min": -3231.824951171875,
+        "max": 1072927.75,
+        "mean": 1791.633817693914,
+        "median": -5.9375,
+        "std": 32327.535841633246,
+        "positive_events": 1555,
+        "positive_pct": 49.52
+      },
+      "VSSC1-H": {
+        "description": "Violet Side Scatter Height",
+        "min": 323.6000061035156,
+        "max": 5379682.0,
+        "mean": 44776.038285817915,
+        "median": 370.20001220703125,
+        "std": 406259.84285145457,
+        "positive_events": 3140,
+        "positive_pct": 100.0
+      },
+      "VSSC1-A": {
+        "description": "Violet Side Scatter Area",
+        "min": 115.2750015258789,
+        "max": 12131831.0,
+        "mean": 48709.903539443774,
+        "median": 232.4250030517578,
+        "std": 523300.771639239,
+        "positive_events": 3140,
+        "positive_pct": 100.0
+      },
+      "VSSC2-H": {
+        "description": "Side Scatter 2 Height",
+        "min": 0.0,
+        "max": 484798.90625,
+        "mean": 1249.7557623234525,
+        "median": 60.79999923706055,
+        "std": 14849.022551481557,
+        "positive_events": 2829,
+        "positive_pct": 90.1
+      },
+      "BSSC-H": {
+        "description": "Blue Side Scatter Height",
+        "min": 0.0,
+        "max": 5340295.0,
+        "mean": 19344.52662773588,
+        "median": 79.19999694824219,
+        "std": 226627.27883289868,
+        "positive_events": 2898,
+        "positive_pct": 92.29
+      }
+    },
+    "fluorescence_stats": {
+      "V447-H": {
+        "min": 0.0,
+        "max": 1126.800048828125,
+        "mean": 56.52700640927454,
+        "median": 55.0,
+        "positive_events": 2828,
+        "positive_pct": 90.06
+      },
+      "B531-H": {
+        "min": 0.0,
+        "max": 4712.0,
+        "mean": 56.14840767641736,
+        "median": 52.900001525878906,
+        "positive_events": 2865,
+        "positive_pct": 91.24
+      },
+      "Y595-H": {
+        "min": 0.0,
+        "max": 3320.89990234375,
+        "mean": 56.70815284631814,
+        "median": 54.099998474121094,
+        "positive_events": 2814,
+        "positive_pct": 89.62
+      },
+      "R670-H": {
+        "min": 0.0,
+        "max": 1268.5,
+        "mean": 47.46369420160913,
+        "median": 45.400001525878906,
+        "positive_events": 2775,
+        "positive_pct": 88.38
+      },
+      "R710-H": {
+        "min": 0.0,
+        "max": 1100.5999755859375,
+        "mean": 49.5312419782019,
+        "median": 47.70000076293945,
+        "positive_events": 2751,
+        "positive_pct": 87.61
+      },
+      "R792-H": {
+        "min": 0.0,
+        "max": 628.0,
+        "mean": 48.82764326781984,
+        "median": 47.45000076293945,
+        "positive_events": 2830,
+        "positive_pct": 90.13
+      }
+    },
+    "data_shape": [
+      3140,
+      33
+    ],
+    "category": "water"
+  }
+]
