@@ -911,8 +911,9 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
     set({ gatingState: initialGatingState }),
 }),
     {
-      name: 'ev-analysis-storage', // unique name for localStorage key
-      storage: createJSONStorage(() => localStorage),
+      name: 'ev-analysis-storage', // unique name for storage key
+      // Use sessionStorage - persists on refresh, but clears when browser tab is closed
+      storage: createJSONStorage(() => sessionStorage),
       // Selectively persist only important state (not File objects or transient state)
       partialize: (state) => ({
         // UI preferences

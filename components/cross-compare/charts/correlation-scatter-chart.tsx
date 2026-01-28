@@ -240,7 +240,9 @@ export function CorrelationScatterChart({
                 name="Regression Line"
                 data={regressionLine}
                 line={{ stroke: "hsl(var(--chart-3))", strokeWidth: 2 }}
-                shape={(props: any) => <circle {...props} r={0} />}
+                shape={({ cx, cy }: { cx?: number; cy?: number }) => (
+                  <circle cx={cx} cy={cy} r={0} fill="transparent" />
+                )}
                 legendType="line"
               />
 

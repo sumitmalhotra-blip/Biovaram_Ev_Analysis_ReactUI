@@ -652,6 +652,7 @@ async def get_scatter_data(
             # Fallback: use relative FSC mapping
             diameters = np.zeros(len(fsc_values))
             success_mask = np.zeros(len(fsc_values), dtype=bool)
+            valid_diameter_count = 0
         
         scatter_data = []
         for idx, orig_idx in enumerate(sampled_indices):
@@ -1346,8 +1347,8 @@ async def get_size_bins(
         sample_size = min(10000, total_events)
         sampled_fsc = parsed_data[fsc_ch].sample(n=sample_size, random_state=42).values
         
-        # FAST vectorized batch conversion: FSC to size (100x faster than loop)
-        sizes_array, success_mask = mie_calc.diameters_from_scatter_batch(
+        # Use NORMALIZED batch conversion: FSC to size (handles scale mismatch)
+        sizes_array, success_mask = mie_calc.diameters_from_scatter_normalized(
             sampled_fsc, min_diameter=10.0, max_diameter=500.0
         )
         sizes_array = sizes_array[success_mask & (sizes_array > 0)]

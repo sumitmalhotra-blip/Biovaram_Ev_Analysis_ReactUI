@@ -235,7 +235,6 @@ class MieScatterCalculator:
         # single_sphere(m, x, n_pole, e_field) returns (qext, qsca, qback, g)
         # n_pole=0 means include all multipole terms (auto-sized for accuracy)
         # e_field=True for electric field calculation (standard for scatter)
-        # Typical series length: 10-50 terms depending on x
         try:
             qext, qsca, qback, g = miepython.single_sphere(self.m, x, 0, True)
         except Exception as e:
