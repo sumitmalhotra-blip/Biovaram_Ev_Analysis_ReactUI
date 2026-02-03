@@ -1,0 +1,32 @@
+{
+  "sample_file": "PC3 EXO1.fcs",
+  "n_events": 914326,
+  "n_analyzed": 100000,
+  "statistics": {
+    "mean_nm": 374.21,
+    "median_nm": 398.0,
+    "mode_nm": 472.04,
+    "std_nm": 101.57,
+    "d10_nm": 191.0,
+    "d50_nm": 398.0,
+    "d90_nm": 472.0,
+    "skewness": -0.9566,
+    "kurtosis": -0.1924
+  },
+  "is_normal": false,
+  "best_fit_distribution": "weibull",
+  "normality_tests": {
+    "dagostino_pearson": {
+      "passes": false,
+      "p_value": 0.0
+    },
+    "anderson_darling": {
+      "passes": false,
+      "p_value": 0.0
+    },
+    "ks_test": {
+      "passes": false,
+      "p_value": 0.0
+    }
+  }
+}

@@ -28,6 +28,38 @@ router = APIRouter()
 
 
 # ============================================================================
+# Multi-Solution Mie Helper Functions
+# ============================================================================
+
+def detect_multi_solution_channels(channels: List[str]) -> Dict[str, Optional[str]]:
+    """
+    Detect VSSC (Violet SSC 405nm) and BSSC (Blue SSC 488nm) channels for multi-solution Mie.
+    
+    Returns dict with keys: 'vssc_channel', 'bssc_channel', 'can_use_multi_solution'
+    """
+    vssc_channel = None
+    bssc_channel = None
+    
+    for ch in channels:
+        ch_upper = ch.upper()
+        # Detect VSSC (Violet SSC at 405nm) - prefer -H over -A
+        if 'VSSC' in ch_upper and '-H' in ch_upper:
+            if vssc_channel is None or 'VSSC1' in ch_upper:  # Prefer VSSC1-H
+                vssc_channel = ch
+        # Detect BSSC (Blue SSC at 488nm)
+        if 'BSSC' in ch_upper and '-H' in ch_upper:
+            bssc_channel = ch
+    
+    can_use_multi_solution = vssc_channel is not None and bssc_channel is not None
+    
+    return {
+        'vssc_channel': vssc_channel,
+        'bssc_channel': bssc_channel,
+        'can_use_multi_solution': can_use_multi_solution
+    }
+
+
+# ============================================================================
 # List Samples Endpoint
 # ============================================================================
 
@@ -622,33 +654,62 @@ async def get_scatter_data(
             sampled_data = parsed_data.reset_index(drop=True)
             sampled_indices = np.arange(total_events)
         
-        # Initialize Mie calculator for diameter estimation
-        # Uses user-provided parameters from sidebar settings
-        from src.physics.mie_scatter import MieScatterCalculator
-        mie_calc = MieScatterCalculator(
-            wavelength_nm=wavelength_nm,
-            n_particle=n_particle,
-            n_medium=n_medium
-        )
-        logger.info(f"🔬 Using Mie params: λ={wavelength_nm}nm, n_p={n_particle}, n_m={n_medium}")
-        
         # Build scatter data array with diameter calculation
         # Note: Use direct column access instead of itertuples() to handle column names with hyphens
         fsc_values = sampled_data[fsc_ch].values
         ssc_values = sampled_data[ssc_ch].values
         
-        # Use batch diameter calculation with normalization for performance
-        # The batch method handles the FSC-to-diameter mapping internally
+        # Check for multi-solution Mie capability (VSSC + BSSC channels)
+        multi_solution_info = detect_multi_solution_channels(channels)
+        can_use_multi_solution = (
+            multi_solution_info['can_use_multi_solution'] and
+            multi_solution_info['vssc_channel'] in sampled_data.columns and
+            multi_solution_info['bssc_channel'] in sampled_data.columns
+        )
+        
+        # Calculate diameters using appropriate method
         try:
-            diameters, success_mask = mie_calc.diameters_from_scatter_normalized(
-                fsc_intensities=fsc_values,
-                min_diameter=20.0,
-                max_diameter=500.0
-            )
-            valid_diameter_count = int(np.sum(success_mask))
-            logger.info(f"📐 Calculated {valid_diameter_count}/{len(fsc_values)} valid diameters via normalized Mie")
+            if can_use_multi_solution:
+                # === MULTI-SOLUTION MIE (PREFERRED) ===
+                from src.physics.mie_scatter import MultiSolutionMieCalculator
+                
+                vssc_ch = multi_solution_info['vssc_channel']
+                bssc_ch = multi_solution_info['bssc_channel']
+                
+                logger.info(f"🔬 Using MULTI-SOLUTION Mie: VSSC={vssc_ch}, BSSC={bssc_ch}")
+                
+                multi_mie_calc = MultiSolutionMieCalculator(n_particle=n_particle, n_medium=n_medium)
+                
+                # Get SSC values for both wavelengths
+                ssc_violet = np.asarray(sampled_data[vssc_ch].values, dtype=np.float64)
+                ssc_blue = np.asarray(sampled_data[bssc_ch].values, dtype=np.float64)
+                
+                # Calculate sizes with disambiguation
+                diameters, num_solutions = multi_mie_calc.calculate_sizes_multi_solution(ssc_blue, ssc_violet)
+                success_mask = ~np.isnan(diameters) & (diameters > 0)
+                valid_diameter_count = int(np.sum(success_mask))
+                
+                logger.info(f"📐 Multi-solution: {valid_diameter_count}/{len(ssc_blue)} valid diameters")
+            else:
+                # === SINGLE-SOLUTION MIE (FALLBACK) ===
+                from src.physics.mie_scatter import MieScatterCalculator
+                mie_calc = MieScatterCalculator(
+                    wavelength_nm=wavelength_nm,
+                    n_particle=n_particle,
+                    n_medium=n_medium
+                )
+                logger.info(f"🔬 Using single-solution Mie: λ={wavelength_nm}nm, n_p={n_particle}, n_m={n_medium}")
+                
+                # Use batch diameter calculation with normalization for performance
+                diameters, success_mask = mie_calc.diameters_from_scatter_normalized(
+                    fsc_intensities=fsc_values,
+                    min_diameter=20.0,
+                    max_diameter=500.0
+                )
+                valid_diameter_count = int(np.sum(success_mask))
+                logger.info(f"📐 Single-solution: {valid_diameter_count}/{len(fsc_values)} valid diameters")
         except Exception as e:
-            logger.warning(f"⚠️ Batch Mie calculation failed, trying fallback: {e}")
+            logger.warning(f"⚠️ Mie calculation failed, using fallback: {e}")
             # Fallback: use relative FSC mapping
             diameters = np.zeros(len(fsc_values))
             success_mask = np.zeros(len(fsc_values), dtype=bool)
@@ -971,30 +1032,61 @@ async def analyze_gated_population(
         
         if request.include_diameter_stats:
             try:
-                from src.physics.mie_scatter import MieScatterCalculator
-                mie_calc = MieScatterCalculator(
-                    wavelength_nm=request.wavelength_nm,
-                    n_particle=request.n_particle,
-                    n_medium=request.n_medium
+                # Check for multi-solution Mie capability
+                multi_solution_info = detect_multi_solution_channels(available_channels)
+                can_use_multi_solution = (
+                    multi_solution_info['can_use_multi_solution'] and
+                    multi_solution_info['vssc_channel'] in parsed_data.columns and
+                    multi_solution_info['bssc_channel'] in parsed_data.columns
                 )
-                logger.info(f"🔬 Gated analysis using Mie params: λ={request.wavelength_nm}nm, n_p={request.n_particle}, n_m={request.n_medium}")
                 
-                # Calculate diameters for gated events
-                diameters = []
-                for fsc_val in gated_x:
-                    try:
-                        d, success = mie_calc.diameter_from_scatter(
-                            fsc_intensity=float(fsc_val),
-                            min_diameter=20.0,
-                            max_diameter=500.0
-                        )
-                        if success and d > 0:
-                            diameters.append(d)
-                    except Exception:
-                        pass
+                if can_use_multi_solution:
+                    # === MULTI-SOLUTION MIE (PREFERRED) ===
+                    from src.physics.mie_scatter import MultiSolutionMieCalculator
+                    
+                    vssc_ch = multi_solution_info['vssc_channel']
+                    bssc_ch = multi_solution_info['bssc_channel']
+                    
+                    logger.info(f"🔬 Gated analysis using MULTI-SOLUTION Mie: VSSC={vssc_ch}, BSSC={bssc_ch}")
+                    
+                    multi_mie_calc = MultiSolutionMieCalculator(
+                        n_particle=request.n_particle, 
+                        n_medium=request.n_medium
+                    )
+                    
+                    # Get SSC values for gated events
+                    gated_vssc = np.asarray(parsed_data[vssc_ch].values[mask], dtype=np.float64)
+                    gated_bssc = np.asarray(parsed_data[bssc_ch].values[mask], dtype=np.float64)
+                    
+                    # Calculate sizes with disambiguation
+                    sizes, num_solutions = multi_mie_calc.calculate_sizes_multi_solution(gated_bssc, gated_vssc)
+                    diameters = sizes[~np.isnan(sizes) & (sizes > 0)]
+                else:
+                    # === SINGLE-SOLUTION MIE (FALLBACK) ===
+                    from src.physics.mie_scatter import MieScatterCalculator
+                    mie_calc = MieScatterCalculator(
+                        wavelength_nm=request.wavelength_nm,
+                        n_particle=request.n_particle,
+                        n_medium=request.n_medium
+                    )
+                    logger.info(f"🔬 Gated analysis using single-solution Mie: λ={request.wavelength_nm}nm")
+                    
+                    # Calculate diameters for gated events
+                    diameters = []
+                    for fsc_val in gated_x:
+                        try:
+                            d, success = mie_calc.diameter_from_scatter(
+                                fsc_intensity=float(fsc_val),
+                                min_diameter=20.0,
+                                max_diameter=500.0
+                            )
+                            if success and d > 0:
+                                diameters.append(d)
+                        except Exception:
+                            pass
+                    diameters = np.array(diameters) if diameters else np.array([])
                 
                 if len(diameters) >= 10:  # Need enough data points
-                    diameters = np.array(diameters)
                     diameter_stats = calc_stats(diameters, "diameter_nm")
                     diameter_percentiles = {
                         "D10": float(np.percentile(diameters, 10)),
@@ -1299,7 +1391,6 @@ async def get_size_bins(
         
         # Parse FCS file and calculate sizes
         from src.parsers.fcs_parser import FCSParser  # type: ignore[import-not-found]
-        from src.physics.mie_scatter import MieScatterCalculator  # type: ignore[import-not-found]
         import numpy as np
         
         logger.info(f"📏 Calculating size bins for sample: {sample_id}")
@@ -1333,25 +1424,56 @@ async def get_size_bins(
             fsc_ch = channels[0]
             logger.warning(f"⚠️ FSC channel not found for size bins, using first channel: {fsc_ch}")
         
-        # Initialize Mie calculator with user-provided parameters
-        mie_calc = MieScatterCalculator(
-            wavelength_nm=wavelength_nm,
-            n_particle=n_particle,
-            n_medium=n_medium
-        )
-        logger.info(f"🔬 Size bins using Mie params: λ={wavelength_nm}nm, n_p={n_particle}, n_m={n_medium}")
-        
         total_events = len(parsed_data)
         
         # Sample for performance (calculate on subset, extrapolate to full dataset)
         sample_size = min(10000, total_events)
-        sampled_fsc = parsed_data[fsc_ch].sample(n=sample_size, random_state=42).values
+        np.random.seed(42)
+        sample_indices = np.random.choice(total_events, size=sample_size, replace=False) if total_events > sample_size else np.arange(total_events)
         
-        # Use NORMALIZED batch conversion: FSC to size (handles scale mismatch)
-        sizes_array, success_mask = mie_calc.diameters_from_scatter_normalized(
-            sampled_fsc, min_diameter=10.0, max_diameter=500.0
+        # Check for multi-solution Mie capability
+        multi_solution_info = detect_multi_solution_channels(channels)
+        can_use_multi_solution = (
+            multi_solution_info['can_use_multi_solution'] and
+            multi_solution_info['vssc_channel'] in parsed_data.columns and
+            multi_solution_info['bssc_channel'] in parsed_data.columns
         )
-        sizes_array = sizes_array[success_mask & (sizes_array > 0)]
+        
+        if can_use_multi_solution:
+            # === MULTI-SOLUTION MIE (PREFERRED) ===
+            from src.physics.mie_scatter import MultiSolutionMieCalculator
+            
+            vssc_ch = multi_solution_info['vssc_channel']
+            bssc_ch = multi_solution_info['bssc_channel']
+            
+            logger.info(f"🔬 Size bins using MULTI-SOLUTION Mie: VSSC={vssc_ch}, BSSC={bssc_ch}")
+            
+            multi_mie_calc = MultiSolutionMieCalculator(n_particle=n_particle, n_medium=n_medium)
+            
+            # Get SSC values for both wavelengths
+            ssc_violet = np.asarray(parsed_data[vssc_ch].values[sample_indices], dtype=np.float64)
+            ssc_blue = np.asarray(parsed_data[bssc_ch].values[sample_indices], dtype=np.float64)
+            
+            # Calculate sizes with disambiguation
+            sizes_array, num_solutions = multi_mie_calc.calculate_sizes_multi_solution(ssc_blue, ssc_violet)
+            sizes_array = sizes_array[~np.isnan(sizes_array) & (sizes_array > 0)]
+        else:
+            # === SINGLE-SOLUTION MIE (FALLBACK) ===
+            from src.physics.mie_scatter import MieScatterCalculator
+            mie_calc = MieScatterCalculator(
+                wavelength_nm=wavelength_nm,
+                n_particle=n_particle,
+                n_medium=n_medium
+            )
+            logger.info(f"🔬 Size bins using single-solution Mie: λ={wavelength_nm}nm, n_p={n_particle}, n_m={n_medium}")
+            
+            sampled_fsc = parsed_data[fsc_ch].values[sample_indices]
+            
+            # Use NORMALIZED batch conversion: FSC to size (handles scale mismatch)
+            sizes_array, success_mask = mie_calc.diameters_from_scatter_normalized(
+                sampled_fsc, min_diameter=10.0, max_diameter=500.0
+            )
+            sizes_array = sizes_array[success_mask & (sizes_array > 0)]
         
         # Bin sizes into categories
         small_count = np.sum(sizes_array < 50)
@@ -1624,7 +1746,7 @@ async def reanalyze_sample(
         
         # Parse FCS file
         from src.parsers.fcs_parser import FCSParser
-        from src.physics.mie_scatter import MieScatterCalculator
+        import numpy as np
         
         parser = FCSParser(sample.file_path_fcs)
         parsed_data = parser.parse()
@@ -1656,71 +1778,131 @@ async def reanalyze_sample(
         fsc_stats = stats.get(fsc_channel, {}) if fsc_channel else {}
         ssc_stats = stats.get(ssc_channel, {}) if ssc_channel else {}
         
-        # Initialize Mie calculator with user parameters
-        mie_calc = MieScatterCalculator(
-            wavelength_nm=request.wavelength_nm,
-            n_particle=request.n_particle,
-            n_medium=request.n_medium
+        # Check for multi-solution Mie capability
+        multi_solution_info = detect_multi_solution_channels(channels)
+        can_use_multi_solution = (
+            multi_solution_info['can_use_multi_solution'] and
+            multi_solution_info['vssc_channel'] in parsed_data.columns and
+            multi_solution_info['bssc_channel'] in parsed_data.columns
         )
         
-        # Calculate particle size from FSC median
+        # Calculate particle size and size distribution
         particle_size_median_nm = None
-        if fsc_stats.get('median'):
-            try:
-                diameter, success = mie_calc.diameter_from_scatter(
-                    fsc_intensity=fsc_stats['median'],
-                    min_diameter=10.0,
-                    max_diameter=500.0
-                )
-                if success:
-                    particle_size_median_nm = float(diameter)
-            except Exception as mie_error:
-                logger.warning(f"⚠️ Mie calculation failed: {mie_error}")
-        
-        # Calculate size distribution
         size_distribution = None
         custom_bins = {}
         
-        if fsc_channel and fsc_channel in parsed_data.columns:
-            try:
-                # Sample for performance
-                sample_size = min(10000, len(parsed_data))
-                sampled_fsc = parsed_data[fsc_channel].sample(n=sample_size, random_state=42)
+        if can_use_multi_solution:
+            # === MULTI-SOLUTION MIE (PREFERRED) ===
+            from src.physics.mie_scatter import MultiSolutionMieCalculator
+            
+            vssc_ch = multi_solution_info['vssc_channel']
+            bssc_ch = multi_solution_info['bssc_channel']
+            
+            logger.info(f"🔬 Re-analyze using MULTI-SOLUTION Mie: VSSC={vssc_ch}, BSSC={bssc_ch}")
+            
+            multi_mie_calc = MultiSolutionMieCalculator(
+                n_particle=request.n_particle, 
+                n_medium=request.n_medium
+            )
+            
+            # Sample for performance
+            sample_size = min(10000, len(parsed_data))
+            np.random.seed(42)
+            sample_indices = np.random.choice(len(parsed_data), size=sample_size, replace=False)
+            
+            # Get SSC values for both wavelengths
+            ssc_violet = np.asarray(parsed_data[vssc_ch].values[sample_indices], dtype=np.float64)
+            ssc_blue = np.asarray(parsed_data[bssc_ch].values[sample_indices], dtype=np.float64)
+            
+            # Calculate sizes with disambiguation
+            sizes_array, num_solutions = multi_mie_calc.calculate_sizes_multi_solution(ssc_blue, ssc_violet)
+            valid_sizes = sizes_array[~np.isnan(sizes_array) & (sizes_array > 0)]
+            
+            if len(valid_sizes) > 0:
+                particle_size_median_nm = float(np.median(valid_sizes))
+                size_distribution = {
+                    'd10': float(np.percentile(valid_sizes, 10)),
+                    'd50': float(np.percentile(valid_sizes, 50)),
+                    'd90': float(np.percentile(valid_sizes, 90)),
+                    'mean': float(np.mean(valid_sizes)),
+                    'std': float(np.std(valid_sizes))
+                }
                 
-                sizes = []
-                for fsc_val in sampled_fsc:
-                    size, success = mie_calc.diameter_from_scatter(
-                        fsc_intensity=float(fsc_val),
+                # Calculate custom size range bins
+                scale_factor = len(parsed_data) / sample_size
+                for range_def in request.size_ranges:
+                    name = range_def.get('name', f"{range_def['min']}-{range_def['max']}nm")
+                    min_size = range_def.get('min', 0)
+                    max_size = range_def.get('max', 1000)
+                    count = np.sum((valid_sizes >= min_size) & (valid_sizes < max_size))
+                    custom_bins[name] = {
+                        'count': int(count * scale_factor),
+                        'percentage': float(count / len(valid_sizes) * 100) if len(valid_sizes) > 0 else 0
+                    }
+        else:
+            # === SINGLE-SOLUTION MIE (FALLBACK) ===
+            from src.physics.mie_scatter import MieScatterCalculator
+            mie_calc = MieScatterCalculator(
+                wavelength_nm=request.wavelength_nm,
+                n_particle=request.n_particle,
+                n_medium=request.n_medium
+            )
+            logger.info(f"🔬 Re-analyze using single-solution Mie: λ={request.wavelength_nm}nm")
+            
+            # Calculate particle size from FSC median
+            if fsc_stats.get('median'):
+                try:
+                    diameter, success = mie_calc.diameter_from_scatter(
+                        fsc_intensity=fsc_stats['median'],
                         min_diameter=10.0,
                         max_diameter=500.0
                     )
-                    if success and size > 0:
-                        sizes.append(size)
-                
-                if sizes:
-                    sizes_array = np.array(sizes)
-                    size_distribution = {
-                        'd10': float(np.percentile(sizes_array, 10)),
-                        'd50': float(np.percentile(sizes_array, 50)),
-                        'd90': float(np.percentile(sizes_array, 90)),
-                        'mean': float(np.mean(sizes_array)),
-                        'std': float(np.std(sizes_array))
-                    }
+                    if success:
+                        particle_size_median_nm = float(diameter)
+                except Exception as mie_error:
+                    logger.warning(f"⚠️ Mie calculation failed: {mie_error}")
+            
+            # Calculate size distribution
+            if fsc_channel and fsc_channel in parsed_data.columns:
+                try:
+                    # Sample for performance
+                    sample_size = min(10000, len(parsed_data))
+                    sampled_fsc = parsed_data[fsc_channel].sample(n=sample_size, random_state=42)
                     
-                    # Calculate custom size range bins
-                    scale_factor = len(parsed_data) / sample_size
-                    for range_def in request.size_ranges:
-                        name = range_def.get('name', f"{range_def['min']}-{range_def['max']}nm")
-                        min_size = range_def.get('min', 0)
-                        max_size = range_def.get('max', 1000)
-                        count = np.sum((sizes_array >= min_size) & (sizes_array < max_size))
-                        custom_bins[name] = {
-                            'count': int(count * scale_factor),
-                            'percentage': float(count / len(sizes_array) * 100) if sizes_array.size > 0 else 0
+                    sizes = []
+                    for fsc_val in sampled_fsc:
+                        size, success = mie_calc.diameter_from_scatter(
+                            fsc_intensity=float(fsc_val),
+                            min_diameter=10.0,
+                            max_diameter=500.0
+                        )
+                        if success and size > 0:
+                            sizes.append(size)
+                    
+                    if sizes:
+                        sizes_array = np.array(sizes)
+                        size_distribution = {
+                            'd10': float(np.percentile(sizes_array, 10)),
+                            'd50': float(np.percentile(sizes_array, 50)),
+                            'd90': float(np.percentile(sizes_array, 90)),
+                            'mean': float(np.mean(sizes_array)),
+                            'std': float(np.std(sizes_array))
                         }
                         
-            except Exception as size_error:
-                logger.warning(f"⚠️ Size distribution calculation failed: {size_error}")
+                        # Calculate custom size range bins
+                        scale_factor = len(parsed_data) / sample_size
+                        for range_def in request.size_ranges:
+                            name = range_def.get('name', f"{range_def['min']}-{range_def['max']}nm")
+                            min_size = range_def.get('min', 0)
+                            max_size = range_def.get('max', 1000)
+                            count = np.sum((sizes_array >= min_size) & (sizes_array < max_size))
+                            custom_bins[name] = {
+                                'count': int(count * scale_factor),
+                                'percentage': float(count / len(sizes_array) * 100) if sizes_array.size > 0 else 0
+                            }
+                            
+                except Exception as size_error:
+                    logger.warning(f"⚠️ Size distribution calculation failed: {size_error}")
         
         # Anomaly detection
         anomaly_data = None
@@ -2359,7 +2541,6 @@ async def get_fcs_values(
         
         # Parse FCS file
         from src.parsers.fcs_parser import FCSParser
-        from src.physics.mie_scatter import MieScatterCalculator
         from src.utils.channel_config import ChannelConfig
         import numpy as np
         
@@ -2368,8 +2549,9 @@ async def get_fcs_values(
         
         # Detect FSC channel
         config = ChannelConfig()
-        fsc_channel = config.detect_fsc_channel(parser.channel_names)
-        ssc_channel = config.detect_ssc_channel(parser.channel_names)
+        channels = parser.channel_names
+        fsc_channel = config.detect_fsc_channel(channels)
+        ssc_channel = config.detect_ssc_channel(channels)
         
         if not fsc_channel:
             raise HTTPException(
@@ -2380,29 +2562,61 @@ async def get_fcs_values(
         # Sample events if needed
         total_events = len(parsed_data)
         if total_events > max_events:
-            sampled_data = parsed_data.sample(n=max_events, random_state=42)
+            np.random.seed(42)
+            sample_indices = np.random.choice(total_events, size=max_events, replace=False)
+            sampled_data = parsed_data.iloc[sample_indices].reset_index(drop=True)
             sampled = True
         else:
             sampled_data = parsed_data
+            sample_indices = np.arange(total_events)
             sampled = False
+        
+        # Check for multi-solution Mie capability
+        multi_solution_info = detect_multi_solution_channels(channels)
+        can_use_multi_solution = (
+            multi_solution_info['can_use_multi_solution'] and
+            multi_solution_info['vssc_channel'] in sampled_data.columns and
+            multi_solution_info['bssc_channel'] in sampled_data.columns
+        )
         
         # Get FSC values
         fsc_values = sampled_data[fsc_channel].values
         
-        # Initialize Mie calculator with user parameters
-        mie_calc = MieScatterCalculator(
-            wavelength_nm=wavelength_nm,
-            n_particle=n_particle,
-            n_medium=n_medium
-        )
-        
-        # Calculate particle sizes using NORMALIZED method
-        # This handles the scale mismatch between raw FSC and physical scatter
-        sizes, success_mask = mie_calc.diameters_from_scatter_normalized(
-            fsc_values, 
-            min_diameter=20.0, 
-            max_diameter=500.0
-        )
+        if can_use_multi_solution:
+            # === MULTI-SOLUTION MIE (PREFERRED) ===
+            from src.physics.mie_scatter import MultiSolutionMieCalculator
+            
+            vssc_ch = multi_solution_info['vssc_channel']
+            bssc_ch = multi_solution_info['bssc_channel']
+            
+            logger.info(f"🔬 FCS values using MULTI-SOLUTION Mie: VSSC={vssc_ch}, BSSC={bssc_ch}")
+            
+            multi_mie_calc = MultiSolutionMieCalculator(n_particle=n_particle, n_medium=n_medium)
+            
+            # Get SSC values for both wavelengths
+            ssc_violet = np.asarray(sampled_data[vssc_ch].values, dtype=np.float64)
+            ssc_blue = np.asarray(sampled_data[bssc_ch].values, dtype=np.float64)
+            
+            # Calculate sizes with disambiguation
+            sizes, num_solutions = multi_mie_calc.calculate_sizes_multi_solution(ssc_blue, ssc_violet)
+            success_mask = ~np.isnan(sizes) & (sizes > 0)
+        else:
+            # === SINGLE-SOLUTION MIE (FALLBACK) ===
+            from src.physics.mie_scatter import MieScatterCalculator
+            mie_calc = MieScatterCalculator(
+                wavelength_nm=wavelength_nm,
+                n_particle=n_particle,
+                n_medium=n_medium
+            )
+            logger.info(f"🔬 FCS values using single-solution Mie: λ={wavelength_nm}nm")
+            
+            # Calculate particle sizes using NORMALIZED method
+            # This handles the scale mismatch between raw FSC and physical scatter
+            sizes, success_mask = mie_calc.diameters_from_scatter_normalized(
+                fsc_values, 
+                min_diameter=20.0, 
+                max_diameter=500.0
+            )
         
         # Filter valid sizes
         valid_sizes = sizes[success_mask]

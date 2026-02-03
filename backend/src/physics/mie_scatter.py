@@ -232,11 +232,11 @@ class MieScatterCalculator:
             logger.debug(f"Geometric optics regime (x={x:.3f}): ray tracing applicable")
         
         # Call miepython to calculate Mie coefficients
-        # single_sphere(m, x, n_pole, e_field) returns (qext, qsca, qback, g)
+        # miepython v3.0.2 API: single_sphere(m, x, n_pole) returns (qext, qsca, qback, g)
         # n_pole=0 means include all multipole terms (auto-sized for accuracy)
-        # e_field=True for electric field calculation (standard for scatter)
+        # NOTE: e_field parameter was removed in miepython v3.x - only 3 args allowed
         try:
-            qext, qsca, qback, g = miepython.single_sphere(self.m, x, 0, True)
+            qext, qsca, qback, g = miepython.single_sphere(self.m, x, 0)
         except Exception as e:
             logger.error(f"❌ Mie calculation failed for d={diameter_nm:.1f}nm, x={x:.4f}: {e}")
             raise RuntimeError(f"Mie theory calculation failed: {e}") from e
@@ -697,11 +697,18 @@ class MultiSolutionMieCalculator:
     - For each candidate, calculate the theoretical VSSC/BSSC ratio
     - Pick the candidate whose theoretical ratio best matches measured ratio
     
-    PHYSICS INSIGHT (from Parvesh Reddy, Jan 2026):
-    -----------------------------------------------
-    - Small particles (< 100nm): Rayleigh regime, violet scatters MORE (ratio > 1)
-    - Large particles (> 200nm): Geometric regime, similar scattering (ratio ≈ 1)
-    - This wavelength-dependent behavior uniquely identifies the correct solution
+    PHYSICS INSIGHT (from Mätzler Mie Functions literature & Parvesh Reddy, Jan 2026):
+    ----------------------------------------------------------------------------------
+    - Size parameter x = πd/λ → smaller λ gives LARGER x (more signal)
+    - Rayleigh scattering ∝ λ⁻⁴ → violet (405nm) scatters MORE for small particles
+    - EVs (30-150nm) are in Rayleigh/early-resonance regime
+    - **VIOLET (405nm) is now PRIMARY** for better small-particle sensitivity
+    
+    WAVELENGTH SELECTION RATIONALE (Feb 2026):
+    ------------------------------------------
+    - Violet (405nm) as PRIMARY: Better sensitivity for small EVs (Rayleigh regime)
+    - Blue (488nm) as SECONDARY: Used for ratio-based disambiguation
+    - This matches the physics: shorter wavelength → stronger scattering for d << λ
     
     Example Usage:
         >>> calc = MultiSolutionMieCalculator(n_particle=1.40, n_medium=1.33)
@@ -710,19 +717,21 @@ class MultiSolutionMieCalculator:
         >>> ssc_blue = data['BSSC-H'].values  # 488nm
         >>> ssc_violet = data['VSSC-H'].values  # 405nm
         >>> 
-        >>> # Calculate sizes with disambiguation
+        >>> # Calculate sizes with disambiguation (violet primary by default)
         >>> sizes, num_solutions = calc.calculate_sizes_multi_solution(ssc_blue, ssc_violet)
         >>> print(f"D50: {np.nanmedian(sizes):.1f} nm")
         >>> print(f"Events with multiple solutions: {(num_solutions > 1).sum()}")
     
     References:
+        - Mätzler (2002) "MATLAB Functions for Mie Scattering and Absorption"
+        - Bohren & Huffman (1983) "Absorption and Scattering of Light by Small Particles"
         - January 2026 meeting with Parvesh Reddy (wavelength ratio disambiguation)
         - compare_single_vs_multi_solution.py script validation
     """
     
     # Physical constants for wavelengths
-    WAVELENGTH_VIOLET = 405.0  # nm (VSSC channel)
-    WAVELENGTH_BLUE = 488.0    # nm (BSSC channel)
+    WAVELENGTH_VIOLET = 405.0  # nm (VSSC channel) - PRIMARY for small EVs
+    WAVELENGTH_BLUE = 488.0    # nm (BSSC channel) - SECONDARY for disambiguation
     
     def __init__(
         self,
@@ -881,20 +890,30 @@ class MultiSolutionMieCalculator:
         self,
         ssc_blue: np.ndarray,
         ssc_violet: np.ndarray,
-        tolerance_pct: float = 15.0
+        tolerance_pct: float = 15.0,
+        use_violet_primary: bool = True
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Calculate particle sizes using multi-solution disambiguation.
         
         This is the PRODUCTION method for accurate sizing when both wavelengths
         are available. For each event:
-        1. Find ALL sizes that match the blue SSC (within tolerance)
+        1. Find ALL sizes that match the PRIMARY SSC (within tolerance)
         2. If multiple solutions, use VSSC/BSSC ratio to pick correct one
+        
+        PHYSICS RATIONALE (from Mätzler Mie functions literature):
+        - Violet (405nm) is used as PRIMARY because:
+          * Size parameter x = πd/λ is LARGER for violet → stronger signal
+          * Rayleigh scattering ∝ λ⁻⁴ → violet scatters MORE for small particles
+          * EVs (30-150nm) are in Rayleigh/early-resonance regime
+          * Better sensitivity for detecting small vesicles
         
         Args:
             ssc_blue: Array of blue SSC (488nm) values, shape (n_events,)
             ssc_violet: Array of violet SSC (405nm) values, shape (n_events,)
             tolerance_pct: Tolerance for solution matching (default 15%)
+            use_violet_primary: If True (default), use violet 405nm as primary sizing channel
+                              If False, use blue 488nm (legacy behavior)
             
         Returns:
             Tuple of (sizes, num_solutions):
@@ -905,16 +924,24 @@ class MultiSolutionMieCalculator:
         sizes = np.zeros(n_events)
         num_solutions = np.zeros(n_events)
         
+        # Select primary channel based on physics
+        if use_violet_primary:
+            primary_ssc = ssc_violet
+            primary_wavelength = 405.0
+        else:
+            primary_ssc = ssc_blue
+            primary_wavelength = 488.0
+        
         for i in range(n_events):
             if ssc_blue[i] <= 0 or ssc_violet[i] <= 0:
                 sizes[i] = np.nan
                 num_solutions[i] = 0
                 continue
             
-            # Step 1: Find ALL possible solutions using blue SSC
+            # Step 1: Find ALL possible solutions using PRIMARY SSC (violet by default)
             solutions = self.find_all_solutions(
-                ssc_blue[i], 
-                wavelength_nm=488.0, 
+                primary_ssc[i], 
+                wavelength_nm=primary_wavelength, 
                 tolerance_pct=tolerance_pct
             )
             num_solutions[i] = len(solutions)

@@ -1,0 +1,49 @@
+================================================================================
+DISTRIBUTION ANALYSIS REPORT: PC3 EXO1 Particle Sizes
+================================================================================
+
+📊 BASIC STATISTICS
+----------------------------------------
+   Sample Size:  100,000 particles
+   Mean:         374.21 nm
+   Median (D50): 398.00 nm
+   Mode:         472.04 nm
+   Std Dev:      101.57 nm
+   D10:          191.00 nm
+   D90:          472.00 nm
+
+📐 SHAPE STATISTICS
+----------------------------------------
+   Skewness:     -0.9566
+                 → Left-skewed (negative skew)
+   Kurtosis:     -0.1924
+                 → Light tails (platykurtic)
+
+🔬 NORMALITY TESTS
+----------------------------------------
+   (p > 0.05 indicates data is consistent with normal distribution)
+   D'Agostino-Pearson       : stat=11251.1646 ❌ FAIL
+   Anderson-Darling         : stat=5095.3138 ❌ FAIL
+   Kolmogorov-Smirnov       : stat=0.1978 ❌ FAIL
+
+📈 DISTRIBUTION FITTING (Lower AIC = Better Fit)
+----------------------------------------
+   Weibull     : AIC=   1180116.9  BIC=   1180145.4  ⭐ BEST
+   Normal      : AIC=   1207939.4  BIC=   1207958.4  
+   Lognormal   : AIC=   1207942.5  BIC=   1207971.1  
+   Gamma       : AIC=   1218518.2  BIC=   1218546.7  
+
+🎯 INTERPRETATION
+----------------------------------------
+   ❌ Distribution is NOT normal
+   → Best fit: WEIBULL distribution
+   → Weibull distribution often used in reliability analysis
+
+💡 RECOMMENDATIONS
+----------------------------------------
+   1. Use non-parametric statistics (Mann-Whitney, Kruskal-Wallis)
+   2. Report median (D50) as primary metric (per MISEV)
+   3. Report D10-D90 range for spread
+   4. Consider log-transformation for parametric tests
+
+================================================================================

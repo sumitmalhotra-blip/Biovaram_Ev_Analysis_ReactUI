@@ -1,6 +1,6 @@
 # BioVaram EV Analysis Platform - Master Task Tracker
 ## Created: January 21, 2026
-## Last Updated: January 21, 2026
+## Last Updated: February 2, 2026
 
 ---
 
@@ -8,16 +8,76 @@
 
 | Category | Completed | In Progress | Pending | Total |
 |----------|-----------|-------------|---------|-------|
-| **Core Platform Tasks (T-xxx)** | 9 | 0 | 3 | 12 |
-| **Data Validation (VAL-xxx)** | 6 | 3 | 7 | 16 |
-| **CRMIT Architecture Tasks** | 8 | 0 | 4 | 12 |
+| **Core Platform Tasks (T-xxx)** | 10 | 1 | 4 | 15 |
+| **Data Validation (VAL-xxx)** | 6 | 2 | 8 | 16 |
+| **CRMIT Architecture Tasks** | 8 | 1 | 4 | 13 |
 | **Compliance Tasks (COMP-xxx)** | 0 | 0 | 7 | 7 |
 | **Enterprise Features (ENT-xxx)** | 0 | 0 | 4 | 4 |
-| **TEM Image Analysis (TEM-xxx)** | 0 | 1 | 4 | 5 |
-| **UI/UX Improvements** | 3 | 1 | 4 | 8 |
-| **Infrastructure** | 2 | 0 | 2 | 4 |
+| **TEM Image Analysis (TEM-xxx)** | 0 | 2 | 4 | 6 |
+| **UI/UX Improvements (UI-xxx)** | 3 | 2 | 3 | 8 |
+| **Infrastructure** | 2 | 1 | 2 | 5 |
 
-**Overall Progress: ~50% Complete**
+**Overall Progress: ~55% Complete**
+
+---
+
+## 🔴 CRITICAL INSIGHTS FROM JAN 28, 2026 MEETING
+
+### Key Technical Updates from Surya Pratap Singh:
+
+1. **Multi-Solution Mie CONFIRMED WORKING:**
+   - 70% particles in 50-200nm range (medium EVs) ✅
+   - Surya: "That's a good number actually... this is technically expected"
+   - Using weighted values for multi-point solution
+   - ~0.9 million events analyzed successfully
+
+2. **Error Bar Estimation Request:**
+   - Surya: "From the user point of view... putting error bar means you are estimating the errors"
+   - Parvesh: Issue is parallax error within measurement
+   - FCS file doesn't provide error estimates
+   - Action: Investigate error estimation methodology
+
+3. **Gaussian Distribution Analysis Required:**
+   - Surya: "If there is a proper Gaussian distribution, it could have made our life easy"
+   - Need to check if size distributions follow normal distribution
+   - Consider: Normal, Poisson, or skewed distributions
+   - Better solution = one that follows normal distribution
+
+4. **Plot Multi-Solution Events:**
+   - Pick one event with multiple Mie solutions
+   - Plot those different solutions on same graph
+   - Use to decide normalization approach
+
+5. **TEM: Voronoi Tessellation Recommended:**
+   - Square grids causing false positives/negatives
+   - Voronoi tessellation better for circular objects
+   - Will stop at broken boundaries (membrane detection)
+
+6. **Scatter Plot UI Fix:**
+   - Dots are too big, difficult to select
+   - Convert circles to smaller dots/different symbol
+
+---
+
+## 🔵 INSIGHTS FROM JAN 22, 2026 MEETING
+
+### Mie Theory Deep Dive (Parvesh Explanation):
+
+1. **Lookup Table Approach:**
+   - For each size (40nm, 41nm, 42nm...) pre-calculate ALL possible scatter values
+   - Multiple solutions exist because sin/cos waves intersect at multiple points
+   - Original program created lookup table and matched values
+   - **Action: Verify if lookup table is still being used**
+
+2. **Multiple Roots Problem:**
+   - Same FCS value (e.g., 20000) can correspond to multiple particle sizes
+   - Range restriction narrows down valid solutions
+   - Cross-referencing multiple wavelengths helps disambiguate
+
+3. **Team Onboarding:**
+   - Deja: Backend Python development
+   - Jay: Frontend UI/UX (2 years experience)
+   - Need documentation and clean codebase for them
 
 ---
 
@@ -70,7 +130,7 @@
    - Some particles show "attachments" - need expert clarification
 
 ---
-
+ 
 ## ✅ VERIFIED COMPLETED TASKS
 
 ### T-001: Fix Tooltip Visibility on Flow Cytometry Graphs
@@ -174,9 +234,290 @@
 | **Status** | ✅ COMPLETE |
 | **Features** | Z-score/IQR detection, histogram highlighting |
 
+### T-010: Multi-Solution Mie Implementation (JAN 28 UPDATE)
+| Field | Value |
+|-------|-------|
+| **Status** | ✅ COMPLETE |
+| **Completed Date** | January 28, 2026 |
+| **Source** | Jan 28 Meeting - Confirmed by Surya |
+| **Result** | 70% particles in 50-200nm (medium range) - "Technically expected" |
+| **Features** | Weighted multi-point solution, VSSC/BSSC cross-validation, lookup table |
+| **Files** | `backend/src/physics/mie_scatter.py`, `backend/src/api/routers/upload.py` |
+
+---
+
+## 🆕 NEW TASKS FROM JAN 28 & JAN 22 MEETINGS
+
+### VAL-008: Gaussian Distribution Analysis (JAN 28 MEETING)
+| Field | Value |
+|-------|-------|
+| **Priority** | 🔴 HIGH |
+| **Status** | 🔴 Not Started |
+| **Source** | Jan 28, 2026 Meeting - Surya's request |
+| **Description** | Analyze if size distributions follow Gaussian/normal distribution |
+
+**Surya's Quote:** "If there is a proper Gaussian distribution, it could have made our life easy. But I don't see neither of them."
+
+**Implementation:**
+- [ ] Plot size distribution histogram with Gaussian fit overlay
+- [ ] Calculate goodness-of-fit (R², chi-squared)
+- [ ] Compare normal vs Poisson vs log-normal distributions
+- [ ] Report which distribution best matches data
+- [ ] Add statistical metrics to analysis results
+
+**Estimated Effort:** 4-6 hours
+
+---
+
+### VAL-009: Error Bar Estimation for Particle Sizing (JAN 28 MEETING)
+| Field | Value |
+|-------|-------|
+| **Priority** | 🟡 MEDIUM |
+| **Status** | 🔴 Not Started |
+| **Source** | Jan 28, 2026 Meeting - Surya's suggestion |
+| **Description** | Add error estimation to particle size calculations |
+
+**Key Points:**
+- Surya: "Putting error bar means you are estimating the errors... it is not possible to have absolute numbers"
+- FCS files don't provide error estimates
+- Need to estimate parallax/measurement error
+- Consider standard deviation of multi-solution Mie results
+
+**Implementation:**
+- [ ] Calculate size uncertainty from multi-solution variance
+- [ ] Add error bars to size distribution charts
+- [ ] Display ± uncertainty in statistics panels
+- [ ] Document error estimation methodology
+
+**Estimated Effort:** 4 hours
+
+---
+
+### VAL-010: Plot Multi-Solution Events (JAN 28 MEETING)
+| Field | Value |
+|-------|-------|
+| **Priority** | 🟡 MEDIUM |
+| **Status** | 🔴 Not Started |
+| **Source** | Jan 28, 2026 Meeting - Parvesh's request |
+| **Description** | For events with multiple Mie solutions, plot all solutions to visualize disambiguation |
+
+**Parvesh's Quote:** "Pick one event that has multiple solutions and plot those graphs... Let's see how that comes out. Then we can decide on what we can use to normalize."
+
+**Implementation:**
+- [ ] Identify events with 2+ Mie solutions
+- [ ] Create visualization showing all possible sizes for selected event
+- [ ] Show which solution was selected and why
+- [ ] Use for internal validation (not user-facing)
+
+**Estimated Effort:** 3 hours
+
+---
+
+### T-011: Mie Lookup Table Verification (JAN 22 MEETING)
+| Field | Value |
+|-------|-------|
+| **Priority** | 🔴 HIGH |
+| **Status** | 🔄 IN PROGRESS |
+| **Source** | Jan 22, 2026 Meeting - Parvesh's explanation |
+| **Description** | Verify lookup table approach is implemented for Mie calculations |
+
+**Parvesh's Explanation:**
+- Original program created lookup table: "for 40nm these are all the numbers, for 41nm these are all the numbers..."
+- Multiple solutions exist because sin/cos waves intersect at multiple points
+- Lookup table approach is faster than on-demand calculation
+
+**Current State:**
+- `MultiSolutionMieCalculator` exists in `mie_scatter.py`
+- Uses VSSC/BSSC cross-referencing
+- Need to verify lookup table is pre-computed vs calculated on-the-fly
+
+**Estimated Effort:** 2 hours
+
+---
+
+### UI-001: Scatter Plot Dot Size Fix (JAN 28 MEETING)
+| Field | Value |
+|-------|-------|
+| **Priority** | 🟡 MEDIUM |
+| **Status** | 🔴 Not Started |
+| **Source** | Jan 28, 2026 Meeting - Surya's feedback |
+| **Description** | Reduce scatter plot dot size for better selection |
+
+**Surya's Quote:** "Selecting few dots was making it difficult because of probably because of size of the dots... keep in mind that also"
+
+**Implementation:**
+- [ ] Reduce dot size in scatter plots
+- [ ] Change from circles to smaller dots
+- [ ] Consider using different symbols for different categories
+- [ ] Ensure dots are still visible but not overlapping
+
+**Estimated Effort:** 1 hour
+
+---
+
+### INFRA-001: Remove Streamlit Code (JAN 22 MEETING)
+| Field | Value |
+|-------|-------|
+| **Priority** | 🟡 MEDIUM |
+| **Status** | 🔴 Not Started |
+| **Source** | Jan 22, 2026 Meeting |
+| **Description** | Clean up old Streamlit code from backend |
+
+**Implementation:**
+- [ ] Identify all Streamlit-related files
+- [ ] Remove deprecated Streamlit code
+- [ ] Update imports and references
+- [ ] Test that backend still works
+
+**Estimated Effort:** 2 hours
+
+---
+
+### INFRA-002: Onboarding Documentation (JAN 22 MEETING)
+| Field | Value |
+|-------|-------|
+| **Priority** | 🟡 MEDIUM |
+| **Status** | ✅ COMPLETE |
+| **Completed Date** | January 28, 2026 |
+| **Source** | Jan 22, 2026 Meeting |
+| **Description** | Create documentation for new team members |
+| **Deliverables** | ONBOARDING_GUIDE.md (731 lines), SETUP.md (395 lines) |
+
+---
+
+### TEM-006: Voronoi Tessellation Implementation (JAN 28 MEETING)
+| Field | Value |
+|-------|-------|
+| **Priority** | 🟡 MEDIUM |
+| **Status** | 🔴 Not Started |
+| **Source** | Jan 28, 2026 Meeting - Surya's recommendation |
+| **Assignee** | Charmi |
+| **Description** | Replace square grids with Voronoi tessellation for TEM analysis |
+
+**Surya's Quote:** "For circular objects, Voronoi tessellations are really nice geometric way... if the boundary is broken, the pixel loss will happen, tessellations would stop"
+
+**Benefits:**
+- Better for circular objects (EVs)
+- Automatically stops at broken boundaries
+- Reduces false positives/negatives
+- No wasted space like square grids
+
+**Estimated Effort:** 1 week
+
 ---
 
 ## 🔴 HIGH PRIORITY PENDING TASKS
+
+### BUG-001: Fix miepython API Call (CRITICAL)
+| Field | Value |
+|-------|-------|
+| **Priority** | 🔴 CRITICAL |
+| **Status** | ✅ FIXED (Feb 2, 2026) |
+| **Source** | Code review Feb 2, 2026 |
+| **Description** | `miepython.single_sphere()` called with 4 args but v3.0.2 only takes 3 |
+| **File** | `backend/src/physics/mie_scatter.py` line 239 |
+
+**Fixed Code:**
+```python
+qext, qsca, qback, g = miepython.single_sphere(self.m, x, 0)
+```
+
+**Verified:** Test successful - MieScatterCalculator now works correctly.
+
+---
+
+### BUG-002: Display Endpoints Use Wrong Mie Calculator
+| Field | Value |
+|-------|-------|
+| **Priority** | 🔴 CRITICAL |
+| **Status** | ✅ FIXED (Feb 2, 2026) |
+| **Source** | Analysis bug investigation Jan 29, 2026 |
+| **Description** | `/scatter-data`, `/size-bins`, `/fcs/values` endpoints use single-solution Mie instead of MultiSolutionMie |
+
+**Root Cause:**
+- Upload uses `MultiSolutionMieCalculator` correctly
+- But display endpoints recalculated with old single-solution method
+- This caused size distribution mismatch (showed 98% Large instead of 70% Medium)
+
+**Fix Applied (Feb 2, 2026):**
+- Added `detect_multi_solution_channels()` helper function
+- Updated 5 endpoints in `samples.py` to use `MultiSolutionMieCalculator` when VSSC+BSSC available:
+  - `/samples/{id}/scatter-data` - scatter plot with diameters
+  - `/samples/{id}/gated-analysis` - gated population statistics  
+  - `/samples/{id}/size-bins` - Small/Medium/Large categorization
+  - `/samples/{id}/reanalyze` - re-analyze with custom parameters
+  - `/samples/{id}/fcs/values` - per-event size calculations
+- Falls back to single-solution `MieScatterCalculator` when only one wavelength available
+
+---
+
+### PHYS-001: Violet (405nm) as Primary Sizing Channel
+| Field | Value |
+|-------|-------|
+| **Priority** | 🟡 MEDIUM |
+| **Status** | ✅ IMPLEMENTED (Feb 2, 2026) |
+| **Source** | User physics insight + Mätzler literature review |
+| **Description** | Violet (405nm) scatters more than blue (488nm) for small particles (Rayleigh ∝ λ⁻⁴) |
+
+**Physics Justification:**
+- Size parameter x = πd/λ → smaller λ = larger x = more signal
+- Rayleigh regime: scatter ∝ λ⁻⁴ 
+- 405nm/488nm = ~2.1× more scattering at violet for EVs (30-150nm)
+- **Reference:** Mätzler (2002) "MATLAB Functions for Mie Scattering and Absorption"
+
+**Implementation:**
+- Added `use_violet_primary=True` parameter to `calculate_sizes_multi_solution()`
+- Violet is now default primary channel
+- Blue channel used for disambiguation (multi-solution approach)
+
+**Files Modified:**
+- `backend/src/physics/mie_scatter.py` - added parameter, updated docstring
+
+---
+
+### CAL-001: Bead Calibration Implementation
+| Field | Value |
+|-------|-------|
+| **Priority** | 🔴 CRITICAL |
+| **Status** | 🔄 IN PROGRESS (Feb 2, 2026) |
+| **Source** | Feb 2, 2026 calibration analysis session |
+| **Description** | Use polystyrene calibration beads to convert arbitrary SSC units to physical diameter |
+
+**Problem Identified:**
+- Flow cytometer SSC values are in arbitrary units
+- Without calibration, Mie theory alone gives D50=337nm (wrong!)
+- With bead calibration, D50=75.5nm (matches expected exosome size!)
+
+**Calibration Beads Analyzed:**
+| File | Events | Range | Populations |
+|------|--------|-------|-------------|
+| Nano Vis Low.fcs | 179,465 | 40-150nm | 17 detected |
+| Nano Vis High.fcs | 124,189 | 140-1000nm | 12 detected |
+
+**Preliminary Calibration Curve:**
+```
+log(diameter) = 0.3051 × log(VSSC) + 0.8532
+```
+
+**PC3 EXO1 Results Comparison:**
+| Metric | Before | After | Expected |
+|--------|--------|-------|----------|
+| D50 | 337nm | **75.5nm** | 50-100nm |
+| Medium (50-200nm) | 40.8% | **88.8%** | 85-95% |
+| Large (>200nm) | 59.2% | **5.2%** | <5% |
+
+**Pending Items:**
+- [ ] Get exact bead sizes from kit datasheet (polystyrene n=1.59 confirmed)
+- [ ] Build refined calibration curve with all 15+ bead populations
+- [ ] Save calibration to `config/calibration/` as JSON
+- [ ] Integrate into upload workflow
+- [ ] Add calibration UI to frontend
+
+**Documentation Created:**
+- `backend/docs/technical/BEAD_CALIBRATION_GUIDE.md` - Full technical guide
+- `backend/docs/technical/BEAD_KIT_FORM.md` - Form for lab team to fill
+
+---
 
 ### P-001: AI Research Chat Backend Integration
 | Field | Value |
@@ -535,18 +876,41 @@ NTA: 1.3E+7 × 500 = 6.6E+9 particles/mL
 
 ## 📅 RECOMMENDED NEXT ACTIONS
 
-### This Week (Jan 21-27, 2026):
-| Priority | Task | Effort |
-|----------|------|--------|
-| 1 | VAL-001: NTA vs FCS Cross-Validation Overlay | 4 hours |
-| 2 | VAL-002: Supplementary Table Generation | 4 hours |
-| 3 | VAL-003: Simplify Mie User Inputs | 3 hours |
-| 4 | TEM-001: Help Charmi fix scale bar detection | 2 hours |
+### 🔥 IMMEDIATE (Feb 2-3, 2026) - CRITICAL BUGS:
+| Priority | Task | Effort | Status |
+|----------|------|--------|--------|
+| 1 | **BUG-001**: Fix miepython 3-arg API | 5 min | 🔴 BLOCKING |
+| 2 | **BUG-002**: Display endpoints use MultiSolutionMie | 2 hrs | 🔴 BLOCKING |
+| 3 | **T-011**: Verify Mie lookup table implementation | 2 hrs | 🟡 |
 
-### Next Week (Jan 28 - Feb 3, 2026):
-| Priority | Task | Effort |
-|----------|------|--------|
-| 1 | P-001: Fix AI Chat Backend | 4 hours |
+### Week 1 (Feb 3-7, 2026) - Validation:
+| Priority | Task | Effort | Status |
+|----------|------|--------|--------|
+| 1 | VAL-008: Gaussian distribution analysis | 4 hrs | 🔴 Surya requested |
+| 2 | VAL-001: NTA vs FCS Cross-Validation Overlay | 4 hrs | 🟡 In Progress |
+| 3 | VAL-010: Plot multi-solution events | 3 hrs | 🔴 Parvesh requested |
+| 4 | UI-001: Scatter plot dot size fix | 1 hr | 🔴 Surya feedback |
+
+### Week 2 (Feb 10-14, 2026) - Features:
+| Priority | Task | Effort | Status |
+|----------|------|--------|--------|
+| 1 | VAL-002: Supplementary Table Generation | 4 hrs | 🔴 |
+| 2 | VAL-009: Error bar estimation | 4 hrs | 🟡 Surya suggested |
+| 3 | INFRA-001: Remove Streamlit code | 2 hrs | 🔴 |
+| 4 | P-001: Fix AI Chat Backend | 4 hrs | 🔴 BROKEN |
+
+### Week 3 (Feb 17-21, 2026) - Polish:
+| Priority | Task | Effort | Status |
+|----------|------|--------|--------|
+| 1 | VAL-003: Simplify Mie User Inputs | 3 hrs | 🔴 |
+| 2 | COMP-007: Enforce Authentication | 2 hrs | 🟡 |
+| 3 | TEM-006: Voronoi tessellation (Charmi) | 1 week | 🔴 |
+
+### Waiting For:
+- **Surya:** Calibrated FCS data (Beckman Coulter visit complete)
+- **Surya:** Error estimation methodology guidance
+- **Charmi:** Voronoi tessellation implementation
+- **MD:** Desktop app packaging decision
 | 2 | COMP-007: Enforce Authentication | 2 hours |
 | 3 | VAL-005: FCS Metadata Investigation | 2 hours |
 
@@ -581,6 +945,27 @@ NTA: 1.3E+7 × 500 = 6.6E+9 particles/mL
   4. Discussed TEM image analysis challenges
   5. Confirmed Mie theory is "widely accepted by cytometric community"
 
+### Jan 28, 2026 - Customer Connect with Surya & Charmi
+- Multi-solution Mie confirmed working (70% particles in 50-200nm range)
+- Surya: "That's a good number actually... this is technically expected"
+- Requested Gaussian distribution analysis for next meeting
+- Suggested error bars for particle size estimation
+- TEM: Recommended Voronoi tessellation over square grids
+- Scatter plot dots too big - need smaller symbols
+- Weekly progress images to be shared
+
+### Jan 22, 2026 - Mie Theory Deep Dive with Parvesh
+- Parvesh explained lookup table approach: "for 40nm these are all the numbers, for 41nm..."
+- Need to verify current implementation uses lookup table
+- Team onboarding: Deja (backend Python), Jay (frontend UI/UX)
+- Action: Remove Streamlit code from codebase
+- Action: Create developer documentation for new team members
+
+### Jan 20, 2026 - PC3 Validation Meeting
+- Reviewed current scatter plots and identified calibration issues
+- Confirmed polystyrene (PS) calibration approach
+- Need to add phosphatidylcholine (PC) calibration
+
 ### Jan 13, 2026 - Compliance Discussion
 - Added 11 compliance and enterprise tasks
 
@@ -589,6 +974,18 @@ NTA: 1.3E+7 × 500 = 6.6E+9 particles/mL
 
 ---
 
-*Document Version: 2.0*
+### Key Contacts
+| Name | Role | Focus Area |
+|------|------|------------|
+| Surya | Principal Investigator | Overall direction, validation |
+| Charmi | PhD Student | TEM image analysis |
+| Parvesh | Mie Theory Lead | Multi-solution Mie implementation |
+| Deja | Developer (new) | Backend Python |
+| Jay | Developer (new) | Frontend UI/UX |
+
+---
+
+*Document Version: 3.0*
 *Consolidated from: CONSOLIDATED_TASK_TRACKER.md, TASK_TRACKER_DEC22_MEETING.md, TASK_TRACKER_PC3_VALIDATION_JAN20.md, EXECUTION_PLAN_JAN7_2025.md*
-*Next Review: January 28, 2026*
+*Last Updated: February 2, 2026*
+*Next Review: February 5, 2026*
