@@ -8,7 +8,7 @@
 
 | Category | Completed | In Progress | Pending | Total |
 |----------|-----------|-------------|---------|-------|
-| **Core Platform Tasks (T-xxx)** | 10 | 1 | 4 | 15 |
+| **Core Platform Tasks (T-xxx)** | 11 | 0 | 4 | 15 |
 | **Data Validation (VAL-xxx)** | 6 | 2 | 8 | 16 |
 | **CRMIT Architecture Tasks** | 8 | 1 | 4 | 13 |
 | **Compliance Tasks (COMP-xxx)** | 0 | 0 | 7 | 7 |
@@ -19,7 +19,7 @@
 | **Documentation (DOC-xxx)** | 2 | 0 | 0 | 2 |
 | **Statistics (STAT-xxx)** | 0 | 1 | 0 | 1 |
 
-**Overall Progress: ~58% Complete**
+**Overall Progress: ~60% Complete**
 
 ---
 
@@ -319,7 +319,8 @@
 | Field | Value |
 |-------|-------|
 | **Priority** | 🔴 HIGH |
-| **Status** | 🔄 IN PROGRESS |
+| **Status** | ✅ COMPLETE |
+| **Completed Date** | February 4, 2026 |
 | **Source** | Jan 22, 2026 Meeting - Parvesh's explanation |
 | **Description** | Verify lookup table approach is implemented for Mie calculations |
 
@@ -328,12 +329,36 @@
 - Multiple solutions exist because sin/cos waves intersect at multiple points
 - Lookup table approach is faster than on-demand calculation
 
-**Current State:**
-- `MultiSolutionMieCalculator` exists in `mie_scatter.py`
-- Uses VSSC/BSSC cross-referencing
-- Need to verify lookup table is pre-computed vs calculated on-the-fly
+**Verification Results (Feb 4, 2026):**
 
-**Estimated Effort:** 2 hours
+| Component | LUT Status | Notes |
+|-----------|------------|-------|
+| `MultiSolutionMieCalculator` | ✅ Pre-computed in `__init__()` | 3 LUTs: violet SSC, blue SSC, V/B ratio |
+| `MieScatterCalculator` | ✅ Cached (Feb 4 update) | LUT cached after first build |
+| Resolution | ✅ Sufficient | 471-500 points (sub-nm precision) |
+| Range | ✅ Correct | 30-500nm (configurable) |
+
+**How the LUT Works:**
+```
+1. Generate diameter grid: [30nm, 31nm, ..., 500nm] (471-500 points)
+2. For each diameter, calculate theoretical SSC using Mie theory
+3. Sort by SSC value (Mie resonances cause non-monotonicity)
+4. Remove duplicates for clean interpolation
+5. Cache result for reuse
+
+For inverse lookup (SSC → diameter):
+- Use numpy.interp() for O(n) interpolation
+- ~1000x faster than per-event Mie calculation
+```
+
+**Code Changes Made (Feb 4, 2026):**
+- [x] Added `_get_or_build_lut()` method with caching to `MieScatterCalculator`
+- [x] Updated `diameters_from_scatter_batch()` to use cached LUT
+- [x] Added detailed documentation explaining LUT approach
+- [x] Added cache key validation (rebuilds if parameters change)
+
+**Files Modified:**
+- `backend/src/physics/mie_scatter.py` - Added LUT caching and documentation
 
 ---
 
@@ -479,9 +504,59 @@
   - Updated Section 8.4 validation point
 
 **Code Changes Needed:**
-- [ ] Update `statistics_utils.py` to use log-normal as default
-- [ ] Update distribution fitting UI to highlight log-normal
-- [ ] Re-run fit analysis on sample data with log-normal focus
+
+1. **Add `fit_distribution()` function to `statistics_utils.py`:**
+   ```python
+   def fit_distribution(data: np.ndarray, distribution: str = 'lognorm') -> Dict:
+       """Fit statistical distribution to particle size data."""
+       from scipy.stats import norm, lognorm, gamma, weibull_min
+       
+       distributions = {
+           'lognorm': lognorm,   # RECOMMENDED for biological particles
+           'normal': norm,
+           'gamma': gamma,
+           'weibull': weibull_min
+       }
+       
+       # Fit log-normal as primary (biologically appropriate)
+       params = distributions[distribution].fit(data)
+       
+       # Calculate AIC for comparison
+       log_likelihood = np.sum(distributions[distribution].logpdf(data, *params))
+       k = len(params)
+       aic = 2*k - 2*log_likelihood
+       
+       return {
+           'distribution': distribution,
+           'params': params,
+           'aic': aic,
+           'mu': params[2] if distribution == 'lognorm' else None,  # location
+           'sigma': params[0] if distribution == 'lognorm' else None,  # shape
+       }
+   ```
+
+2. **Add `get_lognormal_params()` helper:**
+   ```python
+   def get_lognormal_params(data: np.ndarray) -> Tuple[float, float]:
+       """Get log-normal μ and σ for theoretical curve overlay."""
+       log_data = np.log(data[data > 0])
+       mu = np.mean(log_data)
+       sigma = np.std(log_data)
+       return mu, sigma
+   ```
+
+3. **Add `compare_distributions()` function:**
+   - Fit all 4 distributions (Normal, Log-normal, Gamma, Weibull)
+   - Return AIC comparison table
+   - Highlight Log-normal as "biologically recommended"
+
+4. **Optional: Add API endpoint** `/samples/{id}/distribution-fit`:
+   - Returns fit parameters and theoretical curve for histogram overlay
+
+**Files to Modify:**
+- `backend/src/physics/statistics_utils.py` - Add functions above
+- `backend/src/api/routers/samples.py` - Optional: add endpoint
+- `components/flow-cytometry/charts/*.tsx` - Optional: add curve overlay
 
 **Estimated Effort:** 2-3 hours
 

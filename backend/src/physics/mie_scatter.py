@@ -163,6 +163,11 @@ class MieScatterCalculator:
         # For absorbing particles, use complex(real, imaginary)
         self.m = complex(n_particle / n_medium, 0.0)
         
+        # LUT cache for batch operations (initialized on first use)
+        # This avoids rebuilding the lookup table on every batch call
+        self._lut_cache: Optional[Dict[str, Any]] = None
+        self._lut_cache_key: Optional[str] = None
+        
         logger.info(
             f"✓ Mie Calculator initialized: λ={wavelength_nm:.1f}nm, "
             f"n_particle={n_particle:.4f}, n_medium={n_medium:.4f}, m={self.m.real:.4f}"
@@ -401,6 +406,91 @@ class MieScatterCalculator:
             logger.warning(f"Returning fallback diameter: {fallback_diameter:.1f}nm")
             return fallback_diameter, False
     
+    def _get_or_build_lut(
+        self,
+        min_diameter: float = 30.0,
+        max_diameter: float = 500.0,
+        lut_resolution: int = 500
+    ) -> Dict[str, Any]:
+        """
+        Get cached LUT or build a new one if parameters changed.
+        
+        LUT APPROACH EXPLANATION (T-011 Documentation):
+        ================================================
+        
+        Why Use a Lookup Table?
+        -----------------------
+        Mie scattering calculations are computationally expensive (Bessel functions,
+        series expansions). For 900k+ events, calculating on-demand would be slow.
+        
+        Solution: Pre-compute a lookup table (LUT) mapping diameters → SSC values,
+        then use fast interpolation to find diameters from measured SSC.
+        
+        How It Works:
+        -------------
+        1. Generate diameter grid: [30nm, 30.94nm, 31.88nm, ..., 500nm] (500 points)
+        2. For each diameter, calculate theoretical FSC using Mie theory
+        3. Sort by FSC value (Mie can be non-monotonic due to resonances)
+        4. Remove duplicates for clean interpolation
+        5. Cache the result for reuse
+        
+        For inverse lookup (SSC → diameter):
+        - Use numpy.interp() for O(n) interpolation
+        - ~1000x faster than calling Mie theory per-event
+        
+        Cache Key:
+        - Includes min_diameter, max_diameter, resolution, wavelength, n_particle, n_medium
+        - If any parameter changes, LUT is rebuilt
+        
+        Args:
+            min_diameter: Minimum diameter in LUT (nm)
+            max_diameter: Maximum diameter in LUT (nm)
+            lut_resolution: Number of points in LUT
+            
+        Returns:
+            Dict with cached LUT arrays (fsc_unique, diameters_unique, fsc_min, fsc_max)
+        """
+        # Create cache key from all parameters that affect the LUT
+        cache_key = f"{min_diameter}_{max_diameter}_{lut_resolution}_{self.wavelength_nm}_{self.n_particle}_{self.n_medium}"
+        
+        # Return cached LUT if parameters haven't changed
+        if self._lut_cache is not None and self._lut_cache_key == cache_key:
+            return self._lut_cache
+        
+        # Build new LUT
+        logger.debug(f"Building LUT: {min_diameter}-{max_diameter}nm, {lut_resolution} points")
+        
+        diameters_lut = np.linspace(min_diameter, max_diameter, lut_resolution)
+        fsc_lut = np.zeros(lut_resolution)
+        
+        for i, d in enumerate(diameters_lut):
+            result = self.calculate_scattering_efficiency(d, validate=False)
+            fsc_lut[i] = result.forward_scatter
+        
+        # Sort by FSC (Mie resonances can cause non-monotonicity)
+        sort_idx = np.argsort(fsc_lut)
+        fsc_sorted = fsc_lut[sort_idx]
+        diameters_sorted = diameters_lut[sort_idx]
+        
+        # Remove duplicates for clean interpolation
+        unique_mask = np.diff(fsc_sorted, prepend=-np.inf) > 0
+        fsc_unique = fsc_sorted[unique_mask]
+        diameters_unique = diameters_sorted[unique_mask]
+        
+        # Cache the LUT
+        self._lut_cache = {
+            'fsc_unique': fsc_unique,
+            'diameters_unique': diameters_unique,
+            'fsc_min': fsc_unique[0],
+            'fsc_max': fsc_unique[-1],
+            'diameters_lut': diameters_lut,
+            'fsc_lut': fsc_lut
+        }
+        self._lut_cache_key = cache_key
+        
+        logger.debug(f"LUT built and cached: {len(fsc_unique)} unique points")
+        return self._lut_cache
+    
     def diameters_from_scatter_batch(
         self,
         fsc_intensities: np.ndarray,
@@ -414,6 +504,11 @@ class MieScatterCalculator:
         This is 100-1000x faster than calling diameter_from_scatter() in a loop!
         Uses precomputed lookup table (LUT) with linear interpolation.
         
+        LUT CACHING (Feb 2026):
+        -----------------------
+        The lookup table is now cached after first build. Subsequent calls with
+        the same parameters reuse the cached LUT, avoiding repeated Mie calculations.
+        
         Args:
             fsc_intensities: Array of FSC intensity values
             min_diameter: Minimum diameter in lookup table (nm)
@@ -425,33 +520,21 @@ class MieScatterCalculator:
             - diameters: Array of estimated diameters in nm
             - success_mask: Boolean array indicating valid estimates
         """
-        # Build lookup table: diameter -> FSC intensity
-        diameters_lut = np.linspace(min_diameter, max_diameter, lut_resolution)
-        fsc_lut = np.zeros(lut_resolution)
+        # Get or build cached LUT
+        lut = self._get_or_build_lut(min_diameter, max_diameter, lut_resolution)
         
-        for i, d in enumerate(diameters_lut):
-            result = self.calculate_scattering_efficiency(d, validate=False)
-            fsc_lut[i] = result.forward_scatter
-        
-        # Ensure FSC is monotonically increasing for interpolation
-        # (May need sorting if Mie resonances cause non-monotonicity)
-        sort_idx = np.argsort(fsc_lut)
-        fsc_sorted = fsc_lut[sort_idx]
-        diameters_sorted = diameters_lut[sort_idx]
-        
-        # Remove duplicates to avoid interpolation issues
-        unique_mask = np.diff(fsc_sorted, prepend=-np.inf) > 0
-        fsc_unique = fsc_sorted[unique_mask]
-        diameters_unique = diameters_sorted[unique_mask]
+        fsc_unique = lut['fsc_unique']
+        diameters_unique = lut['diameters_unique']
+        fsc_min = lut['fsc_min']
+        fsc_max = lut['fsc_max']
         
         # Interpolate: FSC intensity -> diameter
         fsc_intensities = np.asarray(fsc_intensities)
         
         # Clamp intensities to valid range for interpolation
-        fsc_min, fsc_max = fsc_unique[0], fsc_unique[-1]
         fsc_clamped = np.clip(fsc_intensities, fsc_min, fsc_max)
         
-        # Linear interpolation
+        # Linear interpolation (O(n) - very fast)
         estimated_diameters = np.interp(fsc_clamped, fsc_unique, diameters_unique)
         
         # Mark values outside valid FSC range as potentially unreliable
