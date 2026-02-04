@@ -260,14 +260,221 @@
 
 **Surya's Quote:** "If there is a proper Gaussian distribution, it could have made our life easy. But I don't see neither of them."
 
-**Implementation:**
-- [ ] Plot size distribution histogram with Gaussian fit overlay
-- [ ] Calculate goodness-of-fit (R², chi-squared)
-- [ ] Compare normal vs Poisson vs log-normal distributions
-- [ ] Report which distribution best matches data
-- [ ] Add statistical metrics to analysis results
+**Why This Matters:**
+| If distribution is... | Implication |
+|----------------------|-------------|
+| **Gaussian (Normal)** | Mean = Median = Mode, standard deviation is meaningful |
+| **Log-normal** | Use geometric mean, log-transform for analysis |
+| **Skewed** | Mean is misleading, use median (D50) |
+| **Multimodal** | Multiple EV populations, need separate analysis |
 
-**Estimated Effort:** 4-6 hours
+**Implementation Plan:**
+
+**Step 1: Add Normality Tests to `statistics_utils.py` (30 min)**
+```python
+from scipy.stats import shapiro, normaltest, kstest, anderson
+
+def test_normality(data: np.ndarray) -> Dict[str, Any]:
+    """Run multiple normality tests on size distribution."""
+    
+    # Shapiro-Wilk test (most powerful for small samples)
+    shapiro_stat, shapiro_p = shapiro(data[:5000])  # Limited to 5000 samples
+    
+    # D'Agostino-Pearson test (good for larger samples)
+    dagostino_stat, dagostino_p = normaltest(data)
+    
+    # Kolmogorov-Smirnov test (compares to perfect normal)
+    ks_stat, ks_p = kstest(data, 'norm', args=(np.mean(data), np.std(data)))
+    
+    # Anderson-Darling test (multiple significance levels)
+    anderson_result = anderson(data, dist='norm')
+    
+    return {
+        'shapiro': {'statistic': shapiro_stat, 'p_value': shapiro_p, 'is_normal': shapiro_p > 0.05},
+        'dagostino': {'statistic': dagostino_stat, 'p_value': dagostino_p, 'is_normal': dagostino_p > 0.05},
+        'ks': {'statistic': ks_stat, 'p_value': ks_p, 'is_normal': ks_p > 0.05},
+        'anderson': {'statistic': anderson_result.statistic, 'critical_values': list(anderson_result.critical_values)},
+        'conclusion': 'NORMAL' if shapiro_p > 0.05 and dagostino_p > 0.05 else 'NOT NORMAL'
+    }
+```
+
+**Step 2: Add Distribution Fitting to `statistics_utils.py` (30 min)**
+```python
+from scipy.stats import norm, lognorm, gamma, weibull_min
+
+def fit_distributions(data: np.ndarray) -> Dict[str, Any]:
+    """Fit multiple distributions and compare via AIC."""
+    
+    distributions = {
+        'normal': norm,
+        'lognorm': lognorm,     # RECOMMENDED for biological particles
+        'gamma': gamma,
+        'weibull': weibull_min
+    }
+    
+    results = {}
+    for name, dist in distributions.items():
+        try:
+            params = dist.fit(data)
+            log_likelihood = np.sum(dist.logpdf(data, *params))
+            k = len(params)
+            aic = 2*k - 2*log_likelihood  # Lower = better
+            
+            results[name] = {
+                'params': list(params),
+                'aic': float(aic),
+                'log_likelihood': float(log_likelihood)
+            }
+        except Exception as e:
+            results[name] = {'error': str(e)}
+    
+    # Rank by AIC (lower is better)
+    valid_fits = {k: v for k, v in results.items() if 'aic' in v}
+    ranked = sorted(valid_fits.keys(), key=lambda x: valid_fits[x]['aic'])
+    
+    for i, name in enumerate(ranked):
+        results[name]['rank'] = i + 1
+    
+    best = ranked[0] if ranked else None
+    
+    return {
+        'fits': results,
+        'best_fit_statistical': best,
+        'recommendation': 'lognorm',  # Always recommend log-normal for biology
+        'recommendation_reason': 'Log-normal is preferred for biological particle sizing (multiplicative growth processes)'
+    }
+```
+
+**Step 3: Add Gaussian Overlay Generator (15 min)**
+```python
+def generate_gaussian_overlay(data: np.ndarray, bin_centers: np.ndarray) -> Dict[str, Any]:
+    """Generate theoretical Gaussian curve for histogram overlay."""
+    mean = float(np.mean(data))
+    std = float(np.std(data))
+    
+    # Generate Gaussian curve
+    gaussian_pdf = norm.pdf(bin_centers, mean, std)
+    
+    # Scale to match histogram (area under curve = total count)
+    bin_width = float(bin_centers[1] - bin_centers[0]) if len(bin_centers) > 1 else 1.0
+    gaussian_counts = gaussian_pdf * len(data) * bin_width
+    
+    return {
+        'x': list(bin_centers),
+        'y': list(gaussian_counts),
+        'mean': mean,
+        'std': std,
+        'label': f'Gaussian fit (μ={mean:.1f}, σ={std:.1f})'
+    }
+```
+
+**Step 4: Add API Endpoint to `routers/samples.py` (45 min)**
+```python
+@router.get("/{sample_id}/distribution-analysis")
+async def get_distribution_analysis(
+    sample_id: int, 
+    db: Session = Depends(get_db)
+):
+    """
+    Comprehensive distribution analysis for particle sizes.
+    
+    Returns:
+    - Normality test results (Shapiro, D'Agostino, K-S, Anderson)
+    - Distribution fits (Normal, Log-normal, Gamma, Weibull) with AIC
+    - Best fit recommendation
+    - Gaussian overlay curve for visualization
+    - Summary statistics (mean, median, mode, skewness, kurtosis)
+    """
+    # Get sample and calculate sizes
+    sample = db.query(Sample).filter(Sample.id == sample_id).first()
+    if not sample:
+        raise HTTPException(status_code=404, detail="Sample not found")
+    
+    # Load size data from parquet
+    sizes = load_sample_sizes(sample.parquet_path)
+    
+    # Run analyses
+    normality = test_normality(sizes)
+    distribution_fits = fit_distributions(sizes)
+    
+    # Generate histogram bins and Gaussian overlay
+    counts, bin_edges = np.histogram(sizes, bins=50)
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+    gaussian_overlay = generate_gaussian_overlay(sizes, bin_centers)
+    
+    # Calculate summary statistics
+    stats_result = calculate_comprehensive_stats(sizes)
+    
+    return {
+        'sample_id': sample_id,
+        'n_particles': len(sizes),
+        'normality_tests': normality,
+        'distribution_fits': distribution_fits,
+        'gaussian_overlay': gaussian_overlay,
+        'histogram': {
+            'bin_centers': list(bin_centers),
+            'counts': list(counts),
+            'bin_edges': list(bin_edges)
+        },
+        'statistics': {
+            'mean': stats_result.mean,
+            'median': stats_result.median,
+            'mode': stats_result.mode,
+            'std': stats_result.std,
+            'skewness': stats_result.skewness,
+            'kurtosis': stats_result.kurtosis,
+            'd10': stats_result.d10,
+            'd50': stats_result.d50,
+            'd90': stats_result.d90
+        }
+    }
+```
+
+**Step 5: Frontend Component (Optional, 1-2 hours)**
+- Add "Distribution Analysis" panel to Flow Cytometry tab
+- Show normality test results with ✅/❌ badges
+- Display AIC comparison table with ranking
+- Histogram with Gaussian overlay curve
+- Recommendation badge ("Log-normal recommended for biological interpretation")
+
+**Expected API Response:**
+```json
+{
+  "sample_id": 1,
+  "n_particles": 890123,
+  "normality_tests": {
+    "shapiro": {"statistic": 0.87, "p_value": 0.0001, "is_normal": false},
+    "dagostino": {"statistic": 1245.3, "p_value": 0.0001, "is_normal": false},
+    "ks": {"statistic": 0.198, "p_value": 0.0001, "is_normal": false},
+    "conclusion": "NOT NORMAL"
+  },
+  "distribution_fits": {
+    "normal": {"aic": 1207939, "rank": 2},
+    "lognorm": {"aic": 1207943, "rank": 3},
+    "gamma": {"aic": 1218518, "rank": 4},
+    "weibull": {"aic": 1180117, "rank": 1}
+  },
+  "best_fit_statistical": "weibull",
+  "recommendation": "lognorm",
+  "recommendation_reason": "Log-normal is preferred for biological particle sizing",
+  "gaussian_overlay": {"x": [30, 35, ...], "y": [0.001, 0.002, ...]},
+  "statistics": {"mean": 374.2, "median": 398.0, "mode": 472.0, "skewness": -0.96}
+}
+```
+
+**Files to Modify:**
+| File | Changes |
+|------|---------|
+| `backend/src/physics/statistics_utils.py` | Add `test_normality()`, `fit_distributions()`, `generate_gaussian_overlay()` |
+| `backend/src/api/routers/samples.py` | Add `/distribution-analysis` endpoint |
+| `components/flow-cytometry/*.tsx` | (Optional) Add Distribution Analysis panel |
+
+**Related Tasks:**
+- **STAT-001**: Shares `fit_distributions()` implementation
+- **VAL-001**: Will use distribution comparison for NTA vs FCS validation
+- **DOC-001/002**: Already documented expected results in PARTICLE_SIZING docs
+
+**Estimated Effort:** 4-6 hours (3-4h backend, 1-2h frontend optional)
 
 ---
 
