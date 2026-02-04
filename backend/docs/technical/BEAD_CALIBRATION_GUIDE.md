@@ -174,6 +174,20 @@ With the full bead ladder (15+ points), accuracy will improve significantly.
 
 ## Calibration Workflow
 
+> ⚠️ **IMPORTANT: Bead Material Affects Calibration**
+>
+> Different bead materials have different refractive indices, which directly affects Mie scattering calculations:
+>
+> | Bead Material | Refractive Index (n) | Common Use |
+> |---------------|---------------------|------------|
+> | **Polystyrene (PS)** | **1.59** | Most common, current default |
+> | Silica (SiO₂) | 1.46 | Lower scattering, closer to EVs |
+> | PMMA | 1.49 | Intermediate |
+> | Melamine | 1.68 | High scattering |
+> | EVs (biological) | ~1.38-1.42 | Sample particles |
+>
+> **Always specify the bead material when setting up calibration!** The system must know the bead's refractive index to correctly calculate theoretical Mie scattering values. Using the wrong RI will produce incorrect calibration curves.
+
 ### For Users in the Software
 
 ```

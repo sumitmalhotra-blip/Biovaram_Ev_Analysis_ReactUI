@@ -25,7 +25,7 @@ from scipy import stats
 
 
 # =========================================================================
-# THEME CONFIGURATION - Matching Streamlit Dark Theme
+# THEME CONFIGURATION - Dark Theme for React Frontend
 # =========================================================================
 
 DARK_THEME = {

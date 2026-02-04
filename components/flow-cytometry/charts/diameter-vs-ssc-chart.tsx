@@ -185,13 +185,13 @@ export function DiameterVsSSCChart({
         const point = {
           diameter: Math.round(diameter * 10) / 10,
           ssc: Math.round(ssc * 10) / 10,
-          z: 20,
+          z: 8,
           index: i,
         }
         
         // Classify as anomaly if deviation from theory is too large
         if (seededRandom(i * 4 + 4) > 0.97 || noise > 1.4 || noise < 0.6) {
-          anomalies.push({ ...point, z: 60 })
+          anomalies.push({ ...point, z: 25 })
         } else {
           normal.push(point)
         }
@@ -230,12 +230,12 @@ export function DiameterVsSSCChart({
       const dataPoint = {
         diameter: point.diameter,
         ssc: point.ssc,
-        z: 20,
+        z: 8,
         index: pointIndex,
       }
 
       if (highlightAnomalies && (point.isAnomaly || anomalySet.has(pointIndex))) {
-        anomalies.push({ ...dataPoint, z: 60 })
+        anomalies.push({ ...dataPoint, z: 25 })
       } else {
         normal.push(dataPoint)
       }
@@ -285,12 +285,12 @@ export function DiameterVsSSCChart({
         const dataPoint = {
           diameter: point.diameter,
           ssc: point.ssc,
-          z: 20,
+          z: 8,
           index: pointIndex,
         }
 
         if (highlightAnomalies && (point.isAnomaly || anomalySet.has(pointIndex))) {
-          anomalies.push({ ...dataPoint, z: 50 })
+          anomalies.push({ ...dataPoint, z: 22 })
         } else {
           normal.push(dataPoint)
         }
@@ -339,12 +339,12 @@ export function DiameterVsSSCChart({
         const point = { 
           diameter: Math.round(diameter * 10) / 10, 
           ssc, 
-          z: 20, 
+          z: 8, 
           index: i + 10000 
         }
         
         if (seededRandom(i * 6 + 203) > 0.96) {
-          anomalies.push({ ...point, z: 50 })
+          anomalies.push({ ...point, z: 22 })
         } else {
           normal.push(point)
         }
@@ -482,7 +482,7 @@ export function DiameterVsSSCChart({
               }}
             />
             
-            <ZAxis dataKey="z" range={[15, 80]} />
+            <ZAxis dataKey="z" range={[8, 40]} />
             
             <Tooltip
               contentStyle={{

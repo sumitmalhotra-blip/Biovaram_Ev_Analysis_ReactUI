@@ -182,7 +182,7 @@ export interface SecondaryNTAAnalysisState {
   error: string | null
 }
 
-// FCS Analysis Settings (matches Streamlit app.py)
+// FCS Analysis Settings
 export interface FCSAnalysisSettings {
   laserWavelength: number
   particleRI: number
@@ -210,7 +210,7 @@ export interface FCSAnalysisSettings {
 }
 
 // Chart Color Scheme (TASK-018: Consistent color scheme)
-// Client requested: Purple for normal, Red for anomalies (matches Streamlit)
+// Client requested: Purple for normal, Red for anomalies
 export const CHART_COLORS = {
   primary: "#7c3aed",        // Purple - normal data points
   secondary: "#a855f7",      // Light purple - secondary data
@@ -238,7 +238,7 @@ export interface CrossComparisonSettings {
   maxSizeFilter: number
 }
 
-// NTA Analysis Settings (matches Streamlit app.py)
+// NTA Analysis Settings
 export interface NTAAnalysisSettings {
   applyTemperatureCorrection: boolean
   measurementTemp: number

@@ -50,9 +50,9 @@ export function ScatterPlotChart({
         const y = x * (0.8 + seededRandom(i * 3 + 1) * 0.4) + seededRandom(i * 3 + 2) * 200
 
         if (seededRandom(i * 3 + 3) > 0.95) {
-          anomalies.push({ x, y, z: 50, index: i })
+          anomalies.push({ x, y, z: 20, index: i })
         } else {
-          normal.push({ x, y, z: 20, index: i })
+          normal.push({ x, y, z: 8, index: i })
         }
       }
 
@@ -69,12 +69,12 @@ export function ScatterPlotChart({
       const dataPoint = {
         x: point.x,
         y: point.y,
-        z: 20,
+        z: 8,
         index: pointIndex,
       }
 
       if (highlightAnomalies && anomalySet.has(pointIndex)) {
-        anomalies.push({ ...dataPoint, z: 50 })
+        anomalies.push({ ...dataPoint, z: 20 })
       } else {
         normal.push(dataPoint)
       }
@@ -125,7 +125,7 @@ export function ScatterPlotChart({
               tick={{ fontSize: 11 }}
               label={{ value: yLabel, angle: -90, position: "insideLeft", fill: "#64748b", fontSize: 12 }}
             />
-            <ZAxis dataKey="z" range={[20, 100]} />
+            <ZAxis dataKey="z" range={[8, 40]} />
             <Tooltip
               contentStyle={{
                 backgroundColor: "#1e293b",

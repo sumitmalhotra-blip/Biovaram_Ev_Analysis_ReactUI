@@ -214,7 +214,7 @@ export function CorrelationScatterChart({
                 stroke="#64748b"
                 tick={{ fontSize: 11 }}
               />
-              <ZAxis range={[60, 200]} />
+              <ZAxis range={[25, 60]} />
               <Tooltip content={<CustomTooltip />} />
               <Legend
                 verticalAlign="top"

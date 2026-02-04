@@ -1,10 +1,13 @@
 # BioVaram EV Analysis Platform
 ## Complete Technical Guide: From File Upload to Final Analysis
 
-**Document Version:** 1.0  
+**Document Version:** 2.0  
 **Created:** January 29, 2026  
+**Last Updated:** February 3, 2026  
 **Author:** BioVaram Development Team  
 **Purpose:** Technical documentation explaining how the platform processes flow cytometry data and converts it to meaningful particle size analysis
+
+> ⚠️ **NOTE ON EXAMPLES:** Values shown in examples (e.g., 914,326 events, D50=127nm) are from sample files used during development. Your actual values will vary based on the files you upload. The examples use `PC3 EXO1.fcs` as a reference sample.
 
 ---
 
@@ -91,7 +94,10 @@ Flow cytometry instruments measure **light scatter intensity** - how much light 
 |-----------|---------------|---------|
 | **FCS Parser** | `backend/src/parsers/fcs_parser.py` | Read binary FCS files |
 | **NTA Parser** | `backend/src/parsers/nta_parser.py` | Read NTA text files |
-| **Mie Calculator** | `backend/src/utils/mie_calculator.py` | Convert scatter to size |
+| **Mie Calculator** | `backend/src/physics/mie_scatter.py` | Core Mie theory calculations |
+| **MultiSolution Mie** | `backend/src/physics/mie_scatter.py` | Dual-wavelength disambiguation |
+| **Bead Calibration** | `backend/src/physics/bead_calibration.py` | Calibration bead processing |
+| **Size Config** | `backend/src/physics/size_config.py` | Size categories (Small/Medium/Large) |
 | **Sample Router** | `backend/src/api/routers/samples.py` | API endpoints for samples |
 | **Upload Router** | `backend/src/api/routers/upload.py` | File upload handling |
 
@@ -221,13 +227,15 @@ def parse_fcs_file(file_path: str) -> dict:
 
 ### 3.2 Example: PC3 EXO1.fcs File
 
+> 📋 **EXAMPLE:** The values below are from `PC3 EXO1.fcs`, a pure exosome sample. Your files will have different values depending on your sample type and instrument settings.
+
 When we parse the PC3 EXO1.fcs file, we get:
 
-| Property | Value |
-|----------|-------|
-| **Total Events** | 914,326 particles |
-| **Channels** | 26 |
-| **Key Channels** | SSC-H, SSC-A, VSSC1-Width, FSC-H, FL1-H, etc. |
+| Property | Example Value | Notes |
+|----------|---------------|-------|
+| **Total Events** | 914,326 particles | *Dynamically read from your file* |
+| **Channels** | 26 | *Varies by instrument configuration* |
+| **Key Channels** | SSC-H, SSC-A, VSSC1-H, FSC-H, FL1-H | *Auto-detected from file metadata* |
 
 **Channel List:**
 ```
@@ -374,12 +382,11 @@ def calculate_scatter_cross_section(diameter_nm: float,
     # Q_back = backscattering efficiency ← This is SSC!
     # g = asymmetry factor
     
-    result = miepython.efficiencies(
-        m,                    # Relative refractive index
-        diameter_nm,          # Particle diameter
-        wavelength_nm,        # Laser wavelength
-        n_env=n_medium        # Medium refractive index
-    )
+    # miepython v3.0.2 API (Feb 2026 - BUG-001 fixed)
+    # single_sphere(m, x, n_pole) returns (qext, qsca, qback, g)
+    x = (np.pi * diameter_nm) / wavelength_nm  # Size parameter
+    qext, qsca, qback, g = miepython.single_sphere(m, x, 0)
+    # n_pole=0 means auto-calculate required multipole terms
     
     Q_back = result[2]  # Backscattering efficiency
     
@@ -455,6 +462,8 @@ This is why we need the multi-solution approach.
 ---
 
 ## 6. The Multi-Solution Approach
+
+> 💡 **UPDATE (Feb 2026):** Violet (405nm) is now the **PRIMARY** sizing channel. Physics rationale: Rayleigh scattering ∝ λ⁻⁴, so shorter wavelength scatters MORE for small particles (EVs 30-150nm). Blue (488nm) is used for disambiguation.
 
 ### 6.1 Why Single-Solution Fails
 
@@ -546,13 +555,15 @@ def multi_solution_sizing(ssc_blue: float,
 
 ### 6.3 Real Example: Event #630636
 
+> 📋 **EXAMPLE DATA:** This is from one specific event in `PC3 EXO1.fcs`. Each particle in your file will have different values - the system processes all events automatically.
+
 From PC3 EXO1.fcs file:
 
-| Measurement | Value |
-|-------------|-------|
-| Blue SSC (488nm) | 1,307.4 |
-| Violet SSC (405nm) | 677.3 |
-| Measured Ratio | 0.5181 |
+| Measurement | Example Value | Notes |
+|-------------|---------------|-------|
+| Blue SSC (488nm) | 1,307.4 | *Raw detector reading* |
+| Violet SSC (405nm) | 677.3 | *Raw detector reading* |
+| Measured Ratio (V/B) | 0.5181 | *Calculated automatically* |
 
 **Candidate sizes found (within 15% of Blue SSC):**
 
@@ -745,9 +756,12 @@ def calculate_statistics(sizes: np.ndarray) -> dict:
 | **D10** | 75 nm | 10% are smaller than this |
 | **D90** | 195 nm | 90% are smaller than this |
 
-**Category Breakdown:**
+**Category Breakdown (Example):**
 
-| Category | Size Range | Count | Percentage |
+> ⚠️ These percentages are sample-specific. CD9/CD81 marker samples may show different distributions.
+
+| Category | Size Range | Example Count | Example % |
+|----------|------------|---------------|-----------|
 |----------|------------|-------|------------|
 | Small | < 50 nm | 45,716 | 5% |
 | Medium | 50-200 nm | 640,028 | 70% |
@@ -1256,7 +1270,10 @@ export const useStore = create<AppState>((set) => ({
 |-----------|------|-------------|
 | FCS Parser | `backend/src/parsers/fcs_parser.py` | Parse FCS binary files |
 | NTA Parser | `backend/src/parsers/nta_parser.py` | Parse NTA text files |
-| Mie Calculator | `backend/src/utils/mie_calculator.py` | Mie theory calculations |
+| Mie Calculator | `backend/src/physics/mie_scatter.py` | Mie theory calculations |
+| MultiSolution Mie | `backend/src/physics/mie_scatter.py` | `MultiSolutionMieCalculator` class |
+| Bead Calibration | `backend/src/physics/bead_calibration.py` | Calibration curve fitting |
+| Size Config | `backend/src/physics/size_config.py` | Size category definitions |
 | API Routes | `backend/src/api/routers/` | FastAPI endpoints |
 | UI Components | `components/` | React components |
 | State Store | `lib/store.ts` | Zustand state management |
@@ -1277,6 +1294,9 @@ export const useStore = create<AppState>((set) => ({
 | **D50** | Median size - 50% of particles are smaller than this value |
 | **D10/D90** | 10th/90th percentile - defines the size range |
 | **NTA** | Nanoparticle Tracking Analysis - alternative sizing method |
+| **Calibration Beads** | Known-size particles (polystyrene/silica) for instrument calibration |
+| **VSSC** | Violet Side Scatter - SSC at 405nm wavelength |
+| **BSSC** | Blue Side Scatter - SSC at 488nm wavelength |
 
 ---
 
@@ -1285,6 +1305,7 @@ export const useStore = create<AppState>((set) => ({
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | Jan 29, 2026 | BioVaram Team | Initial creation |
+| 2.0 | Feb 3, 2026 | BioVaram Team | Updated file paths, added example markers, calibration notes, violet primary channel |
 
 ---
 

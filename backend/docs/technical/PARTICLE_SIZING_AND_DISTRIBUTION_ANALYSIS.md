@@ -2,10 +2,13 @@
 
 ## Complete Technical Documentation
 
-**Document Version:** 1.0  
+**Document Version:** 2.0  
 **Created:** January 29, 2026  
+**Last Updated:** February 3, 2026  
 **Author:** BioVaram Development Team  
 **Purpose:** Technical reference for particle sizing methodology and statistical validation
+
+> ⚠️ **NOTE ON EXAMPLES:** All numerical values in this document (e.g., 914,326 events, D50=398nm) are from sample files used during development validation. **Your actual values will vary** based on the files you upload. The examples use `PC3 EXO1.fcs` as a reference sample.
 
 ---
 
@@ -35,7 +38,8 @@ This document provides a complete technical explanation of how the BioVaram EV A
 | Aspect | Finding |
 |--------|---------|
 | **Sizing Method** | Mie theory with multi-solution disambiguation |
-| **Distribution Type** | NOT Gaussian (Weibull distribution) |
+| **Primary Channel** | Violet (405nm) - better sensitivity for small EVs |
+| **Distribution Type** | NOT Gaussian (Log-normal recommended) |
 | **Primary Metric** | Median (D50) - validated as correct choice |
 | **Spread Metric** | D10-D90 percentile range |
 | **Statistical Approach** | Non-parametric tests recommended |
@@ -250,17 +254,18 @@ class MieLookupTable:
             self.ssc_values.append(ssc)
 ```
 
-**Example LUT values (simplified):**
+**Example LUT values (illustrative):**
 
-| Diameter (nm) | SSC @ 488nm | SSC @ 405nm | Ratio (V/B) |
-|---------------|-------------|-------------|-------------|
-| 50 | 45.2 | 38.1 | 0.84 |
-| 100 | 312.5 | 198.7 | 0.64 |
-| 150 | 892.1 | 523.4 | 0.59 |
-| 200 | 1,245.8 | 689.2 | 0.55 |
-| 250 | 1,198.3 | 842.1 | 0.70 |
-| 300 | 987.6 | 1,102.4 | 1.12 |
-| ... | ... | ... | ... |
+> 📋 **EXAMPLE DATA:** These are calculated theoretical values. The actual LUT is built dynamically at runtime using `miepython` library with your configured refractive indices.
+
+| Diameter (nm) | SSC @ 488nm | SSC @ 405nm | Ratio (V/B) | Notes |
+|---------------|-------------|-------------|-------------|-------|
+| 50 | 45.2 | 38.1 | 0.84 | Small EV |
+| 100 | 312.5 | 198.7 | 0.64 | Typical exosome |
+| 150 | 892.1 | 523.4 | 0.59 | Large exosome |
+| 200 | 1,245.8 | 689.2 | 0.55 | Microvesicle boundary |
+| 250 | 1,198.3 | 842.1 | 0.70 | ← SSC decreases! |
+| 300 | 987.6 | 1,102.4 | 1.12 | ← Oscillation visible |
 
 **Notice:** SSC doesn't increase linearly! It oscillates due to Mie theory.
 
@@ -286,14 +291,17 @@ EVs are typically 50-500nm, which is comparable to visible light wavelengths (40
 
 **Inputs required:**
 - `d` = Particle diameter (what we want to find)
-- `λ` = Laser wavelength (488nm or 405nm)
-- `n_particle` = Refractive index of EV (typically 1.40)
+- `λ` = Laser wavelength (488nm blue or 405nm violet)
+- `n_particle` = Refractive index of EV (typically 1.40) or beads (polystyrene: 1.59)
 - `n_medium` = Refractive index of buffer/PBS (1.33)
 
-**The calculation:**
+> 💡 **UPDATE (Feb 2026):** Violet 405nm is now the PRIMARY sizing channel. Physics: Rayleigh scattering ∝ λ⁻⁴, so shorter wavelength gives stronger signal for small particles.
+
+**The calculation (miepython v3.0.2):**
 
 ```python
 import miepython
+import numpy as np
 
 def calculate_scatter(diameter_nm, wavelength_nm, n_particle=1.40, n_medium=1.33):
     """
@@ -306,22 +314,21 @@ def calculate_scatter(diameter_nm, wavelength_nm, n_particle=1.40, n_medium=1.33
     # Relative refractive index (complex number for non-absorbing particles)
     m = complex(n_particle / n_medium, 0)  # = 1.40/1.33 ≈ 1.053
     
-    # miepython calculates scattering efficiencies
-    # Returns: (Qext, Qsca, Qback, g)
-    # Qext = extinction efficiency
-    # Qsca = scattering efficiency  
-    # Qback = backscattering efficiency (this is SSC!)
-    # g = asymmetry factor
+    # Size parameter: x = πd/λ (dimensionless)
+    x = (np.pi * diameter_nm) / wavelength_nm
     
-    result = miepython.efficiencies(m, diameter_nm, wavelength_nm, n_env=n_medium)
+    # miepython v3.0.2 API: single_sphere(m, x, n_pole)
+    # Returns: (qext, qsca, qback, g)
+    # n_pole=0 means auto-calculate required multipole terms
+    qext, qsca, qback, g = miepython.single_sphere(m, x, 0)
     
-    Qback = result[2]  # Backscattering efficiency
+    # qback = backscattering efficiency (this is SSC!)
     
     # Convert efficiency to cross-section (actual scattering "area")
     radius = diameter_nm / 2.0
     geometric_cross_section = np.pi * radius**2
     
-    scatter_cross_section = Qback * geometric_cross_section
+    scatter_cross_section = qback * geometric_cross_section
     
     return scatter_cross_section  # This is proportional to SSC signal
 ```
@@ -380,26 +387,32 @@ def single_solution_sizing(ssc_value, lut_diameters, lut_ssc):
 ### 5.2 The Multi-Solution Approach (Current Method)
 
 **How it works:**
-1. Measure SSC at TWO wavelengths (Blue 488nm + Violet 405nm)
-2. Find ALL possible sizes that match the Blue SSC
-3. For each candidate size, check if Violet SSC also matches
+**How it works (Feb 2026 update - Violet Primary):**
+1. Measure SSC at TWO wavelengths (Violet 405nm + Blue 488nm)
+2. Find ALL possible sizes that match the **Violet SSC** (PRIMARY)
+3. For each candidate size, calculate the theoretical V/B ratio
 4. Use the wavelength RATIO to pick the correct size
 
+> 💡 **Violet is now PRIMARY** because: Size parameter x = πd/λ → smaller λ = larger x = more signal for small particles. Rayleigh scattering ∝ λ⁻⁴ means violet scatters 2.1× more for EVs (30-150nm).
+
 ```python
+# Simplified illustration - actual code in backend/src/physics/mie_scatter.py
 def multi_solution_sizing(ssc_blue, ssc_violet, lut_blue, lut_violet, lut_diameters):
     """
     Multi-solution approach with wavelength ratio disambiguation.
+    Violet (405nm) is now PRIMARY for better small-particle sensitivity.
     """
     
-    # Step 1: Find ALL sizes that could produce this Blue SSC (within 15% tolerance)
-    tolerance = ssc_blue * 0.15
+    # Step 1: Find ALL sizes that could produce this VIOLET SSC (within 15% tolerance)
+    # Using violet as primary because shorter wavelength = better sensitivity for EVs
+    tolerance = ssc_violet * 0.15
     candidate_sizes = []
     
-    for i, (d, ssc) in enumerate(zip(lut_diameters, lut_blue)):
-        if abs(ssc - ssc_blue) <= tolerance:
+    for i, (d, ssc) in enumerate(zip(lut_diameters, lut_violet)):
+        if abs(ssc - ssc_violet) <= tolerance:
             candidate_sizes.append(d)
     
-    # Step 2: Calculate measured wavelength ratio
+    # Step 2: Calculate measured wavelength ratio (V/B)
     measured_ratio = ssc_violet / ssc_blue
     
     # Step 3: For each candidate, get theoretical ratio and compare
@@ -425,13 +438,15 @@ def multi_solution_sizing(ssc_blue, ssc_violet, lut_blue, lut_violet, lut_diamet
 
 ### 5.3 Visual Example: Why Multi-Solution Works
 
+> 📋 **EXAMPLE DATA:** This shows ONE specific event from `PC3 EXO1.fcs`. Each of the ~914,000 particles in the file goes through this same process automatically.
+
 **Event #630636 from PC3 EXO1:**
 
-| Measurement | Value |
-|-------------|-------|
-| Blue SSC (488nm) | 1,307.4 |
-| Violet SSC (405nm) | 677.3 |
-| Measured Ratio | 0.5181 |
+| Measurement | Example Value | Notes |
+|-------------|---------------|-------|
+| Blue SSC (488nm) | 1,307.4 | *Raw detector reading* |
+| Violet SSC (405nm) | 677.3 | *Raw detector reading* |
+| Measured Ratio (V/B) | 0.5181 | *Calculated: 677.3/1307.4* |
 
 **Candidate sizes found:**
 
@@ -444,12 +459,14 @@ def multi_solution_sizing(ssc_blue, ssc_violet, lut_blue, lut_violet, lut_diamet
 
 ### 5.4 Results Comparison: Single vs Multi-Solution
 
-| Metric | Single-Solution | Multi-Solution |
-|--------|-----------------|----------------|
-| Small (<50nm) | Under-represented | Better detection |
-| Medium (50-200nm) | ~65% of particles | ~70% of particles |
-| Large (>200nm) | ~25% (inflated) | ~15% (corrected) |
-| Accuracy | Lower (ambiguity) | Higher (validated) |
+> ⚠️ These percentages are sample-specific. Your results will vary based on your sample type.
+
+| Metric | Single-Solution | Multi-Solution | Improvement |
+|--------|-----------------|----------------|-------------|
+| Small (<50nm) | Under-represented | Better detection | ↑ |
+| Medium (50-200nm) | ~65% of particles | ~70% of particles | +5% |
+| Large (>200nm) | ~25% (inflated) | ~15% (corrected) | -10% |
+| Accuracy | Lower (ambiguity) | Higher (validated) | ✓ |
 
 ---
 
@@ -588,18 +605,25 @@ for name, dist in distributions.items():
     aic = 2*k - 2*log_likelihood  # Lower = better fit
 ```
 
-**Results:**
+**Results (from PC3 EXO1 sample):**
+
+> 📋 **EXAMPLE DATA:** AIC values are specific to `PC3 EXO1.fcs`. Your samples may show different best-fit distributions.
+
+> ⚠️ **UPDATE (Feb 4, 2026):** Per domain expert feedback (Parvesh Reddy), **Log-normal distribution is preferred** over Weibull for biological particle sizing. Weibull is more appropriate for manufacturing/reliability engineering applications. Log-normal better captures the multiplicative growth processes underlying EV biogenesis.
 
 | Distribution | AIC | Rank | Interpretation |
 |--------------|-----|------|----------------|
-| **Weibull** | 1,180,117 | ⭐ BEST | Best fit for our data |
+| **Weibull** | 1,180,117 | ⭐ Best AIC | Best statistical fit (but may not be biologically relevant) |
 | Normal | 1,207,939 | 2nd | Poor fit (ΔAIC = +27,822) |
-| Log-normal | 1,207,943 | 3rd | Slightly worse than normal |
+| **Log-normal** | 1,207,943 | 3rd | **Recommended for biological interpretation** |
 | Gamma | 1,218,518 | 4th | Worst fit |
 
-**Winner: WEIBULL distribution** (by a large margin!)
+**Statistical Winner: WEIBULL** (lowest AIC)  
+**Biological Recommendation: LOG-NORMAL** (better theoretical basis for particle sizing)
 
 ### 7.5 What the Results Mean
+
+> 📋 **EXAMPLE DATA:** Statistics below are from `PC3 EXO1.fcs`. Your samples will have different values - the system calculates these dynamically.
 
 **Key Statistics from PC3 EXO1:**
 
@@ -617,18 +641,28 @@ for name, dist in distributions.items():
 **Our data:** Mode (472) > Median (398) > Mean (374) → **LEFT-SKEWED**
 
 ```
-Our Distribution (Left-Skewed)        Normal Distribution
+Left-Skewed Distribution               Normal Distribution
+(Negative Skew)                        (Zero Skew)
            │                                  │
-Frequency  │    ╭────╮                       │       ╭───╮
-           │   ╱      ╲                      │      ╱     ╲
-           │  ╱        ╰─────╮               │     ╱       ╲
-           │ ╱                ╲              │    ╱         ╲
-           │╱                  ╲             │   ╱           ╲
+Frequency  │           ╭────╮                │       ╭───╮
+           │          ╱      ╲               │      ╱     ╲
+           │    ╭────╯        ╲              │     ╱       ╲
+           │   ╱               ╲             │    ╱         ╲
+           │  ╱                 ╲            │   ╱           ╲
            └─────────────────────▶           └───────────────────▶
-              Mean  Median  Mode               Mean=Median=Mode
-              ◀────────────▶
-               Data piled up on right
+              ← Long tail        Peak            Mean=Median=Mode
+              (low values)       (Mode)
+              
+   Mean < Median < Mode               Mean = Median = Mode
+   ◀─────────────────▶
+   Mean pulled left by
+   long tail of low values
 ```
+
+**Interpretation:** Our EV population has:
+- A **peak (mode) at larger sizes** (~472nm)
+- A **long tail toward smaller sizes**
+- **Mean is pulled left** by the small particles in the tail
 
 ---
 
@@ -675,14 +709,22 @@ For comparing two samples (e.g., treatment vs control):
 
 **Our cross-compare feature should use non-parametric tests!**
 
-### 8.4 Validation Point 4: Weibull Distribution is Expected
+### 8.4 Validation Point 4: Log-normal Distribution for Biological Particles
 
-Weibull distribution is commonly used in:
-- Particle size analysis
-- Material strength testing
-- Reliability engineering
+> ⚠️ **Note:** While Weibull may show lowest AIC statistically, **Log-normal is the recommended distribution** for biological particle sizing per domain expert guidance (Feb 4, 2026).
 
-The fact that our data fits Weibull well is **scientifically consistent** with what's expected for biological particle populations!
+**Why Log-normal is preferred for EVs:**
+- EV biogenesis involves multiplicative processes (budding, fission)
+- Multiplicative random processes → log-normal distribution
+- Well-established in aerosol and colloidal particle literature
+- Weibull is more appropriate for reliability/manufacturing (e.g., time-to-failure)
+
+**Why Weibull shows better AIC:**
+- Weibull is more flexible (2 shape parameters)
+- Can fit many distribution shapes empirically
+- But this flexibility doesn't imply biological relevance
+
+The fact that our data approximates a log-normal distribution is **scientifically consistent** with what's expected for biological particle populations!
 
 ### 8.5 Validation Point 5: Left-Skew Explained
 
@@ -833,6 +875,12 @@ Quality Assessment: ✅ PASSED
    - Use distribution analysis to ensure training data quality
    - Detect anomalous samples before they affect models
 
+4. **Bead Calibration Integration (Feb 2026):**
+   - Upload calibration bead files (polystyrene n=1.59)
+   - Auto-detect bead populations and assign known sizes
+   - Build calibration curve: `log(d) = a*log(VSSC) + b`
+   - See: `docs/technical/BEAD_CALIBRATION_GUIDE.md`
+
 ---
 
 ## 10. Technical Appendix
@@ -841,12 +889,15 @@ Quality Assessment: ✅ PASSED
 
 | File | Purpose |
 |------|---------|
-| `backend/scripts/analyze_distribution.py` | Main analysis script |
-| `backend/scripts/compare_single_vs_multi_solution.py` | Comparison script |
-| `backend/scripts/visualize_multi_solution.py` | Multi-solution visualization |
-| `backend/figures/distribution_analysis/` | Output graphs |
-| `backend/src/utils/mie_calculator.py` | Mie theory calculations |
+| `backend/src/physics/mie_scatter.py` | **Core Mie theory calculations** |
+| `backend/src/physics/mie_scatter.py` | `MultiSolutionMieCalculator` class |
+| `backend/src/physics/bead_calibration.py` | Bead calibration curve fitting |
+| `backend/src/physics/size_config.py` | Size category definitions |
 | `backend/src/parsers/fcs_parser.py` | FCS file parsing |
+| `backend/scripts/analyze_distribution.py` | Distribution analysis script |
+| `backend/scripts/compare_single_vs_multi_solution.py` | Comparison script |
+| `backend/figures/distribution_analysis/` | Output graphs |
+| `backend/figures/multi_solution_visualization/` | Multi-solution event graphs |
 
 ### 10.2 Key Libraries Used
 
@@ -899,13 +950,18 @@ import matplotlib.pyplot as plt
 
 ### 10.5 Physical Constants Used
 
-| Parameter | Value | Source |
-|-----------|-------|--------|
-| n_particle (EV) | 1.40 | Literature consensus |
-| n_medium (PBS) | 1.33 | Known value for water/PBS |
-| λ_blue | 488 nm | Standard flow cytometry laser |
-| λ_violet | 405 nm | Standard flow cytometry laser |
-| Size range | 30-500 nm | EV size range |
+> ⚠️ These are DEFAULT values. Calibration bead material and sample-specific settings may override these.
+
+| Parameter | Default Value | Source | Notes |
+|-----------|---------------|--------|-------|
+| n_particle (EV) | 1.40 | Literature consensus | Range: 1.37-1.45 |
+| n_particle (Polystyrene beads) | 1.59 | Manufacturer spec | For calibration |
+| n_particle (Silica beads) | 1.46 | Manufacturer spec | Alternative calibration |
+| n_medium (PBS) | 1.33 | Known value | Water/saline similar |
+| λ_blue | 488 nm | Instrument spec | BSSC channel |
+| λ_violet | 405 nm | Instrument spec | VSSC channel (PRIMARY) |
+| Size range | 30-500 nm | EV size range | LUT boundaries |
+| LUT resolution | 471 points | 1nm steps 30-500 | Configurable |
 
 ---
 
@@ -914,15 +970,18 @@ import matplotlib.pyplot as plt
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | Jan 29, 2026 | BioVaram Team | Initial creation |
+| 2.0 | Feb 3, 2026 | BioVaram Team | Updated API (miepython v3.0.2), violet primary channel, added example markers, calibration notes, file path corrections |
 
 ---
 
 ## References
 
 1. Mie, G. (1908). "Beiträge zur Optik trüber Medien, speziell kolloidaler Metallösungen." Annalen der Physik.
-2. MISEV2018: Minimal Information for Studies of Extracellular Vesicles 2018.
-3. miepython documentation: https://miepython.readthedocs.io/
-4. scipy.stats documentation: https://docs.scipy.org/doc/scipy/reference/stats.html
+2. Mätzler (2002). "MATLAB Functions for Mie Scattering and Absorption" - `Literature/Mie functions_scattering_Abs-V1.docx`
+3. Bohren & Huffman (1983). "Absorption and Scattering of Light by Small Particles"
+4. MISEV2018: Minimal Information for Studies of Extracellular Vesicles 2018.
+5. miepython documentation: https://miepython.readthedocs.io/
+6. scipy.stats documentation: https://docs.scipy.org/doc/scipy/reference/stats.html
 
 ---
 

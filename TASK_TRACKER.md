@@ -1,6 +1,6 @@
 # BioVaram EV Analysis Platform - Master Task Tracker
 ## Created: January 21, 2026
-## Last Updated: February 2, 2026
+## Last Updated: February 4, 2026
 
 ---
 
@@ -14,10 +14,12 @@
 | **Compliance Tasks (COMP-xxx)** | 0 | 0 | 7 | 7 |
 | **Enterprise Features (ENT-xxx)** | 0 | 0 | 4 | 4 |
 | **TEM Image Analysis (TEM-xxx)** | 0 | 2 | 4 | 6 |
-| **UI/UX Improvements (UI-xxx)** | 3 | 2 | 3 | 8 |
-| **Infrastructure** | 2 | 1 | 2 | 5 |
+| **UI/UX Improvements (UI-xxx)** | 4 | 0 | 4 | 8 |
+| **Infrastructure** | 2 | 0 | 2 | 4 |
+| **Documentation (DOC-xxx)** | 2 | 0 | 0 | 2 |
+| **Statistics (STAT-xxx)** | 0 | 1 | 0 | 1 |
 
-**Overall Progress: ~55% Complete**
+**Overall Progress: ~58% Complete**
 
 ---
 
@@ -339,19 +341,34 @@
 | Field | Value |
 |-------|-------|
 | **Priority** | 🟡 MEDIUM |
-| **Status** | 🔴 Not Started |
+| **Status** | ✅ COMPLETE |
+| **Completed Date** | February 4, 2026 |
 | **Source** | Jan 28, 2026 Meeting - Surya's feedback |
 | **Description** | Reduce scatter plot dot size for better selection |
 
 **Surya's Quote:** "Selecting few dots was making it difficult because of probably because of size of the dots... keep in mind that also"
 
 **Implementation:**
-- [ ] Reduce dot size in scatter plots
-- [ ] Change from circles to smaller dots
-- [ ] Consider using different symbols for different categories
-- [ ] Ensure dots are still visible but not overlapping
+- [x] Reduce dot size in scatter plots (ZAxis range: [20,100] → [8,40])
+- [x] Reduce SVG circle radii (r=3,4 → r=2,3)
+- [x] Ensure zoom/selection controls available on all charts
+- [x] All scatter charts use Plotly/Recharts with consistent styling
 
-**Estimated Effort:** 1 hour
+**Files Modified:**
+- `components/flow-cytometry/charts/scatter-plot-chart.tsx` - ZAxis [8,40], z values 8/20
+- `components/flow-cytometry/charts/scatter-plot-with-selection.tsx` - ZAxis [8,40], z values 8/20/25
+- `components/flow-cytometry/charts/diameter-vs-ssc-chart.tsx` - ZAxis [8,40], z values 8/22/25
+- `components/flow-cytometry/charts/interactive-scatter-chart.tsx` - SVG r=2/3 (was 3/4)
+- `components/cross-compare/charts/correlation-scatter-chart.tsx` - ZAxis [25,60]
+- `components/nta/position-analysis.tsx` - ZAxis [10,50]
+
+**Zoom/Selection Controls Available:**
+- ✅ Zoom In/Out buttons
+- ✅ Reset view button  
+- ✅ Pan mode (drag to pan)
+- ✅ Selection mode (drag to select region)
+- ✅ Zoom to selection
+- ✅ Save gate functionality
 
 ---
 
@@ -359,17 +376,28 @@
 | Field | Value |
 |-------|-------|
 | **Priority** | 🟡 MEDIUM |
-| **Status** | 🔴 Not Started |
+| **Status** | ✅ COMPLETE |
+| **Completed Date** | February 3, 2026 |
 | **Source** | Jan 22, 2026 Meeting |
 | **Description** | Clean up old Streamlit code from backend |
 
 **Implementation:**
-- [ ] Identify all Streamlit-related files
-- [ ] Remove deprecated Streamlit code
-- [ ] Update imports and references
-- [ ] Test that backend still works
+- [x] Identify all Streamlit-related files
+- [x] Remove deprecated Streamlit code (`integration/api_bridge.py` - 484 lines)
+- [x] Update imports and references (5 files updated)
+- [x] Remove Streamlit section from `requirements.txt`
+- [x] Test that backend still works
 
-**Estimated Effort:** 2 hours
+**Files Modified:**
+- Removed: `backend/integration/api_bridge.py` (484 lines - Streamlit bridge)
+- Removed: `backend/integration/` (empty folder)
+- Updated: `lib/store.ts` (removed 3 Streamlit comments)
+- Updated: `components/sidebar.tsx` (updated comment)
+- Updated: `components/flow-cytometry/analysis-settings-panel.tsx` (updated comment)
+- Updated: `backend/requirements.txt` (removed Streamlit section)
+- Updated: `backend/src/visualization/interactive_plots.py` (updated comment)
+- Updated: `backend/src/visualization/cross_comparison.py` (updated comment)
+- Updated: `backend/tests/test_e2e_system.py` (changed to React frontend URL)
 
 ---
 
@@ -382,6 +410,123 @@
 | **Source** | Jan 22, 2026 Meeting |
 | **Description** | Create documentation for new team members |
 | **Deliverables** | ONBOARDING_GUIDE.md (731 lines), SETUP.md (395 lines) |
+
+---
+
+## 🆕 NEW TASKS FROM FEB 4, 2026 (PARVESH FEEDBACK)
+
+### UI-002: Cluster Visualization for Large Datasets (FEB 4 MEETING)
+| Field | Value |
+|-------|-------|
+| **Priority** | 🔴 HIGH |
+| **Status** | 🔴 Not Started |
+| **Source** | Feb 4, 2026 - Parvesh Reddy feedback |
+| **Description** | Show event clusters as bubbles that expand on zoom instead of rendering all 10k+ points |
+
+**Parvesh's Quote:** "Instead can we consider showing clusters of events as large circles zoomed out. and as we zoom into those clusters they break up into smaller clusters or individual events."
+
+**Problem Statement:**
+- NanoFACS analysis has 900k-1M events
+- Currently sampling 10k events for display (still laggy)
+- Rendering 10k+ DOM elements causes UI freeze
+
+**Proposed Solutions (try in order):**
+1. **Clustered bubbles with zoom expansion:**
+   - Calculate k-means clusters on backend
+   - Show cluster centroids as sized circles (size = event count)
+   - On zoom in, split clusters into sub-clusters
+   - On deep zoom, show individual events
+   
+2. **Pop-out cluster view:**
+   - Click on cluster bubble → opens new mini-graph
+   - Mini-graph shows only that cluster's events
+   - Avoids rendering all points at once
+
+3. **Lazy loading with virtualization:**
+   - Load visible viewport only
+   - Stream additional data on pan/zoom
+
+**Implementation:**
+- [ ] Backend: Add clustering endpoint (k-means grouping by position)
+- [ ] Frontend: Hierarchical zoom component
+- [ ] State: Track zoom level → cluster granularity mapping
+- [ ] Test with 900k events dataset
+
+**Estimated Effort:** 1-2 weeks
+
+---
+
+### STAT-001: Replace Weibull with Log-normal Distribution (FEB 4 MEETING)
+| Field | Value |
+|-------|-------|
+| **Priority** | 🟡 MEDIUM |
+| **Status** | 🟡 DOCS UPDATED |
+| **Source** | Feb 4, 2026 - Parvesh Reddy feedback |
+| **Description** | Use log-normal instead of Weibull for distribution fitting |
+
+**Parvesh's Quote:** "Can you redo the bestfit? I dont think weibull distribution is relevant anymore. Can you see if a lognormal distribution would work better? Cause from what i understand Weibull is more flexible but is suited for like manufacturing"
+
+**Rationale:**
+- Weibull: suited for reliability engineering, time-to-failure, manufacturing
+- Log-normal: better for biological particles (multiplicative growth processes)
+- EV biogenesis is multiplicative → log-normal is theoretically appropriate
+
+**Changes Made (Feb 4, 2026):**
+- [x] Updated `PARTICLE_SIZING_AND_DISTRIBUTION_ANALYSIS.md`:
+  - Changed key takeaways from "Weibull" to "Log-normal recommended"
+  - Added note explaining biological preference for log-normal
+  - Updated Section 7.5 distribution table
+  - Updated Section 8.4 validation point
+
+**Code Changes Needed:**
+- [ ] Update `statistics_utils.py` to use log-normal as default
+- [ ] Update distribution fitting UI to highlight log-normal
+- [ ] Re-run fit analysis on sample data with log-normal focus
+
+**Estimated Effort:** 2-3 hours
+
+---
+
+### DOC-001: Fix Left-Skewed Distribution Diagram (FEB 4 MEETING)
+| Field | Value |
+|-------|-------|
+| **Priority** | 🟡 MEDIUM |
+| **Status** | ✅ COMPLETE |
+| **Completed Date** | February 4, 2026 |
+| **Source** | Feb 4, 2026 - Parvesh Reddy feedback |
+| **Description** | The ASCII diagram for left-skewed distribution was incorrect |
+
+**Issue:** Diagram showed data "piled up on right" which is actually right-skewed.
+
+**Correct Left-Skewed Distribution:**
+- Long tail on LEFT (toward low values)
+- Mode/peak on RIGHT (high values)
+- Mean < Median < Mode
+- Mean is pulled left by the long tail
+
+**Fix Applied:** Updated ASCII diagram in Section 7.5 of `PARTICLE_SIZING_AND_DISTRIBUTION_ANALYSIS.md`
+
+---
+
+### DOC-002: Add Bead Material/RI Note to Calibration Guide (FEB 4 MEETING)
+| Field | Value |
+|-------|-------|
+| **Priority** | 🟡 MEDIUM |
+| **Status** | ✅ COMPLETE |
+| **Completed Date** | February 4, 2026 |
+| **Source** | Feb 4, 2026 - Parvesh Reddy feedback |
+| **Description** | Add note about different bead materials and their refractive indices |
+
+**Issue:** Calibration guide didn't clearly state that different bead materials have different refractive indices.
+
+**Fix Applied:** Added important note to `BEAD_CALIBRATION_GUIDE.md` with table:
+| Bead Material | Refractive Index |
+|---------------|------------------|
+| Polystyrene | 1.59 (current default) |
+| Silica | 1.46 |
+| PMMA | 1.49 |
+| Melamine | 1.68 |
+| EVs (biological) | ~1.38-1.42 |
 
 ---
 
@@ -889,14 +1034,14 @@ NTA: 1.3E+7 × 500 = 6.6E+9 particles/mL
 | 1 | VAL-008: Gaussian distribution analysis | 4 hrs | 🔴 Surya requested |
 | 2 | VAL-001: NTA vs FCS Cross-Validation Overlay | 4 hrs | 🟡 In Progress |
 | 3 | VAL-010: Plot multi-solution events | 3 hrs | 🔴 Parvesh requested |
-| 4 | UI-001: Scatter plot dot size fix | 1 hr | 🔴 Surya feedback |
+| 4 | ~~UI-001: Scatter plot dot size fix~~ | ~~1 hr~~ | ✅ DONE (Feb 4) |
 
 ### Week 2 (Feb 10-14, 2026) - Features:
 | Priority | Task | Effort | Status |
 |----------|------|--------|--------|
 | 1 | VAL-002: Supplementary Table Generation | 4 hrs | 🔴 |
 | 2 | VAL-009: Error bar estimation | 4 hrs | 🟡 Surya suggested |
-| 3 | INFRA-001: Remove Streamlit code | 2 hrs | 🔴 |
+| 3 | ~~INFRA-001: Remove Streamlit code~~ | ~~2 hrs~~ | ✅ DONE (Feb 3) |
 | 4 | P-001: Fix AI Chat Backend | 4 hrs | 🔴 BROKEN |
 
 ### Week 3 (Feb 17-21, 2026) - Polish:
