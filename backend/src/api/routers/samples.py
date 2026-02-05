@@ -1532,6 +1532,210 @@ async def get_size_bins(
 
 
 # ============================================================================
+# Distribution Analysis Endpoint (VAL-008 + STAT-001)
+# ============================================================================
+
+@router.get("/{sample_id}/distribution-analysis", response_model=dict)
+async def get_distribution_analysis(
+    sample_id: str,
+    fsc_channel: Optional[str] = Query(None, description="FSC channel name override (e.g., 'Channel_3')"),
+    wavelength_nm: float = Query(488.0, ge=200, le=800, description="Laser wavelength for Mie calculations"),
+    n_particle: float = Query(1.40, ge=1.0, le=2.0, description="Particle refractive index"),
+    n_medium: float = Query(1.33, ge=1.0, le=2.0, description="Medium refractive index"),
+    include_overlays: bool = Query(True, description="Include distribution overlay curves for plotting"),
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    Perform comprehensive distribution analysis on particle size data.
+    
+    This endpoint runs multiple normality tests, fits various probability
+    distributions (Normal, Log-normal, Gamma, Weibull), and provides
+    recommendations for biological interpretation.
+    
+    **Key Features:**
+    - Normality testing: Shapiro-Wilk, D'Agostino-Pearson, K-S, Anderson-Darling
+    - Distribution fitting: Normal, Log-normal (recommended), Gamma, Weibull
+    - AIC/BIC model comparison for best statistical fit
+    - Overlay curves for histogram visualization
+    
+    **Response:**
+    ```json
+    {
+        "sample_id": "PC3_EXO1",
+        "n_samples": 5000,
+        "normality_tests": {
+            "tests": {...},
+            "is_normal": false,
+            "conclusion": "Data is NOT normally distributed (0/4 tests passed)"
+        },
+        "distribution_fits": {
+            "fits": {...},
+            "best_fit_aic": "weibull_min",
+            "recommendation": "lognorm",
+            "recommendation_reason": "Log-normal recommended for biological interpretation..."
+        },
+        "summary_statistics": {
+            "mean": 120.5,
+            "median": 95.2,
+            "d10": 45.0,
+            "d50": 95.2,
+            "d90": 210.0,
+            "skewness": 1.2,
+            "skew_interpretation": "right-skewed (positive)"
+        },
+        "conclusion": {
+            "is_normal": false,
+            "recommended_distribution": "lognorm",
+            "use_median": true,
+            "central_tendency": 95.2,
+            "central_tendency_metric": "median (D50)"
+        },
+        "overlays": {...}
+    }
+    ```
+    
+    **Notes:**
+    - EV size distributions are typically NOT normal (usually right-skewed)
+    - Log-normal is biologically appropriate due to multiplicative growth processes
+    - Use median (D50) instead of mean for non-normal distributions
+    - Per MISEV2018 guidelines: report median with D10/D90 for EV sizing
+    """
+    from src.physics.statistics_utils import comprehensive_distribution_analysis
+    from src.physics.mie_theory import MieCalculator
+    from src.parser.fcs_parser import parse_fcs_to_dataframe
+    
+    try:
+        # Get sample from database
+        query = select(Sample).where(Sample.sample_id == sample_id)
+        result = await db.execute(query)
+        sample = result.scalar_one_or_none()
+        
+        if not sample:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Sample not found: {sample_id}"
+            )
+        
+        if not sample.file_path_fcs:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Sample has no FCS data for distribution analysis"
+            )
+        
+        # Parse FCS file
+        import os
+        if not os.path.exists(sample.file_path_fcs):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"FCS file not found: {sample.file_path_fcs}"
+            )
+        
+        parsed_data = parse_fcs_to_dataframe(sample.file_path_fcs)
+        if parsed_data.empty:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No data in FCS file"
+            )
+        
+        # Determine FSC channel
+        available_channels = parsed_data.columns.tolist()
+        
+        if fsc_channel and fsc_channel in available_channels:
+            selected_fsc = fsc_channel
+        else:
+            # Auto-detect FSC channel
+            fsc_candidates = ['FSC-H', 'FSC-A', 'FSC_H', 'FSC_A', 'BFSC-H', 'BFSC-A']
+            selected_fsc = None
+            for candidate in fsc_candidates:
+                if candidate in available_channels:
+                    selected_fsc = candidate
+                    break
+            
+            if not selected_fsc:
+                # Try partial match
+                for ch in available_channels:
+                    if 'FSC' in ch.upper():
+                        selected_fsc = ch
+                        break
+        
+        if not selected_fsc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"No FSC channel found. Available: {available_channels[:10]}"
+            )
+        
+        # Get FSC values and convert to particle sizes
+        import numpy as np
+        fsc_values = parsed_data[selected_fsc].values
+        fsc_values = fsc_values[np.isfinite(fsc_values) & (fsc_values > 0)]
+        
+        if len(fsc_values) < 10:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Insufficient valid FSC data (n={len(fsc_values)}, need ≥10)"
+            )
+        
+        # Initialize Mie calculator and convert to sizes
+        mie = MieCalculator(
+            wavelength_nm=wavelength_nm,
+            n_particle=n_particle,
+            n_medium=n_medium
+        )
+        
+        # Normalize FSC values for Mie conversion
+        fsc_normalized = fsc_values / np.max(fsc_values)
+        
+        # Convert to particle sizes (vectorized operation)
+        sizes_nm = np.array([
+            mie.inverse_solve_size(fsc, max_size=1000)
+            for fsc in fsc_normalized[:min(len(fsc_normalized), 10000)]
+        ])
+        
+        # Filter valid sizes
+        sizes_nm = sizes_nm[np.isfinite(sizes_nm) & (sizes_nm > 0) & (sizes_nm < 1000)]
+        
+        if len(sizes_nm) < 10:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Insufficient valid size data after Mie conversion (n={len(sizes_nm)})"
+            )
+        
+        logger.info(f"📊 Running distribution analysis for {sample_id} with {len(sizes_nm)} particles")
+        
+        # Run comprehensive distribution analysis
+        analysis = comprehensive_distribution_analysis(
+            data=sizes_nm,
+            include_overlays=include_overlays
+        )
+        
+        # Add metadata to response
+        analysis['sample_id'] = sample_id
+        analysis['fsc_channel'] = selected_fsc
+        analysis['mie_parameters'] = {
+            'wavelength_nm': wavelength_nm,
+            'n_particle': n_particle,
+            'n_medium': n_medium
+        }
+        
+        logger.info(
+            f"✅ Distribution analysis complete for {sample_id}: "
+            f"is_normal={analysis['conclusion']['is_normal']}, "
+            f"recommended={analysis['conclusion']['recommended_distribution']}"
+        )
+        
+        return analysis
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"❌ Failed to run distribution analysis for {sample_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Distribution analysis failed: {str(e)}"
+        )
+
+
+# ============================================================================
 # Anomaly Detection Endpoint
 # ============================================================================
 
