@@ -1,6 +1,6 @@
 # BioVaram EV Analysis Platform - Master Task Tracker
 ## Created: January 21, 2026
-## Last Updated: February 4, 2026
+## Last Updated: February 5, 2026
 
 ---
 
@@ -20,6 +20,35 @@
 | **Statistics (STAT-xxx)** | 0 | 1 | 0 | 1 |
 
 **Overall Progress: ~60% Complete**
+
+---
+
+## 🔴 CRITICAL INSIGHTS FROM FEB 4, 2026 MEETING
+
+### Key Updates from Meeting with Surya Pratap Singh:
+
+1. **Bead Calibration - CONFIRMED POLYSTYRENE:**
+   - Surya confirmed calibration beads are polystyrene (n=1.59)
+   - **BLOCKING:** Still need bead kit datasheet with exact nm sizes
+   - Sumit created document with questions → Parvesh to share with Surya
+   - Action: Get datasheet to complete CAL-001
+
+2. **Distribution Analysis - Left-Skewed is EXPECTED:**
+   - Surya: "It is not necessary that all particles will fall into Gaussian distribution only"
+   - Left-skewed/Weibull results are "as expected"
+   - Surya suggested: **Add Poisson distribution** to analysis options
+   - Sumit implementing 4-5 distributions (Gaussian, Weibull, Log-normal, Poisson)
+
+3. **Project Status Assessment:**
+   - Surya: **"FCS is more than 70% done"**
+   - Surya: **"NTA is definitely getting results"**
+   - **On track for May/June rollout target**
+   - Training data (Western blot images) is the shortcoming
+
+4. **TEM Voronoi Tessellation - WORKING:**
+   - Charmi's 16th iteration showing good results
+   - Boundaries being detected correctly
+   - Next step: Viable vs non-viable classification (manual training needed)
 
 ---
 
@@ -260,11 +289,18 @@
 
 **Surya's Quote:** "If there is a proper Gaussian distribution, it could have made our life easy. But I don't see neither of them."
 
+**Feb 4, 2026 Meeting Update:**
+- Surya confirmed: Left-skewed distribution is **EXPECTED** for EV data
+- Surya: "It is not necessary that all particles will fall into Gaussian distribution only"
+- **NEW:** Surya suggested adding **Poisson distribution** to analysis options
+- Sumit implementing 4-5 distributions (Gaussian, Weibull, Log-normal, Poisson, Gamma)
+
 **Why This Matters:**
 | If distribution is... | Implication |
 |----------------------|-------------|
 | **Gaussian (Normal)** | Mean = Median = Mode, standard deviation is meaningful |
-| **Log-normal** | Use geometric mean, log-transform for analysis |
+| **Log-normal** | Use geometric mean, log-transform for analysis (RECOMMENDED for biology) |
+| **Poisson** | Count-based data, useful for particle counting events |
 | **Skewed** | Mean is misleading, use median (D50) |
 | **Multimodal** | Multiple EV populations, need separate analysis |
 
@@ -300,16 +336,18 @@ def test_normality(data: np.ndarray) -> Dict[str, Any]:
 
 **Step 2: Add Distribution Fitting to `statistics_utils.py` (30 min)**
 ```python
-from scipy.stats import norm, lognorm, gamma, weibull_min
+from scipy.stats import norm, lognorm, gamma, weibull_min, poisson
 
 def fit_distributions(data: np.ndarray) -> Dict[str, Any]:
     """Fit multiple distributions and compare via AIC."""
     
+    # Continuous distributions for size data
     distributions = {
         'normal': norm,
         'lognorm': lognorm,     # RECOMMENDED for biological particles
         'gamma': gamma,
-        'weibull': weibull_min
+        'weibull': weibull_min,
+        # Note: Poisson is discrete - use for count data only
     }
     
     results = {}
@@ -906,7 +944,7 @@ qext, qsca, qback, g = miepython.single_sphere(self.m, x, 0)
 | Field | Value |
 |-------|-------|
 | **Priority** | 🔴 CRITICAL |
-| **Status** | 🔄 IN PROGRESS (Feb 2, 2026) |
+| **Status** | 🔄 BLOCKED - Waiting for Bead Datasheet |
 | **Source** | Feb 2, 2026 calibration analysis session |
 | **Description** | Use polystyrene calibration beads to convert arbitrary SSC units to physical diameter |
 
@@ -933,8 +971,14 @@ log(diameter) = 0.3051 × log(VSSC) + 0.8532
 | Medium (50-200nm) | 40.8% | **88.8%** | 85-95% |
 | Large (>200nm) | 59.2% | **5.2%** | <5% |
 
+**Feb 4, 2026 Meeting Update:**
+- ✅ **CONFIRMED:** Beads are POLYSTYRENE (n=1.59)
+- 🔴 **BLOCKING:** Need bead kit datasheet with exact nm sizes for each population
+- Sumit created document with questions → Parvesh to share with Surya
+- Surya promised to provide answers immediately once he receives document
+
 **Pending Items:**
-- [ ] Get exact bead sizes from kit datasheet (polystyrene n=1.59 confirmed)
+- [ ] 🔴 **BLOCKING:** Get exact bead sizes from kit datasheet
 - [ ] Build refined calibration curve with all 15+ bead populations
 - [ ] Save calibration to `config/calibration/` as JSON
 - [ ] Integrate into upload workflow
