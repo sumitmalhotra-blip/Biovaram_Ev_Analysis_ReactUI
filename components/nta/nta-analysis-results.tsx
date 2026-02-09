@@ -28,6 +28,7 @@ import { EVSizeCategoryPieChart } from "./charts/ev-size-category-pie-chart"
 import { NTAStatisticsCards } from "./statistics-cards"
 import { NTASizeDistributionBreakdown } from "./size-distribution-breakdown"
 import { PositionAnalysis } from "./position-analysis"
+import { SupplementaryMetadataTable } from "./supplementary-metadata-table"
 import { 
   generateMarkdownReport, 
   downloadMarkdownReport,
@@ -489,6 +490,9 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
               <TabsTrigger value="corrected" className="shrink-0">
                 Temperature Corrected
               </TabsTrigger>
+              <TabsTrigger value="metadata" className="shrink-0">
+                📋 Metadata
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="distribution" className="space-y-4">
@@ -549,6 +553,10 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
 
             <TabsContent value="corrected" className="space-y-4">
               <TemperatureCorrectedComparison data={results} />
+            </TabsContent>
+
+            <TabsContent value="metadata" className="space-y-4">
+              <SupplementaryMetadataTable sampleId={sampleId} />
             </TabsContent>
           </Tabs>
         </CardContent>
