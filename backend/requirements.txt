@@ -89,12 +89,6 @@ bcrypt>=4.0.0
 email-validator>=2.0.0
 
 # ============================================
-# STREAMLIT UI (Optional - legacy frontend)
-# ============================================
-# Uncomment if using Streamlit:
-# streamlit>=1.30.0
-
-# ============================================
 # AWS S3 INTEGRATION (Optional)
 # ============================================
 # Uncomment for cloud storage:

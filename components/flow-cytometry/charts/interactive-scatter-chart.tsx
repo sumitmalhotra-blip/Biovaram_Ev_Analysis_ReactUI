@@ -671,7 +671,7 @@ export function InteractiveScatterChart({
                     key={`normal-${pointIndex}`}
                     cx={cx}
                     cy={cy}
-                    r={3}
+                    r={2}
                     fill={CHART_COLORS.primary}
                     fillOpacity={0.6}
                   />
@@ -696,7 +696,7 @@ export function InteractiveScatterChart({
                     key={`anomaly-${pointIndex}`}
                     cx={cx}
                     cy={cy}
-                    r={4}
+                    r={3}
                     fill={CHART_COLORS.anomaly}
                     fillOpacity={0.9}
                   />
@@ -721,7 +721,7 @@ export function InteractiveScatterChart({
                     key={`selected-${pointIndex}`}
                     cx={cx}
                     cy={cy}
-                    r={4}
+                    r={3}
                     fill="#22c55e"
                     fillOpacity={0.9}
                     stroke="#fff"

@@ -182,7 +182,7 @@ export interface SecondaryNTAAnalysisState {
   error: string | null
 }
 
-// FCS Analysis Settings (matches Streamlit app.py)
+// FCS Analysis Settings
 export interface FCSAnalysisSettings {
   laserWavelength: number
   particleRI: number
@@ -210,7 +210,7 @@ export interface FCSAnalysisSettings {
 }
 
 // Chart Color Scheme (TASK-018: Consistent color scheme)
-// Client requested: Purple for normal, Red for anomalies (matches Streamlit)
+// Client requested: Purple for normal, Red for anomalies
 export const CHART_COLORS = {
   primary: "#7c3aed",        // Purple - normal data points
   secondary: "#a855f7",      // Light purple - secondary data
@@ -238,7 +238,7 @@ export interface CrossComparisonSettings {
   maxSizeFilter: number
 }
 
-// NTA Analysis Settings (matches Streamlit app.py)
+// NTA Analysis Settings
 export interface NTAAnalysisSettings {
   applyTemperatureCorrection: boolean
   measurementTemp: number
@@ -911,8 +911,9 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
     set({ gatingState: initialGatingState }),
 }),
     {
-      name: 'ev-analysis-storage', // unique name for localStorage key
-      storage: createJSONStorage(() => localStorage),
+      name: 'ev-analysis-storage', // unique name for storage key
+      // Use sessionStorage - persists on refresh, but clears when browser tab is closed
+      storage: createJSONStorage(() => sessionStorage),
       // Selectively persist only important state (not File objects or transient state)
       partialize: (state) => ({
         // UI preferences

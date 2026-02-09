@@ -44,7 +44,7 @@ interface AnalysisSettingsPanelProps {
   onSettingsChange?: (settings: FCSAnalysisSettings) => void
 }
 
-// Default settings matching Streamlit app.py
+// Default FCS analysis settings
 const DEFAULT_SETTINGS: FCSAnalysisSettings = {
   laserWavelength: 405,
   particleRI: 1.40,

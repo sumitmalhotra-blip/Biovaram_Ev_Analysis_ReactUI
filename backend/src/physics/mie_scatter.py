@@ -163,6 +163,11 @@ class MieScatterCalculator:
         # For absorbing particles, use complex(real, imaginary)
         self.m = complex(n_particle / n_medium, 0.0)
         
+        # LUT cache for batch operations (initialized on first use)
+        # This avoids rebuilding the lookup table on every batch call
+        self._lut_cache: Optional[Dict[str, Any]] = None
+        self._lut_cache_key: Optional[str] = None
+        
         logger.info(
             f"✓ Mie Calculator initialized: λ={wavelength_nm:.1f}nm, "
             f"n_particle={n_particle:.4f}, n_medium={n_medium:.4f}, m={self.m.real:.4f}"
@@ -232,12 +237,11 @@ class MieScatterCalculator:
             logger.debug(f"Geometric optics regime (x={x:.3f}): ray tracing applicable")
         
         # Call miepython to calculate Mie coefficients
-        # single_sphere(m, x, n_pole, e_field) returns (qext, qsca, qback, g)
+        # miepython v3.0.2 API: single_sphere(m, x, n_pole) returns (qext, qsca, qback, g)
         # n_pole=0 means include all multipole terms (auto-sized for accuracy)
-        # e_field=True for electric field calculation (standard for scatter)
-        # Typical series length: 10-50 terms depending on x
+        # NOTE: e_field parameter was removed in miepython v3.x - only 3 args allowed
         try:
-            qext, qsca, qback, g = miepython.single_sphere(self.m, x, 0, True)
+            qext, qsca, qback, g = miepython.single_sphere(self.m, x, 0)
         except Exception as e:
             logger.error(f"❌ Mie calculation failed for d={diameter_nm:.1f}nm, x={x:.4f}: {e}")
             raise RuntimeError(f"Mie theory calculation failed: {e}") from e
@@ -402,6 +406,91 @@ class MieScatterCalculator:
             logger.warning(f"Returning fallback diameter: {fallback_diameter:.1f}nm")
             return fallback_diameter, False
     
+    def _get_or_build_lut(
+        self,
+        min_diameter: float = 30.0,
+        max_diameter: float = 500.0,
+        lut_resolution: int = 500
+    ) -> Dict[str, Any]:
+        """
+        Get cached LUT or build a new one if parameters changed.
+        
+        LUT APPROACH EXPLANATION (T-011 Documentation):
+        ================================================
+        
+        Why Use a Lookup Table?
+        -----------------------
+        Mie scattering calculations are computationally expensive (Bessel functions,
+        series expansions). For 900k+ events, calculating on-demand would be slow.
+        
+        Solution: Pre-compute a lookup table (LUT) mapping diameters → SSC values,
+        then use fast interpolation to find diameters from measured SSC.
+        
+        How It Works:
+        -------------
+        1. Generate diameter grid: [30nm, 30.94nm, 31.88nm, ..., 500nm] (500 points)
+        2. For each diameter, calculate theoretical FSC using Mie theory
+        3. Sort by FSC value (Mie can be non-monotonic due to resonances)
+        4. Remove duplicates for clean interpolation
+        5. Cache the result for reuse
+        
+        For inverse lookup (SSC → diameter):
+        - Use numpy.interp() for O(n) interpolation
+        - ~1000x faster than calling Mie theory per-event
+        
+        Cache Key:
+        - Includes min_diameter, max_diameter, resolution, wavelength, n_particle, n_medium
+        - If any parameter changes, LUT is rebuilt
+        
+        Args:
+            min_diameter: Minimum diameter in LUT (nm)
+            max_diameter: Maximum diameter in LUT (nm)
+            lut_resolution: Number of points in LUT
+            
+        Returns:
+            Dict with cached LUT arrays (fsc_unique, diameters_unique, fsc_min, fsc_max)
+        """
+        # Create cache key from all parameters that affect the LUT
+        cache_key = f"{min_diameter}_{max_diameter}_{lut_resolution}_{self.wavelength_nm}_{self.n_particle}_{self.n_medium}"
+        
+        # Return cached LUT if parameters haven't changed
+        if self._lut_cache is not None and self._lut_cache_key == cache_key:
+            return self._lut_cache
+        
+        # Build new LUT
+        logger.debug(f"Building LUT: {min_diameter}-{max_diameter}nm, {lut_resolution} points")
+        
+        diameters_lut = np.linspace(min_diameter, max_diameter, lut_resolution)
+        fsc_lut = np.zeros(lut_resolution)
+        
+        for i, d in enumerate(diameters_lut):
+            result = self.calculate_scattering_efficiency(d, validate=False)
+            fsc_lut[i] = result.forward_scatter
+        
+        # Sort by FSC (Mie resonances can cause non-monotonicity)
+        sort_idx = np.argsort(fsc_lut)
+        fsc_sorted = fsc_lut[sort_idx]
+        diameters_sorted = diameters_lut[sort_idx]
+        
+        # Remove duplicates for clean interpolation
+        unique_mask = np.diff(fsc_sorted, prepend=-np.inf) > 0
+        fsc_unique = fsc_sorted[unique_mask]
+        diameters_unique = diameters_sorted[unique_mask]
+        
+        # Cache the LUT
+        self._lut_cache = {
+            'fsc_unique': fsc_unique,
+            'diameters_unique': diameters_unique,
+            'fsc_min': fsc_unique[0],
+            'fsc_max': fsc_unique[-1],
+            'diameters_lut': diameters_lut,
+            'fsc_lut': fsc_lut
+        }
+        self._lut_cache_key = cache_key
+        
+        logger.debug(f"LUT built and cached: {len(fsc_unique)} unique points")
+        return self._lut_cache
+    
     def diameters_from_scatter_batch(
         self,
         fsc_intensities: np.ndarray,
@@ -415,6 +504,11 @@ class MieScatterCalculator:
         This is 100-1000x faster than calling diameter_from_scatter() in a loop!
         Uses precomputed lookup table (LUT) with linear interpolation.
         
+        LUT CACHING (Feb 2026):
+        -----------------------
+        The lookup table is now cached after first build. Subsequent calls with
+        the same parameters reuse the cached LUT, avoiding repeated Mie calculations.
+        
         Args:
             fsc_intensities: Array of FSC intensity values
             min_diameter: Minimum diameter in lookup table (nm)
@@ -426,33 +520,21 @@ class MieScatterCalculator:
             - diameters: Array of estimated diameters in nm
             - success_mask: Boolean array indicating valid estimates
         """
-        # Build lookup table: diameter -> FSC intensity
-        diameters_lut = np.linspace(min_diameter, max_diameter, lut_resolution)
-        fsc_lut = np.zeros(lut_resolution)
+        # Get or build cached LUT
+        lut = self._get_or_build_lut(min_diameter, max_diameter, lut_resolution)
         
-        for i, d in enumerate(diameters_lut):
-            result = self.calculate_scattering_efficiency(d, validate=False)
-            fsc_lut[i] = result.forward_scatter
-        
-        # Ensure FSC is monotonically increasing for interpolation
-        # (May need sorting if Mie resonances cause non-monotonicity)
-        sort_idx = np.argsort(fsc_lut)
-        fsc_sorted = fsc_lut[sort_idx]
-        diameters_sorted = diameters_lut[sort_idx]
-        
-        # Remove duplicates to avoid interpolation issues
-        unique_mask = np.diff(fsc_sorted, prepend=-np.inf) > 0
-        fsc_unique = fsc_sorted[unique_mask]
-        diameters_unique = diameters_sorted[unique_mask]
+        fsc_unique = lut['fsc_unique']
+        diameters_unique = lut['diameters_unique']
+        fsc_min = lut['fsc_min']
+        fsc_max = lut['fsc_max']
         
         # Interpolate: FSC intensity -> diameter
         fsc_intensities = np.asarray(fsc_intensities)
         
         # Clamp intensities to valid range for interpolation
-        fsc_min, fsc_max = fsc_unique[0], fsc_unique[-1]
         fsc_clamped = np.clip(fsc_intensities, fsc_min, fsc_max)
         
-        # Linear interpolation
+        # Linear interpolation (O(n) - very fast)
         estimated_diameters = np.interp(fsc_clamped, fsc_unique, diameters_unique)
         
         # Mark values outside valid FSC range as potentially unreliable
@@ -698,11 +780,18 @@ class MultiSolutionMieCalculator:
     - For each candidate, calculate the theoretical VSSC/BSSC ratio
     - Pick the candidate whose theoretical ratio best matches measured ratio
     
-    PHYSICS INSIGHT (from Parvesh Reddy, Jan 2026):
-    -----------------------------------------------
-    - Small particles (< 100nm): Rayleigh regime, violet scatters MORE (ratio > 1)
-    - Large particles (> 200nm): Geometric regime, similar scattering (ratio ≈ 1)
-    - This wavelength-dependent behavior uniquely identifies the correct solution
+    PHYSICS INSIGHT (from Mätzler Mie Functions literature & Parvesh Reddy, Jan 2026):
+    ----------------------------------------------------------------------------------
+    - Size parameter x = πd/λ → smaller λ gives LARGER x (more signal)
+    - Rayleigh scattering ∝ λ⁻⁴ → violet (405nm) scatters MORE for small particles
+    - EVs (30-150nm) are in Rayleigh/early-resonance regime
+    - **VIOLET (405nm) is now PRIMARY** for better small-particle sensitivity
+    
+    WAVELENGTH SELECTION RATIONALE (Feb 2026):
+    ------------------------------------------
+    - Violet (405nm) as PRIMARY: Better sensitivity for small EVs (Rayleigh regime)
+    - Blue (488nm) as SECONDARY: Used for ratio-based disambiguation
+    - This matches the physics: shorter wavelength → stronger scattering for d << λ
     
     Example Usage:
         >>> calc = MultiSolutionMieCalculator(n_particle=1.40, n_medium=1.33)
@@ -711,19 +800,21 @@ class MultiSolutionMieCalculator:
         >>> ssc_blue = data['BSSC-H'].values  # 488nm
         >>> ssc_violet = data['VSSC-H'].values  # 405nm
         >>> 
-        >>> # Calculate sizes with disambiguation
+        >>> # Calculate sizes with disambiguation (violet primary by default)
         >>> sizes, num_solutions = calc.calculate_sizes_multi_solution(ssc_blue, ssc_violet)
         >>> print(f"D50: {np.nanmedian(sizes):.1f} nm")
         >>> print(f"Events with multiple solutions: {(num_solutions > 1).sum()}")
     
     References:
+        - Mätzler (2002) "MATLAB Functions for Mie Scattering and Absorption"
+        - Bohren & Huffman (1983) "Absorption and Scattering of Light by Small Particles"
         - January 2026 meeting with Parvesh Reddy (wavelength ratio disambiguation)
         - compare_single_vs_multi_solution.py script validation
     """
     
     # Physical constants for wavelengths
-    WAVELENGTH_VIOLET = 405.0  # nm (VSSC channel)
-    WAVELENGTH_BLUE = 488.0    # nm (BSSC channel)
+    WAVELENGTH_VIOLET = 405.0  # nm (VSSC channel) - PRIMARY for small EVs
+    WAVELENGTH_BLUE = 488.0    # nm (BSSC channel) - SECONDARY for disambiguation
     
     def __init__(
         self,
@@ -882,20 +973,30 @@ class MultiSolutionMieCalculator:
         self,
         ssc_blue: np.ndarray,
         ssc_violet: np.ndarray,
-        tolerance_pct: float = 15.0
+        tolerance_pct: float = 15.0,
+        use_violet_primary: bool = True
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Calculate particle sizes using multi-solution disambiguation.
         
         This is the PRODUCTION method for accurate sizing when both wavelengths
         are available. For each event:
-        1. Find ALL sizes that match the blue SSC (within tolerance)
+        1. Find ALL sizes that match the PRIMARY SSC (within tolerance)
         2. If multiple solutions, use VSSC/BSSC ratio to pick correct one
+        
+        PHYSICS RATIONALE (from Mätzler Mie functions literature):
+        - Violet (405nm) is used as PRIMARY because:
+          * Size parameter x = πd/λ is LARGER for violet → stronger signal
+          * Rayleigh scattering ∝ λ⁻⁴ → violet scatters MORE for small particles
+          * EVs (30-150nm) are in Rayleigh/early-resonance regime
+          * Better sensitivity for detecting small vesicles
         
         Args:
             ssc_blue: Array of blue SSC (488nm) values, shape (n_events,)
             ssc_violet: Array of violet SSC (405nm) values, shape (n_events,)
             tolerance_pct: Tolerance for solution matching (default 15%)
+            use_violet_primary: If True (default), use violet 405nm as primary sizing channel
+                              If False, use blue 488nm (legacy behavior)
             
         Returns:
             Tuple of (sizes, num_solutions):
@@ -906,16 +1007,24 @@ class MultiSolutionMieCalculator:
         sizes = np.zeros(n_events)
         num_solutions = np.zeros(n_events)
         
+        # Select primary channel based on physics
+        if use_violet_primary:
+            primary_ssc = ssc_violet
+            primary_wavelength = 405.0
+        else:
+            primary_ssc = ssc_blue
+            primary_wavelength = 488.0
+        
         for i in range(n_events):
             if ssc_blue[i] <= 0 or ssc_violet[i] <= 0:
                 sizes[i] = np.nan
                 num_solutions[i] = 0
                 continue
             
-            # Step 1: Find ALL possible solutions using blue SSC
+            # Step 1: Find ALL possible solutions using PRIMARY SSC (violet by default)
             solutions = self.find_all_solutions(
-                ssc_blue[i], 
-                wavelength_nm=488.0, 
+                primary_ssc[i], 
+                wavelength_nm=primary_wavelength, 
                 tolerance_pct=tolerance_pct
             )
             num_solutions[i] = len(solutions)

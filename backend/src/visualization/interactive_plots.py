@@ -9,7 +9,7 @@ Features:
 - Zoom/pan controls
 - Selection tools for gating
 - Export to PNG/SVG/PDF
-- Dark theme matching the Streamlit UI
+- Dark theme matching the React frontend
 - Anomaly highlighting support
 
 Author: CRMIT Team
@@ -25,7 +25,7 @@ from typing import Optional, List, Dict, Any, Tuple
 
 
 # =========================================================================
-# THEME CONFIGURATION - Matching Streamlit Dark Theme
+# THEME CONFIGURATION - Dark Theme for React Frontend
 # =========================================================================
 
 DARK_THEME = {

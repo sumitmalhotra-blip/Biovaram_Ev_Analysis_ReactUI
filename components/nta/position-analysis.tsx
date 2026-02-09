@@ -426,7 +426,7 @@ export function PositionAnalysis({
                   <ZAxis 
                     type="number" 
                     dataKey="size" 
-                    range={[20, 100]} 
+                    range={[10, 50]} 
                     name="Size" 
                   />
                   <Tooltip

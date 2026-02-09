@@ -22,7 +22,7 @@ from typing import Dict, List, Tuple
 
 # Configuration
 API_URL = "http://localhost:8000"
-STREAMLIT_URL = "http://localhost:8501"
+FRONTEND_URL = "http://localhost:3000"  # React/Next.js frontend
 
 # Test data
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -84,10 +84,10 @@ def test_prerequisites() -> Tuple[int, int]:
     if api_ok:
         passed += 1
     
-    # Check Streamlit frontend
+    # Check React/Next.js frontend
     total += 1
-    ui_ok = check_service(STREAMLIT_URL, "Streamlit")
-    print_test("Frontend UI Running", ui_ok, f"{STREAMLIT_URL}")
+    ui_ok = check_service(FRONTEND_URL, "Next.js")
+    print_test("Frontend UI Running", ui_ok, f"{FRONTEND_URL}")
     if ui_ok:
         passed += 1
     

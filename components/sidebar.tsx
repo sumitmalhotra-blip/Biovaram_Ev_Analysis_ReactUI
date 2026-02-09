@@ -333,7 +333,7 @@ function FlowCytometrySidebar() {
   const [newRangeMin, setNewRangeMin] = useState(30)
   const [newRangeMax, setNewRangeMax] = useState(100)
 
-  // Size range presets matching Streamlit
+  // Size range presets based on ISEV 2023 guidelines
   const SIZE_PRESETS = {
     standard: [
       { name: "Small EVs (<50nm)", min: 0, max: 50, color: "#22c55e" },

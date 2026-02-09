@@ -157,12 +157,12 @@ export function ScatterPlotChart({
         const x = seededRandom(i * 3) * 1000 + 100
         const y = x * (0.8 + seededRandom(i * 3 + 1) * 0.4) + seededRandom(i * 3 + 2) * 200
 
-        const point = { x, y, z: 20, index: i }
+        const point = { x, y, z: 8, index: i }
 
         if (selectedPoints.has(i)) {
-          selected.push({ ...point, z: 50 })
+          selected.push({ ...point, z: 25 })
         } else if (seededRandom(i * 3 + 3) > 0.95) {
-          anomalies.push({ ...point, z: 50 })
+          anomalies.push({ ...point, z: 20 })
         } else {
           normal.push(point)
         }
@@ -191,14 +191,14 @@ export function ScatterPlotChart({
       const dataPoint = {
         x: point.x,
         y: point.y,
-        z: 20,
+        z: 8,
         index: pointIndex,
       }
 
       if (selectedPoints.has(pointIndex)) {
-        selected.push({ ...dataPoint, z: 60 })
+        selected.push({ ...dataPoint, z: 25 })
       } else if (highlightAnomalies && anomalySet.has(pointIndex)) {
-        anomalies.push({ ...dataPoint, z: 50 })
+        anomalies.push({ ...dataPoint, z: 20 })
       } else {
         normal.push(dataPoint)
       }
@@ -231,12 +231,12 @@ export function ScatterPlotChart({
         const dataPoint = {
           x: point.x,
           y: point.y,
-          z: 20,
+          z: 8,
           index: pointIndex,
         }
 
         if (highlightAnomalies && anomalySet.has(pointIndex)) {
-          anomalies.push({ ...dataPoint, z: 40 })
+          anomalies.push({ ...dataPoint, z: 18 })
         } else {
           normal.push(dataPoint)
         }
@@ -254,10 +254,10 @@ export function ScatterPlotChart({
       const x = seededRandom(i * 5 + 100) * 900 + 150  // Shifted range
       const y = x * (0.75 + seededRandom(i * 5 + 101) * 0.35) + seededRandom(i * 5 + 102) * 180
       
-      const point = { x, y, z: 20, index: i + 10000 }  // Offset indices to avoid collision
+      const point = { x, y, z: 8, index: i + 10000 }  // Offset indices to avoid collision
       
       if (seededRandom(i * 5 + 103) > 0.96) {
-        anomalies.push({ ...point, z: 40 })
+        anomalies.push({ ...point, z: 18 })
       } else {
         normal.push(point)
       }
@@ -850,7 +850,7 @@ export function ScatterPlotChart({
                 domain={zoom.yMin !== null && zoom.yMax !== null ? [zoom.yMin, zoom.yMax] : ["dataMin", "dataMax"]}
                 allowDataOverflow={true}
               />
-              <ZAxis dataKey="z" range={[20, 100]} />
+              <ZAxis dataKey="z" range={[8, 40]} />
               <Tooltip
                 contentStyle={{
                   backgroundColor: "#1e293b",
