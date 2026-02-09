@@ -15,13 +15,16 @@ import {
   Eye,
   EyeOff,
   Loader2,
-  RotateCcw
+  RotateCcw,
+  Layers,
+  Grid3X3
 } from "lucide-react"
 import { useAnalysisStore } from "@/lib/store"
 import { useApi } from "@/hooks/use-api"
 import { SizeDistributionChart } from "./charts/size-distribution-chart"
 import { ScatterPlotChart, type ScatterDataPoint } from "./charts/scatter-plot-with-selection"
 import { InteractiveScatterChart } from "./charts/interactive-scatter-chart"
+import { ClusteredScatterChart } from "./charts/clustered-scatter-chart"
 import { ScatterAxisSelector } from "./charts/scatter-axis-selector"
 import { TheoryVsMeasuredChart } from "./charts/theory-vs-measured-chart"
 import { DiameterVsSSCChart } from "./charts/diameter-vs-ssc-chart"
@@ -74,6 +77,9 @@ export function AnalysisResults() {
   const [xChannel, setXChannel] = useState<string>("")
   const [yChannel, setYChannel] = useState<string>("")
   const [channelsInitialized, setChannelsInitialized] = useState(false)
+  
+  // UI-002: Clustered scatter view mode for large datasets
+  const [scatterViewMode, setScatterViewMode] = useState<"standard" | "clustered">("standard")
 
   // Use real results from the API
   const results = fcsAnalysis.results
@@ -787,27 +793,75 @@ export function AnalysisResults() {
             </TabsContent>
 
             <TabsContent value="fsc-ssc" className="space-y-4">
-              {/* CRMIT-002: Auto Axis Selection */}
-              {sampleId && (
-                <ScatterAxisSelector
-                  sampleId={sampleId}
-                  xChannel={xChannel}
-                  yChannel={yChannel}
-                  onAxisChange={handleAxisChange}
-                  disabled={loadingScatter}
-                  availableChannels={results?.channels || []}
-                />
-              )}
+              {/* View Mode Toggle + Axis Selection */}
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                {/* CRMIT-002: Auto Axis Selection */}
+                {sampleId && (
+                  <ScatterAxisSelector
+                    sampleId={sampleId}
+                    xChannel={xChannel}
+                    yChannel={yChannel}
+                    onAxisChange={handleAxisChange}
+                    disabled={loadingScatter}
+                    availableChannels={results?.channels || []}
+                  />
+                )}
+                
+                {/* UI-002: View Mode Toggle */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">View:</span>
+                  <div className="flex rounded-md border">
+                    <Button
+                      variant={scatterViewMode === "standard" ? "secondary" : "ghost"}
+                      size="sm"
+                      className="h-8 rounded-r-none gap-1.5"
+                      onClick={() => setScatterViewMode("standard")}
+                    >
+                      <Grid3X3 className="h-3.5 w-3.5" />
+                      Standard
+                    </Button>
+                    <Button
+                      variant={scatterViewMode === "clustered" ? "secondary" : "ghost"}
+                      size="sm"
+                      className="h-8 rounded-l-none gap-1.5"
+                      onClick={() => setScatterViewMode("clustered")}
+                    >
+                      <Layers className="h-3.5 w-3.5" />
+                      Clustered
+                    </Button>
+                  </div>
+                  {scatterViewMode === "clustered" && (
+                    <Badge variant="outline" className="text-xs">
+                      Large Dataset Mode
+                    </Badge>
+                  )}
+                </div>
+              </div>
               
               {loadingScatter ? (
                 <div className="flex items-center justify-center h-[400px]">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
                   <span className="ml-3 text-muted-foreground">Loading scatter data...</span>
                 </div>
+              ) : scatterViewMode === "clustered" && sampleId ? (
+                // UI-002: Clustered scatter view for large datasets
+                <ClusteredScatterChart
+                  sampleId={sampleId}
+                  title={`${xChannel} vs ${yChannel} (Clustered)`}
+                  xLabel={xChannel}
+                  yLabel={yChannel}
+                  height={500}
+                  onClusterClick={(cluster) => {
+                    toast({
+                      title: `Cluster ${cluster.id + 1}`,
+                      description: `${cluster.count.toLocaleString()} events (${cluster.pct}%)${cluster.avg_diameter ? `, Avg diameter: ${cluster.avg_diameter.toFixed(1)} nm` : ''}`,
+                    })
+                  }}
+                />
               ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
                   <div className="lg:col-span-3">
-                    {/* NEW: Interactive SVG-based scatter chart with reliable selection */}
+                    {/* Standard: Interactive SVG-based scatter chart with reliable selection */}
                     <InteractiveScatterChart
                       title={`${xChannel} vs ${yChannel}`}
                       xLabel={xChannel}

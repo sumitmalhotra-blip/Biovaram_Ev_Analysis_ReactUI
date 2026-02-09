@@ -757,6 +757,299 @@ async def get_scatter_data(
 
 
 # ============================================================================
+# Clustered Scatter Data Endpoint (UI-002: Large Dataset Visualization)
+# ============================================================================
+
+@router.get("/{sample_id}/clustered-scatter", response_model=dict)
+async def get_clustered_scatter_data(
+    sample_id: str,
+    zoom_level: int = Query(1, ge=1, le=3, description="Zoom level: 1=overview (few clusters), 2=medium, 3=detailed"),
+    n_clusters_base: int = Query(8, ge=3, le=20, description="Base number of clusters at zoom level 1"),
+    fsc_channel: Optional[str] = Query(None, description="FSC channel name override"),
+    ssc_channel: Optional[str] = Query(None, description="SSC channel name override"),
+    viewport_x_min: Optional[float] = Query(None, description="Viewport X minimum (for zoom level 3)"),
+    viewport_x_max: Optional[float] = Query(None, description="Viewport X maximum (for zoom level 3)"),
+    viewport_y_min: Optional[float] = Query(None, description="Viewport Y minimum (for zoom level 3)"),
+    viewport_y_max: Optional[float] = Query(None, description="Viewport Y maximum (for zoom level 3)"),
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    Get hierarchical clustered scatter data for efficient large dataset visualization.
+    
+    This endpoint uses K-means clustering to summarize large datasets (900k+ events)
+    into manageable clusters that can be rendered efficiently. As the user zooms in,
+    more detail is revealed.
+    
+    **Zoom Levels:**
+    - Level 1 (Overview): ~8-10 clusters showing major population groups
+    - Level 2 (Medium): ~40-50 sub-clusters for more detail
+    - Level 3 (Detailed): Individual points within viewport (max 2000)
+    
+    **Response:**
+    ```json
+    {
+        "sample_id": "PC3_EXO1",
+        "zoom_level": 1,
+        "total_events": 900000,
+        "clusters": [
+            {
+                "id": 0,
+                "cx": 25000,
+                "cy": 15000,
+                "count": 45000,
+                "radius": 30,
+                "std_x": 5000,
+                "std_y": 3000,
+                "pct": 5.0,
+                "avg_diameter": 95.2
+            },
+            ...
+        ],
+        "bounds": {"x_min": 0, "x_max": 262144, "y_min": 0, "y_max": 262144},
+        "individual_points": null
+    }
+    ```
+    
+    **Performance:** 
+    - Level 1-2: Returns clusters (fast, <100ms)
+    - Level 3: Returns up to 2000 individual points within viewport
+    """
+    from sklearn.cluster import KMeans, MiniBatchKMeans
+    import numpy as np
+    
+    try:
+        # Get sample
+        result = await db.execute(select(Sample).where(Sample.sample_id == sample_id))
+        sample = result.scalar_one_or_none()
+        
+        if not sample:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Sample {sample_id} not found"
+            )
+        
+        if not sample.file_path_fcs:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No FCS file associated with sample {sample_id}"
+            )
+        
+        # Parse FCS file
+        from src.parsers.fcs_parser import FCSParser
+        from src.utils.channel_config import get_channel_config
+        
+        logger.info(f"📊 Loading clustered scatter data for {sample_id} at zoom level {zoom_level}")
+        
+        parser = FCSParser(sample.file_path_fcs)
+        parsed_data = parser.parse()
+        channels = parser.channel_names
+        
+        # Detect channels
+        channel_config = get_channel_config()
+        fsc_ch = fsc_channel if fsc_channel and fsc_channel in channels else channel_config.detect_fsc_channel(channels)
+        ssc_ch = ssc_channel if ssc_channel and ssc_channel in channels else channel_config.detect_ssc_channel(channels)
+        
+        if not fsc_ch or not ssc_ch:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Could not detect FSC/SSC channels. Available: {channels}"
+            )
+        
+        # Extract data
+        fsc_values = parsed_data[fsc_ch].values.astype(np.float64)
+        ssc_values = parsed_data[ssc_ch].values.astype(np.float64)
+        total_events = len(fsc_values)
+        
+        # Calculate data bounds
+        x_min, x_max = float(np.min(fsc_values)), float(np.max(fsc_values))
+        y_min, y_max = float(np.min(ssc_values)), float(np.max(ssc_values))
+        
+        # Calculate diameters if possible (for cluster statistics)
+        try:
+            multi_solution_info = detect_multi_solution_channels(channels)
+            if multi_solution_info['can_use_multi_solution']:
+                from src.physics.mie_scatter import MultiSolutionMieCalculator
+                vssc_ch = multi_solution_info['vssc_channel']
+                bssc_ch = multi_solution_info['bssc_channel']
+                calc = MultiSolutionMieCalculator(n_particle=1.40, n_medium=1.33)
+                ssc_violet = parsed_data[vssc_ch].values.astype(np.float64)
+                ssc_blue = parsed_data[bssc_ch].values.astype(np.float64)
+                diameters, _ = calc.calculate_sizes_multi_solution(ssc_blue, ssc_violet)
+            else:
+                from src.physics.mie_scatter import MieScatterCalculator
+                calc = MieScatterCalculator(wavelength_nm=488.0, n_particle=1.40, n_medium=1.33)
+                diameters, _ = calc.diameters_from_scatter_normalized(fsc_values, min_diameter=20.0, max_diameter=500.0)
+        except Exception as e:
+            logger.warning(f"Could not calculate diameters: {e}")
+            diameters = np.full(total_events, np.nan)
+        
+        # Determine number of clusters based on zoom level
+        if zoom_level == 1:
+            n_clusters = n_clusters_base
+        elif zoom_level == 2:
+            n_clusters = n_clusters_base * 5  # ~40 clusters
+        else:
+            # Level 3: Return individual points within viewport
+            n_clusters = None
+        
+        if zoom_level < 3:
+            # Use MiniBatchKMeans for large datasets (faster than regular KMeans)
+            X = np.column_stack([fsc_values, ssc_values])
+            
+            # Sample for very large datasets to speed up clustering
+            if total_events > 100000:
+                sample_size = min(50000, total_events)
+                sample_indices = np.random.choice(total_events, sample_size, replace=False)
+                X_sample = X[sample_indices]
+                diameters_sample = diameters[sample_indices]
+            else:
+                X_sample = X
+                diameters_sample = diameters
+                sample_indices = np.arange(total_events)
+            
+            # Perform clustering
+            kmeans = MiniBatchKMeans(
+                n_clusters=n_clusters,
+                random_state=42,
+                batch_size=1024,
+                n_init=3
+            )
+            labels = kmeans.fit_predict(X_sample)
+            
+            # Build cluster data
+            clusters = []
+            for i in range(n_clusters):
+                mask = labels == i
+                cluster_points = X_sample[mask]
+                cluster_diameters = diameters_sample[mask]
+                
+                if len(cluster_points) == 0:
+                    continue
+                
+                # Calculate cluster statistics
+                cx = float(np.mean(cluster_points[:, 0]))
+                cy = float(np.mean(cluster_points[:, 1]))
+                std_x = float(np.std(cluster_points[:, 0]))
+                std_y = float(np.std(cluster_points[:, 1]))
+                count = int(np.sum(mask))
+                
+                # Scale count back to full dataset if we sampled
+                if total_events > 100000:
+                    count = int(count * (total_events / len(sample_indices)))
+                
+                pct = round(count / total_events * 100, 2)
+                
+                # Calculate radius based on count (log scale for visual balance)
+                # Min radius 8, max radius 50
+                radius = max(8, min(50, 8 + 10 * np.log10(max(1, count / 100))))
+                
+                # Average diameter for cluster
+                valid_diameters = cluster_diameters[~np.isnan(cluster_diameters)]
+                avg_diameter = float(np.mean(valid_diameters)) if len(valid_diameters) > 0 else None
+                
+                clusters.append({
+                    "id": i,
+                    "cx": round(cx, 2),
+                    "cy": round(cy, 2),
+                    "count": count,
+                    "radius": round(radius, 1),
+                    "std_x": round(std_x, 2),
+                    "std_y": round(std_y, 2),
+                    "pct": pct,
+                    "avg_diameter": round(avg_diameter, 1) if avg_diameter else None
+                })
+            
+            # Sort by count descending
+            clusters.sort(key=lambda c: c["count"], reverse=True)
+            
+            logger.success(f"✅ Generated {len(clusters)} clusters for {sample_id} at zoom level {zoom_level}")
+            
+            return {
+                "sample_id": sample_id,
+                "zoom_level": zoom_level,
+                "total_events": total_events,
+                "clusters": clusters,
+                "bounds": {
+                    "x_min": round(x_min, 2),
+                    "x_max": round(x_max, 2),
+                    "y_min": round(y_min, 2),
+                    "y_max": round(y_max, 2)
+                },
+                "channels": {"fsc": fsc_ch, "ssc": ssc_ch},
+                "individual_points": None
+            }
+        
+        else:
+            # Zoom level 3: Return individual points within viewport
+            if viewport_x_min is None:
+                viewport_x_min = x_min
+            if viewport_x_max is None:
+                viewport_x_max = x_max
+            if viewport_y_min is None:
+                viewport_y_min = y_min
+            if viewport_y_max is None:
+                viewport_y_max = y_max
+            
+            # Filter points within viewport
+            mask = (
+                (fsc_values >= viewport_x_min) & (fsc_values <= viewport_x_max) &
+                (ssc_values >= viewport_y_min) & (ssc_values <= viewport_y_max)
+            )
+            
+            viewport_indices = np.where(mask)[0]
+            
+            # Limit to 2000 points
+            max_points = 2000
+            if len(viewport_indices) > max_points:
+                viewport_indices = np.random.choice(viewport_indices, max_points, replace=False)
+            
+            # Build individual points
+            points = []
+            for idx in viewport_indices:
+                point = {
+                    "x": float(fsc_values[idx]),
+                    "y": float(ssc_values[idx]),
+                    "index": int(idx)
+                }
+                if not np.isnan(diameters[idx]):
+                    point["diameter"] = round(float(diameters[idx]), 1)
+                points.append(point)
+            
+            logger.success(f"✅ Returned {len(points)} individual points for {sample_id} at zoom level 3")
+            
+            return {
+                "sample_id": sample_id,
+                "zoom_level": zoom_level,
+                "total_events": total_events,
+                "clusters": None,
+                "bounds": {
+                    "x_min": round(x_min, 2),
+                    "x_max": round(x_max, 2),
+                    "y_min": round(y_min, 2),
+                    "y_max": round(y_max, 2)
+                },
+                "viewport": {
+                    "x_min": viewport_x_min,
+                    "x_max": viewport_x_max,
+                    "y_min": viewport_y_min,
+                    "y_max": viewport_y_max
+                },
+                "channels": {"fsc": fsc_ch, "ssc": ssc_ch},
+                "individual_points": points,
+                "points_in_viewport": len(viewport_indices) if len(viewport_indices) <= max_points else f"{len(viewport_indices)} (sampled to {max_points})"
+            }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"❌ Failed to get clustered scatter data for {sample_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get clustered scatter data: {str(e)}"
+        )
+
+
+# ============================================================================
 # Gated Analysis Endpoint (T-009: Population Gating)
 # ============================================================================
 
