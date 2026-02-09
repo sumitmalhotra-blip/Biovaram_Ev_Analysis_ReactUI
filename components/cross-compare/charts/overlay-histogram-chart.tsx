@@ -31,6 +31,7 @@ function normalizeDistribution(data: SizeDistribution): SizeDistributionBins | n
 interface OverlayHistogramChartProps {
   fcsData?: SizeDistribution
   ntaData?: SizeDistribution
+  crossValidationData?: Array<{ size: number; fcs: number; nta: number; fcs_raw: number; nta_raw: number }>
 }
 
 // Generate default overlay histogram data
@@ -56,8 +57,17 @@ const generateDefaultData = () => {
   return data
 }
 
-export function OverlayHistogramChart({ fcsData, ntaData }: OverlayHistogramChartProps) {
+export function OverlayHistogramChart({ fcsData, ntaData, crossValidationData }: OverlayHistogramChartProps) {
   const chartData = useMemo(() => {
+    // Prefer cross-validation aligned data when available
+    if (crossValidationData && crossValidationData.length > 0) {
+      return crossValidationData.map(d => ({
+        size: d.size,
+        fcs: d.fcs,
+        nta: d.nta,
+      }))
+    }
+    
     // Normalize both datasets
     const normalizedFcs = fcsData ? normalizeDistribution(fcsData) : null
     const normalizedNta = ntaData ? normalizeDistribution(ntaData) : null
@@ -99,7 +109,9 @@ export function OverlayHistogramChart({ fcsData, ntaData }: OverlayHistogramChar
     
     // Default data for demo
     return generateDefaultData()
-  }, [fcsData, ntaData])
+  }, [fcsData, ntaData, crossValidationData])
+
+  const yAxisLabel = crossValidationData ? "% of Total" : "Count"
 
   return (
     <div className="h-80">
@@ -115,7 +127,7 @@ export function OverlayHistogramChart({ fcsData, ntaData }: OverlayHistogramChar
           <YAxis
             stroke="#64748b"
             tick={{ fontSize: 11 }}
-            label={{ value: "Count", angle: -90, position: "insideLeft", fill: "#64748b", fontSize: 12 }}
+            label={{ value: yAxisLabel, angle: -90, position: "insideLeft", fill: "#64748b", fontSize: 12 }}
           />
           <Tooltip
             contentStyle={{

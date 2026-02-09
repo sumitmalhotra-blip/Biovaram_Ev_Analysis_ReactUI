@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useAnalysisStore } from "@/lib/store"
 import { useToast } from "@/hooks/use-toast"
 import { useApi } from "@/hooks/use-api"
-import { apiClient, type Sample, type FCSResult, type NTAResult } from "@/lib/api-client"
+import { apiClient, type Sample, type FCSResult, type NTAResult, type CrossValidationResult } from "@/lib/api-client"
 import { OverlayHistogramChart } from "./charts/overlay-histogram-chart"
 import { DiscrepancyChart } from "./charts/discrepancy-chart"
 import { KDEComparisonChart } from "./charts/kde-comparison-chart"
@@ -18,6 +18,7 @@ import { CorrelationScatterChart } from "./charts/correlation-scatter-chart"
 import { StatisticalComparisonTable } from "./statistical-comparison-table"
 import { StatisticalTestsCard } from "./statistical-tests-card"
 import { MethodComparisonSummary } from "./method-comparison-summary"
+import { ValidationVerdictCard } from "./validation-verdict-card"
 import * as XLSX from 'xlsx'
 
 export function CrossCompareTab() {
@@ -31,6 +32,8 @@ export function CrossCompareTab() {
   const [ntaResults, setNtaResults] = useState<NTAResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [crossValidation, setCrossValidation] = useState<CrossValidationResult | null>(null)
+  const [crossValidating, setCrossValidating] = useState(false)
 
   // Fetch samples on mount only if API is connected
   useEffect(() => {
@@ -133,6 +136,45 @@ export function CrossCompareTab() {
       setNtaResults(ntaAnalysis.results)
     }
   }, [ntaAnalysis.results, selectedNtaSample])
+
+  // Run cross-validation when both API samples are selected (not current analysis)
+  const runCrossValidation = useCallback(async () => {
+    // Cross-validation requires real sample IDs (not current analysis)
+    const fcsId = selectedFcsSample && selectedFcsSample !== "-1" 
+      ? fcsSamples.find(s => String(s.id) === selectedFcsSample)?.sample_id 
+      : fcsAnalysis.sampleId
+    const ntaId = selectedNtaSample && selectedNtaSample !== "-2"
+      ? ntaSamples.find(s => String(s.id) === selectedNtaSample)?.sample_id
+      : ntaAnalysis.sampleId
+
+    if (!fcsId || !ntaId) {
+      toast({
+        title: "Cannot Cross-Validate",
+        description: "Both FCS and NTA samples must be selected",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setCrossValidating(true)
+    try {
+      const result = await apiClient.crossValidate(fcsId, ntaId)
+      setCrossValidation(result)
+      toast({
+        title: `Cross-Validation: ${result.comparison.verdict}`,
+        description: `D50 difference: ${result.comparison.d50_difference_pct.toFixed(1)}% — ${result.comparison.verdict_detail}`,
+      })
+    } catch (err) {
+      console.error("Cross-validation failed:", err)
+      toast({
+        title: "Cross-Validation Failed",
+        description: err instanceof Error ? err.message : "Failed to run cross-validation",
+        variant: "destructive",
+      })
+    } finally {
+      setCrossValidating(false)
+    }
+  }, [selectedFcsSample, selectedNtaSample, fcsSamples, ntaSamples, fcsAnalysis.sampleId, ntaAnalysis.sampleId, toast])
 
   const handlePin = (chartTitle: string, chartType: "histogram" | "bar" | "line") => {
     pinChart({
@@ -424,38 +466,38 @@ export function CrossCompareTab() {
     }
   }
 
-  // Calculate stats from results or use defaults
-  const fcsStats = fcsResults ? {
-    d10: fcsResults.size_statistics?.d10 || 89.2,
-    d50: fcsResults.size_statistics?.d50 || 127.4,
-    d90: fcsResults.size_statistics?.d90 || 198.3,
-    mean: fcsResults.size_statistics?.mean || 134.5,
-    std: fcsResults.size_statistics?.std || 45.2,
-    n: fcsResults.total_events || 45678,
-  } : {
-    d10: 89.2,
-    d50: 127.4,
-    d90: 198.3,
-    mean: 134.5,
-    std: 45.2,
-    n: 45678,
-  }
+  // Calculate stats from cross-validation results (preferred) or individual results
+  const fcsStats = crossValidation ? {
+    d10: crossValidation.fcs_statistics.d10,
+    d50: crossValidation.fcs_statistics.d50,
+    d90: crossValidation.fcs_statistics.d90,
+    mean: crossValidation.fcs_statistics.mean,
+    std: crossValidation.fcs_statistics.std,
+    n: crossValidation.data_summary.fcs_valid_sizes,
+  } : fcsResults ? {
+    d10: fcsResults.size_statistics?.d10 || 0,
+    d50: fcsResults.size_statistics?.d50 || fcsResults.particle_size_median_nm || 0,
+    d90: fcsResults.size_statistics?.d90 || 0,
+    mean: fcsResults.size_statistics?.mean || 0,
+    std: fcsResults.size_statistics?.std || 0,
+    n: fcsResults.total_events || 0,
+  } : { d10: 0, d50: 0, d90: 0, mean: 0, std: 0, n: 0 }
 
-  const ntaStats = ntaResults ? {
-    d10: ntaResults.size_statistics?.d10 || 92.1,
-    d50: ntaResults.size_statistics?.d50 || 135.2,
-    d90: ntaResults.size_statistics?.d90 || 201.8,
-    mean: ntaResults.size_statistics?.mean || 141.2,
-    std: ntaResults.size_statistics?.std || 42.8,
-    n: ntaResults.total_particles || 12345,
-  } : {
-    d10: 92.1,
-    d50: 135.2,
-    d90: 201.8,
-    mean: 141.2,
-    std: 42.8,
-    n: 12345,
-  }
+  const ntaStats = crossValidation ? {
+    d10: crossValidation.nta_statistics.d10,
+    d50: crossValidation.nta_statistics.d50,
+    d90: crossValidation.nta_statistics.d90,
+    mean: crossValidation.nta_statistics.mean,
+    std: crossValidation.nta_statistics.std,
+    n: crossValidation.nta_statistics.count,
+  } : ntaResults ? {
+    d10: ntaResults.d10_nm || ntaResults.size_statistics?.d10 || 0,
+    d50: ntaResults.median_size_nm || ntaResults.d50_nm || ntaResults.size_statistics?.d50 || 0,
+    d90: ntaResults.d90_nm || ntaResults.size_statistics?.d90 || 0,
+    mean: ntaResults.mean_size_nm || ntaResults.size_statistics?.mean || 0,
+    std: ntaResults.size_statistics?.std || 0,
+    n: ntaResults.total_particles || 0,
+  } : { d10: 0, d50: 0, d90: 0, mean: 0, std: 0, n: 0 }
 
   // Calculate discrepancy - focused on D50 (Median) per client preference (Surya, Dec 3, 2025)
   // "Mean is basically not the real metric... median is something that really existed in the data set"
@@ -478,8 +520,10 @@ export function CrossCompareTab() {
     setSelectedNtaSample("")
     setFcsResults(null)
     setNtaResults(null)
+    setCrossValidation(null)
     setLoading(false)
     setError(null)
+    setCrossValidating(false)
     toast({
       title: "Cross-Compare Reset",
       description: "All sample selections and comparison data have been cleared.",
@@ -570,8 +614,38 @@ export function CrossCompareTab() {
               </Button>
             </div>
           )}
+          {/* Cross-Validation Button */}
+          {(selectedFcsSample || fcsAnalysis.results) && (selectedNtaSample || ntaAnalysis.results) && (
+            <div className="mt-4 flex items-center gap-3">
+              <Button
+                onClick={runCrossValidation}
+                disabled={crossValidating}
+                className="gap-2"
+              >
+                {crossValidating ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Running Cross-Validation...
+                  </>
+                ) : (
+                  <>
+                    <GitCompare className="h-4 w-4" />
+                    Run Cross-Validation
+                  </>
+                )}
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                Computes aligned histograms, D50 comparison, and statistical tests
+              </span>
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* VAL-001: Validation Verdict Card */}
+      {crossValidation && (
+        <ValidationVerdictCard result={crossValidation} />
+      )}
 
       {/* Method Comparison Summary */}
       {hasData && (
@@ -625,10 +699,11 @@ export function CrossCompareTab() {
                   </Button>
                 </div>
               </div>
-              {hasData ? (
+              {hasData || crossValidation ? (
                 <OverlayHistogramChart 
                   fcsData={fcsResults?.size_distribution || fcsAnalysis.results?.size_distribution}
                   ntaData={ntaResults?.size_distribution || ntaAnalysis.results?.size_distribution}
+                  crossValidationData={crossValidation?.distribution}
                 />
               ) : (
                 <div className="p-8 text-center text-muted-foreground border rounded-lg bg-secondary/20">
@@ -698,9 +773,10 @@ export function CrossCompareTab() {
                   <p className="text-sm">
                     <span className="font-medium">Interpretation: </span>
                     <span className="text-muted-foreground">
-                      The FCS and NTA measurements show good agreement with most metrics within the 15% threshold. D50
-                      shows the largest discrepancy at 6.1%, which is typical for these measurement techniques due to
-                      different detection principles.
+                      {crossValidation
+                        ? `D50 discrepancy: ${crossValidation.comparison.d50_difference_pct.toFixed(1)}% (${crossValidation.comparison.d50_difference_nm.toFixed(1)} nm). ${crossValidation.comparison.verdict_detail}. Mie method: ${crossValidation.mie_parameters.method}.`
+                        : `The FCS and NTA measurements show ${avgDiscrepancy < 15 ? "good" : avgDiscrepancy < 25 ? "moderate" : "poor"} agreement. D50 discrepancy: ${calculateDiscrepancy(fcsStats.d50, ntaStats.d50).toFixed(1)}%. Run Cross-Validation for detailed statistical analysis.`
+                      }
                     </span>
                   </p>
                 </CardContent>

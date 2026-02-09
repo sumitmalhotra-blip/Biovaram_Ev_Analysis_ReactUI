@@ -326,6 +326,53 @@ async def get_fcs_results(
         results_data = []
         for fcs in fcs_results:
             processed = getattr(fcs, 'processed_at', None)
+            
+            # Calculate size distribution histogram from parquet if available
+            size_distribution_histogram = None
+            size_stats_computed = None
+            parquet_path = getattr(fcs, 'parquet_file_path', None)
+            
+            if parquet_path:
+                try:
+                    import numpy as np
+                    import pandas as pd
+                    from pathlib import Path
+                    
+                    parquet_file = Path(parquet_path)
+                    if parquet_file.exists():
+                        df = pd.read_parquet(parquet_file)
+                        # Look for pre-calculated diameter column
+                        size_col = None
+                        for col_name in ['diameter_nm', 'particle_size_nm', 'size_nm']:
+                            if col_name in df.columns:
+                                size_col = col_name
+                                break
+                        
+                        if size_col:
+                            sizes = df[size_col].dropna().values
+                            valid = sizes[(sizes > 0) & (sizes < 2000)]
+                            
+                            if len(valid) > 0:
+                                # Create 50-bin histogram from 20-500nm
+                                bins = np.linspace(20, 500, 51)
+                                centers = (bins[:-1] + bins[1:]) / 2
+                                hist, _ = np.histogram(valid, bins=bins)
+                                
+                                size_distribution_histogram = [
+                                    {"size": round(float(c), 1), "count": int(h)}
+                                    for c, h in zip(centers, hist) if h > 0
+                                ]
+                                
+                                size_stats_computed = {
+                                    "d10": round(float(np.percentile(valid, 10)), 2),
+                                    "d50": round(float(np.percentile(valid, 50)), 2),
+                                    "d90": round(float(np.percentile(valid, 90)), 2),
+                                    "mean": round(float(np.mean(valid)), 2),
+                                    "std": round(float(np.std(valid)), 2),
+                                }
+                except Exception as hist_err:
+                    logger.debug(f"Could not compute FCS histogram: {hist_err}")
+            
             results_data.append({
                 "id": fcs.id,
                 "total_events": fcs.total_events,
@@ -342,6 +389,8 @@ async def get_fcs_results(
                 "doublets_pct": fcs.doublets_pct,
                 "processed_at": processed.isoformat() if processed else None,
                 "parquet_file": fcs.parquet_file_path,
+                "size_distribution": size_distribution_histogram,
+                "size_statistics": size_stats_computed,
             })
         
         return {
@@ -3411,3 +3460,345 @@ async def get_nta_values(
             detail=f"Failed to get NTA values: {str(e)}"
         )
 
+
+# ============================================================================
+# VAL-001: NTA vs FCS Cross-Validation Endpoint
+# ============================================================================
+
+@router.get("/{fcs_sample_id}/cross-validate/{nta_sample_id}", response_model=dict)
+async def cross_validate_fcs_nta(
+    fcs_sample_id: str,
+    nta_sample_id: str,
+    wavelength_nm: float = Query(488.0, description="Laser wavelength in nm"),
+    n_particle: float = Query(1.40, description="Particle refractive index (EVs ≈ 1.40)"),
+    n_medium: float = Query(1.33, description="Medium refractive index (PBS ≈ 1.33)"),
+    num_bins: int = Query(50, ge=10, le=200, description="Number of histogram bins"),
+    size_min: float = Query(20.0, ge=0, description="Minimum size in nm for histogram"),
+    size_max: float = Query(500.0, le=2000, description="Maximum size in nm for histogram"),
+    normalize: bool = Query(True, description="Normalize distributions to probability density"),
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    Cross-validate FCS and NTA size distributions.
+    
+    Computes aligned histogram bins for both FCS (Mie-calculated) and NTA (measured)
+    size distributions and returns comparison statistics.
+    
+    **Science:** Both methods measure the same EV sample. If Mie calibration is correct,
+    D50 values should agree within ~10-15%. Surya (Jan 20 meeting): "bell curves should
+    look similar."
+    
+    **Response:** Aligned size distributions, D50 comparison, statistical tests.
+    """
+    import numpy as np
+    
+    try:
+        # ===== 1. Load FCS sample and compute Mie-calculated sizes =====
+        fcs_result = await db.execute(select(Sample).where(Sample.sample_id == fcs_sample_id))
+        fcs_sample = fcs_result.scalar_one_or_none()
+        
+        if not fcs_sample:
+            raise HTTPException(status_code=404, detail=f"FCS sample '{fcs_sample_id}' not found")
+        if not fcs_sample.file_path_fcs:
+            raise HTTPException(status_code=404, detail=f"No FCS file for sample '{fcs_sample_id}'")
+        
+        from src.parsers.fcs_parser import FCSParser
+        from src.utils.channel_config import ChannelConfig
+        
+        fcs_parser = FCSParser(fcs_sample.file_path_fcs)
+        fcs_data = fcs_parser.parse()
+        fcs_channels = fcs_parser.channel_names
+        
+        config = ChannelConfig()
+        fsc_channel = config.detect_fsc_channel(fcs_channels)
+        ssc_channel = config.detect_ssc_channel(fcs_channels)
+        
+        if not fsc_channel:
+            raise HTTPException(status_code=400, detail="No FSC channel detected in FCS file")
+        
+        # Detect multi-solution capability
+        multi_info = detect_multi_solution_channels(fcs_channels)
+        
+        # Sample for performance (max 50k events)
+        sample_size = min(50000, len(fcs_data))
+        np.random.seed(42)
+        sample_indices = np.random.choice(len(fcs_data), size=sample_size, replace=False)
+        
+        fsc_values = np.asarray(fcs_data[fsc_channel].values[sample_indices], dtype=np.float64)
+        
+        if multi_info['can_use_multi_solution'] and multi_info['vssc_channel'] in fcs_data.columns and multi_info['bssc_channel'] in fcs_data.columns:
+            # Multi-solution Mie
+            from src.physics.mie_scatter import MultiSolutionMieCalculator
+            vssc_ch = multi_info['vssc_channel']
+            bssc_ch = multi_info['bssc_channel']
+            
+            ssc_violet = np.asarray(fcs_data[vssc_ch].values[sample_indices], dtype=np.float64)
+            ssc_blue = np.asarray(fcs_data[bssc_ch].values[sample_indices], dtype=np.float64)
+            
+            multi_calc = MultiSolutionMieCalculator(n_particle=n_particle, n_medium=n_medium)
+            fcs_sizes, _ = multi_calc.calculate_sizes_multi_solution(ssc_blue, ssc_violet)
+            mie_method = "multi-solution"
+        else:
+            # Single-solution Mie
+            from src.physics.mie_scatter import MieScatterCalculator
+            mie_calc = MieScatterCalculator(
+                wavelength_nm=wavelength_nm,
+                n_particle=n_particle,
+                n_medium=n_medium
+            )
+            fcs_sizes, success = mie_calc.diameters_from_scatter_normalized(
+                fsc_values, min_diameter=20.0, max_diameter=500.0
+            )
+            fcs_sizes = fcs_sizes[success]
+            mie_method = "single-solution"
+        
+        # Filter valid FCS sizes
+        fcs_valid = fcs_sizes[~np.isnan(fcs_sizes) & (fcs_sizes > 0) & (fcs_sizes >= size_min) & (fcs_sizes <= size_max)]
+        
+        if len(fcs_valid) == 0:
+            raise HTTPException(status_code=400, detail="No valid FCS sizes calculated from Mie theory")
+        
+        logger.info(f"✅ FCS cross-val: {len(fcs_valid)} valid sizes from {len(fcs_data)} events ({mie_method})")
+        
+        # ===== 2. Load NTA sample and get size distribution =====
+        nta_result = await db.execute(select(Sample).where(Sample.sample_id == nta_sample_id))
+        nta_sample = nta_result.scalar_one_or_none()
+        
+        if not nta_sample:
+            raise HTTPException(status_code=404, detail=f"NTA sample '{nta_sample_id}' not found")
+        if not nta_sample.file_path_nta:
+            raise HTTPException(status_code=404, detail=f"No NTA file for sample '{nta_sample_id}'")
+        
+        from src.parsers.nta_parser import NTAParser
+        
+        nta_parser = NTAParser(nta_sample.file_path_nta)
+        nta_data = nta_parser.parse()
+        
+        # Find size and concentration columns
+        size_col = None
+        conc_col = None
+        for col in ['size_nm', 'Size (nm)', 'Diameter', 'diameter_nm']:
+            if col in nta_data.columns:
+                size_col = col
+                break
+        for col in ['concentration_particles_ml', 'Concentration (particles/mL)', 'concentration_particles_cm3', 'Conc.']:
+            if col in nta_data.columns:
+                conc_col = col
+                break
+        
+        if not size_col:
+            raise HTTPException(status_code=400, detail="No size column found in NTA data")
+        
+        nta_sizes_raw = nta_data[size_col].values
+        nta_concentrations = nta_data[conc_col].values if conc_col else None
+        
+        # Filter to valid range
+        nta_mask = ~np.isnan(nta_sizes_raw) & (nta_sizes_raw >= size_min) & (nta_sizes_raw <= size_max)
+        nta_sizes = nta_sizes_raw[nta_mask]
+        nta_conc = nta_concentrations[nta_mask] if nta_concentrations is not None else None
+        
+        if len(nta_sizes) == 0:
+            raise HTTPException(status_code=400, detail="No valid NTA sizes in the specified range")
+        
+        logger.info(f"✅ NTA cross-val: {len(nta_sizes)} size bins from {len(nta_data)} total rows")
+        
+        # ===== 3. Create aligned histograms =====
+        bin_edges = np.linspace(size_min, size_max, num_bins + 1)
+        bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+        bin_width = bin_edges[1] - bin_edges[0]
+        
+        # FCS histogram (event counts)
+        fcs_hist, _ = np.histogram(fcs_valid, bins=bin_edges)
+        
+        # NTA histogram - use concentration weighting if available
+        if nta_conc is not None and len(nta_conc) > 0:
+            # NTA data is typically binned: size vs concentration
+            # Interpolate into our common bins
+            nta_hist = np.zeros(num_bins)
+            for i, (sz, conc) in enumerate(zip(nta_sizes, nta_conc)):
+                bin_idx = int((sz - size_min) / bin_width)
+                if 0 <= bin_idx < num_bins:
+                    nta_hist[bin_idx] += conc
+        else:
+            nta_hist, _ = np.histogram(nta_sizes, bins=bin_edges)
+        
+        # Normalize to probability density if requested
+        if normalize:
+            fcs_total = np.sum(fcs_hist)
+            nta_total = np.sum(nta_hist)
+            fcs_density = (fcs_hist / fcs_total * 100) if fcs_total > 0 else fcs_hist
+            nta_density = (nta_hist / nta_total * 100) if nta_total > 0 else nta_hist
+        else:
+            fcs_density = fcs_hist.astype(float)
+            nta_density = nta_hist.astype(float)
+        
+        # ===== 4. Calculate comparative statistics =====
+        fcs_d10 = float(np.percentile(fcs_valid, 10))
+        fcs_d50 = float(np.percentile(fcs_valid, 50))
+        fcs_d90 = float(np.percentile(fcs_valid, 90))
+        fcs_mean = float(np.mean(fcs_valid))
+        fcs_std = float(np.std(fcs_valid))
+        
+        # NTA stats - concentration-weighted if available
+        if nta_conc is not None and np.sum(nta_conc) > 0:
+            nta_cumsum = np.cumsum(nta_conc)
+            nta_total_conc = nta_cumsum[-1]
+            nta_d10_idx = np.searchsorted(nta_cumsum, 0.10 * nta_total_conc)
+            nta_d50_idx = np.searchsorted(nta_cumsum, 0.50 * nta_total_conc)
+            nta_d90_idx = np.searchsorted(nta_cumsum, 0.90 * nta_total_conc)
+            
+            nta_d10 = float(nta_sizes[min(nta_d10_idx, len(nta_sizes) - 1)])
+            nta_d50 = float(nta_sizes[min(nta_d50_idx, len(nta_sizes) - 1)])
+            nta_d90 = float(nta_sizes[min(nta_d90_idx, len(nta_sizes) - 1)])
+            nta_mean = float(np.average(nta_sizes, weights=nta_conc))
+            nta_std = float(np.sqrt(np.average((nta_sizes - nta_mean) ** 2, weights=nta_conc)))
+        else:
+            nta_d10 = float(np.percentile(nta_sizes, 10))
+            nta_d50 = float(np.percentile(nta_sizes, 50))
+            nta_d90 = float(np.percentile(nta_sizes, 90))
+            nta_mean = float(np.mean(nta_sizes))
+            nta_std = float(np.std(nta_sizes))
+        
+        # D50 comparison (the key metric per Surya)
+        d50_diff = abs(fcs_d50 - nta_d50)
+        d50_avg = (fcs_d50 + nta_d50) / 2
+        d50_pct_diff = (d50_diff / d50_avg * 100) if d50_avg > 0 else 0
+        
+        # Determine validation verdict
+        if d50_pct_diff < 10:
+            verdict = "PASS"
+            verdict_detail = "Excellent agreement — Mie calibration validated"
+        elif d50_pct_diff < 20:
+            verdict = "ACCEPTABLE"
+            verdict_detail = "Acceptable agreement — minor systematic offset"
+        elif d50_pct_diff < 30:
+            verdict = "WARNING"
+            verdict_detail = "Moderate discrepancy — review Mie parameters or sample prep"
+        else:
+            verdict = "FAIL"
+            verdict_detail = "Significant discrepancy — calibration check needed"
+        
+        # ===== 5. Statistical tests =====
+        try:
+            from scipy import stats as scipy_stats
+            
+            # KS test (FCS vs NTA - compare distributions)
+            # For NTA with concentration weighting, expand to representative sample
+            if nta_conc is not None and np.sum(nta_conc) > 0:
+                # Create expanded sample from concentration-weighted bins
+                nta_expanded = np.repeat(nta_sizes, (nta_conc / np.min(nta_conc[nta_conc > 0])).astype(int).clip(max=1000))
+                if len(nta_expanded) > 50000:
+                    nta_expanded = np.random.choice(nta_expanded, 50000, replace=False)
+            else:
+                nta_expanded = nta_sizes
+            
+            ks_stat, ks_pval = scipy_stats.ks_2samp(fcs_valid[:50000], nta_expanded[:50000])
+            
+            # Mann-Whitney U test
+            mw_stat, mw_pval = scipy_stats.mannwhitneyu(
+                fcs_valid[:50000], nta_expanded[:50000], alternative='two-sided'
+            )
+            
+            # Overlap coefficient (Bhattacharyya)
+            fcs_norm = fcs_density / (np.sum(fcs_density) + 1e-10)
+            nta_norm = nta_density / (np.sum(nta_density) + 1e-10)
+            bhattacharyya_coeff = float(np.sum(np.sqrt(fcs_norm * nta_norm)))
+            
+            statistical_tests = {
+                "kolmogorov_smirnov": {
+                    "statistic": float(ks_stat),
+                    "p_value": float(ks_pval),
+                    "interpretation": "Distributions are similar" if ks_pval > 0.05 else "Distributions differ significantly"
+                },
+                "mann_whitney_u": {
+                    "statistic": float(mw_stat),
+                    "p_value": float(mw_pval),
+                    "interpretation": "Medians are similar" if mw_pval > 0.05 else "Medians differ significantly"
+                },
+                "bhattacharyya_coefficient": {
+                    "value": bhattacharyya_coeff,
+                    "interpretation": "High overlap" if bhattacharyya_coeff > 0.85 else "Moderate overlap" if bhattacharyya_coeff > 0.7 else "Low overlap"
+                }
+            }
+        except ImportError:
+            logger.warning("scipy not available — skipping statistical tests")
+            statistical_tests = None
+        except Exception as stat_err:
+            logger.warning(f"Statistical tests failed: {stat_err}")
+            statistical_tests = None
+        
+        # ===== 6. Build aligned distribution data =====
+        distribution_data = []
+        for i in range(num_bins):
+            distribution_data.append({
+                "size": round(float(bin_centers[i]), 1),
+                "fcs": round(float(fcs_density[i]), 4),
+                "nta": round(float(nta_density[i]), 4),
+                "fcs_raw": int(fcs_hist[i]),
+                "nta_raw": round(float(nta_hist[i]), 2),
+            })
+        
+        response = {
+            "fcs_sample_id": fcs_sample_id,
+            "nta_sample_id": nta_sample_id,
+            "mie_parameters": {
+                "wavelength_nm": wavelength_nm,
+                "n_particle": n_particle,
+                "n_medium": n_medium,
+                "method": mie_method,
+            },
+            "data_summary": {
+                "fcs_total_events": len(fcs_data),
+                "fcs_valid_sizes": len(fcs_valid),
+                "nta_total_bins": len(nta_data),
+                "nta_valid_bins": len(nta_sizes),
+                "histogram_bins": num_bins,
+                "size_range": [size_min, size_max],
+                "normalized": normalize,
+            },
+            "fcs_statistics": {
+                "d10": round(fcs_d10, 2),
+                "d50": round(fcs_d50, 2),
+                "d90": round(fcs_d90, 2),
+                "mean": round(fcs_mean, 2),
+                "std": round(fcs_std, 2),
+                "count": len(fcs_valid),
+            },
+            "nta_statistics": {
+                "d10": round(nta_d10, 2),
+                "d50": round(nta_d50, 2),
+                "d90": round(nta_d90, 2),
+                "mean": round(nta_mean, 2),
+                "std": round(nta_std, 2),
+                "count": len(nta_sizes),
+            },
+            "comparison": {
+                "d50_fcs": round(fcs_d50, 2),
+                "d50_nta": round(nta_d50, 2),
+                "d50_difference_nm": round(d50_diff, 2),
+                "d50_difference_pct": round(d50_pct_diff, 2),
+                "d10_difference_pct": round(abs(fcs_d10 - nta_d10) / ((fcs_d10 + nta_d10) / 2) * 100, 2) if (fcs_d10 + nta_d10) > 0 else 0,
+                "d90_difference_pct": round(abs(fcs_d90 - nta_d90) / ((fcs_d90 + nta_d90) / 2) * 100, 2) if (fcs_d90 + nta_d90) > 0 else 0,
+                "mean_difference_pct": round(abs(fcs_mean - nta_mean) / ((fcs_mean + nta_mean) / 2) * 100, 2) if (fcs_mean + nta_mean) > 0 else 0,
+                "verdict": verdict,
+                "verdict_detail": verdict_detail,
+            },
+            "statistical_tests": statistical_tests,
+            "distribution": distribution_data,
+        }
+        
+        logger.success(
+            f"✅ Cross-validation complete: FCS D50={fcs_d50:.1f}nm vs NTA D50={nta_d50:.1f}nm "
+            f"→ {d50_pct_diff:.1f}% difference → {verdict}"
+        )
+        
+        return response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"❌ Cross-validation failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Cross-validation failed: {str(e)}"
+        )

@@ -138,6 +138,68 @@ export interface NTAResult {
 }
 
 /**
+ * VAL-001: Cross-Validation Result (FCS vs NTA)
+ */
+export interface CrossValidationResult {
+  fcs_sample_id: string;
+  nta_sample_id: string;
+  mie_parameters: {
+    wavelength_nm: number;
+    n_particle: number;
+    n_medium: number;
+    method: string;
+  };
+  data_summary: {
+    fcs_total_events: number;
+    fcs_valid_sizes: number;
+    nta_total_bins: number;
+    nta_valid_bins: number;
+    histogram_bins: number;
+    size_range: [number, number];
+    normalized: boolean;
+  };
+  fcs_statistics: {
+    d10: number;
+    d50: number;
+    d90: number;
+    mean: number;
+    std: number;
+    count: number;
+  };
+  nta_statistics: {
+    d10: number;
+    d50: number;
+    d90: number;
+    mean: number;
+    std: number;
+    count: number;
+  };
+  comparison: {
+    d50_fcs: number;
+    d50_nta: number;
+    d50_difference_nm: number;
+    d50_difference_pct: number;
+    d10_difference_pct: number;
+    d90_difference_pct: number;
+    mean_difference_pct: number;
+    verdict: "PASS" | "ACCEPTABLE" | "WARNING" | "FAIL";
+    verdict_detail: string;
+  };
+  statistical_tests: {
+    kolmogorov_smirnov: { statistic: number; p_value: number; interpretation: string };
+    mann_whitney_u: { statistic: number; p_value: number; interpretation: string };
+    bhattacharyya_coefficient: { value: number; interpretation: string };
+  } | null;
+  distribution: Array<{
+    size: number;
+    fcs: number;
+    nta: number;
+    fcs_raw: number;
+    nta_raw: number;
+  }>;
+}
+
+/**
  * TASK-009: Experimental Conditions interface
  * Stores metadata about experiment setup for reproducibility and AI analysis
  */
@@ -1814,6 +1876,53 @@ class ApiClient {
       return this.handleResponse(response);
     } catch (error) {
       console.error("[API] Get FCS values failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  // ===========================================================================
+  // VAL-001: Cross-Validation (FCS vs NTA)
+  // ===========================================================================
+
+  /**
+   * Cross-validate FCS and NTA size distributions.
+   * Returns aligned histograms, D50 comparison, statistical tests, and verdict.
+   */
+  async crossValidate(
+    fcsSampleId: string,
+    ntaSampleId: string,
+    options?: {
+      wavelength_nm?: number;
+      n_particle?: number;
+      n_medium?: number;
+      num_bins?: number;
+      size_min?: number;
+      size_max?: number;
+      normalize?: boolean;
+    }
+  ): Promise<CrossValidationResult> {
+    try {
+      const params = new URLSearchParams();
+      if (options?.wavelength_nm) params.set("wavelength_nm", String(options.wavelength_nm));
+      if (options?.n_particle) params.set("n_particle", String(options.n_particle));
+      if (options?.n_medium) params.set("n_medium", String(options.n_medium));
+      if (options?.num_bins) params.set("num_bins", String(options.num_bins));
+      if (options?.size_min) params.set("size_min", String(options.size_min));
+      if (options?.size_max) params.set("size_max", String(options.size_max));
+      if (options?.normalize !== undefined) params.set("normalize", String(options.normalize));
+
+      const queryString = params.toString();
+      const url = `${this.baseUrl}/samples/${fcsSampleId}/cross-validate/${ntaSampleId}${queryString ? `?${queryString}` : ""}`;
+      
+      const response = await fetch(url, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      
+      this.isOffline = false;
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Cross-validation failed:", error);
       this.handleNetworkError(error);
     }
   }
