@@ -413,13 +413,13 @@ export function BeadCalibrationPanel() {
                 )}
 
                 {/* Calibration Curve Chart */}
-                {activeCalibration.calibration.bead_points &&
+                {expanded && activeCalibration.calibration.bead_points &&
                   activeCalibration.calibration.curve_points && (
                     <div className="rounded-md border p-2">
                       <div className="text-xs text-muted-foreground mb-2 font-medium">
                         Calibration Curve (Log-Log)
                       </div>
-                      <ResponsiveContainer width="100%" height={200}>
+                      <ResponsiveContainer width="100%" height={200} minWidth={100}>
                         <ComposedChart margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
                           <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
                           <XAxis

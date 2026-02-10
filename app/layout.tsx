@@ -19,6 +19,13 @@ export const metadata: Metadata = {
   description: "Advanced Extracellular Vesicle Analysis for Flow Cytometry and NTA",
   generator: 'v0.app',
   manifest: '/manifest.json',
+  icons: {
+    icon: [
+      { url: '/icon-dark-32x32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/icon.svg', type: 'image/svg+xml' },
+    ],
+    apple: '/apple-icon.png',
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',

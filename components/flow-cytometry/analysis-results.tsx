@@ -635,20 +635,20 @@ export function AnalysisResults() {
       )}
 
       {/* Particle Size Visualization with Real Data */}
-      {loadingSizeBins ? (
+      {(loadingSizeBins || loadingScatter) ? (
         <Card className="card-3d">
           <CardContent className="p-8 flex items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-primary mr-3" />
-            <span className="text-muted-foreground">Calculating size distribution...</span>
+            <span className="text-muted-foreground">{loadingScatter ? 'Loading scatter data...' : 'Calculating size distribution...'}</span>
           </CardContent>
         </Card>
-      ) : (
+      ) : scatterData.length > 0 ? (
         <ParticleSizeVisualization
           totalEvents={totalEvents}
           medianSize={medianSize}
           scatterData={scatterData}
         />
-      )}
+      ) : null}
 
       {/* Custom Size Range Analysis */}
       <CustomSizeRanges 

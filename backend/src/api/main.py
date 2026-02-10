@@ -307,14 +307,6 @@ if _has_calibration_router:
         tags=["Calibration"]
     )
 
-# CAL-001: Bead Calibration (Feb 10, 2026)
-if _has_calibration_router:
-    app.include_router(
-        calibration_router.router,
-        prefix=f"{settings.api_prefix}/calibration",
-        tags=["Calibration"]
-    )
-
 
 # ============================================================================
 # Main Entry Point (Development)
