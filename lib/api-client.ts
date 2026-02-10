@@ -203,6 +203,102 @@ export interface CrossValidationResult {
  * TASK-009: Experimental Conditions interface
  * Stores metadata about experiment setup for reproducibility and AI analysis
  */
+
+/**
+ * CAL-001: Bead Calibration interfaces
+ */
+export interface CalibrationStatus {
+  status: 'calibrated' | 'not_calibrated' | 'error';
+  calibrated: boolean;
+  message: string;
+  instrument?: string;
+  wavelength_nm?: number;
+  fit_method?: string;
+  r_squared?: number | null;
+  n_bead_sizes?: number;
+  calibration_range_nm?: [number, number];
+  created_at?: string;
+  bead_kit?: string;
+  bead_lot?: string;
+  bead_ri?: number;
+  nist_traceable?: boolean;
+}
+
+export interface BeadStandard {
+  file: string;
+  filename: string;
+  kit_part_number: string;
+  product_name: string;
+  lot_number: string;
+  manufacturer: string;
+  refractive_index: number;
+  expiration_date: string;
+  n_bead_sizes: number;
+  bead_sizes_nm: number[];
+}
+
+export interface CalibrationBeadPoint {
+  diameter_nm: number;
+  scatter_mean: number;
+  scatter_std: number;
+  n_events: number;
+  cv_pct: number;
+}
+
+export interface CalibrationCurvePoint {
+  diameter_nm: number;
+  scatter_predicted: number;
+}
+
+export interface ActiveCalibration {
+  calibrated: boolean;
+  calibration: {
+    instrument: string;
+    wavelength_nm: number;
+    fit_method: string;
+    fit_params: {
+      a: number;
+      b: number;
+      r_squared: number;
+    };
+    calibration_range_nm: [number, number];
+    created_at: string;
+    bead_datasheet_info: {
+      kit_part_number: string | null;
+      lot_number: string | null;
+      refractive_index: number;
+      material: string;
+      nist_traceable: boolean;
+    };
+    bead_points: CalibrationBeadPoint[];
+    curve_points: CalibrationCurvePoint[];
+    n_bead_sizes: number;
+  } | null;
+}
+
+export interface CalibrationFitResult {
+  success: boolean;
+  message: string;
+  set_as_active: boolean;
+  saved_path?: string;
+  diagnostics?: {
+    datasheet: {
+      kit: string;
+      lot: string;
+      ri: number;
+      material: string;
+      nist_traceable: boolean;
+    };
+    channel: string;
+    wavelength_nm: number;
+    n_peaks_detected: number;
+    n_beads_matched: number;
+    n_beads_expected: number;
+    fit: Record<string, unknown>;
+    bead_points: CalibrationBeadPoint[];
+  };
+}
+
 export interface ExperimentalConditions {
   id: number;
   sample_id: number;
@@ -1923,6 +2019,129 @@ class ApiClient {
       return this.handleResponse(response);
     } catch (error) {
       console.error("[API] Cross-validation failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  // ─── Calibration Methods ───────────────────────────────────────────
+
+  /**
+   * Get current calibration status (for sidebar badge)
+   */
+  async getCalibrationStatus(): Promise<CalibrationStatus> {
+    try {
+      const response = await fetch(`${this.baseUrl}/calibration/status`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      this.isOffline = false;
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Calibration status failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  /**
+   * List available bead standard datasheets
+   */
+  async getBeadStandards(): Promise<{ count: number; standards: BeadStandard[] }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/calibration/bead-standards`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      this.isOffline = false;
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Bead standards list failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  /**
+   * Get active calibration details including fitted curve
+   */
+  async getActiveCalibration(): Promise<ActiveCalibration> {
+    try {
+      const response = await fetch(`${this.baseUrl}/calibration/active`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      this.isOffline = false;
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Active calibration fetch failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  /**
+   * Auto-fit calibration from a bead FCS file + datasheet
+   */
+  async fitCalibration(
+    beadSampleId: string,
+    beadStandardFile: string,
+    sscChannel?: string
+  ): Promise<CalibrationFitResult> {
+    try {
+      const params = new URLSearchParams();
+      params.append("bead_sample_id", beadSampleId);
+      params.append("bead_standard_file", beadStandardFile);
+      if (sscChannel) params.append("ssc_channel", sscChannel);
+
+      const response = await fetch(`${this.baseUrl}/calibration/fit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: params.toString(),
+      });
+      this.isOffline = false;
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Calibration fit failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  /**
+   * Fit calibration from manually entered bead scatter means
+   */
+  async fitCalibrationManual(
+    points: { diameter_nm: number; mean_ssc: number }[],
+    kitName?: string,
+    riParticle?: number
+  ): Promise<CalibrationFitResult> {
+    try {
+      const body: Record<string, unknown> = { points };
+      if (kitName) body.kit_name = kitName;
+      if (riParticle !== undefined) body.ri_particle = riParticle;
+
+      const response = await fetch(`${this.baseUrl}/calibration/fit-manual`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      this.isOffline = false;
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Manual calibration fit failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  /**
+   * Remove (archive) the active calibration
+   */
+  async removeCalibration(): Promise<{ success: boolean; message: string }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/calibration/active`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+      });
+      this.isOffline = false;
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Remove calibration failed:", error);
       this.handleNetworkError(error);
     }
   }

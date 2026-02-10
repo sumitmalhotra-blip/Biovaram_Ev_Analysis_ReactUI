@@ -42,16 +42,17 @@ class SizeRangeConfig:
     """
     
     # Search range for Mie optimization (wider to avoid edge effects)
-    search_min_nm: float = 30.0   # Smallest size to search
-    search_max_nm: float = 220.0  # Largest size to search
+    # CAL-001 (Feb 10, 2026): Extended to cover full nanoViS bead range (40-1020nm)
+    search_min_nm: float = 20.0   # Smallest size to search
+    search_max_nm: float = 1100.0 # Largest size to search (covers 1020nm bead)
     
     # Valid range - particles we consider physically valid EVs
-    valid_min_nm: float = 30.0    # Minimum valid EV size
-    valid_max_nm: float = 220.0   # Maximum valid EV size
+    valid_min_nm: float = 20.0    # Minimum valid EV size
+    valid_max_nm: float = 1100.0  # Maximum valid EV size (covers microvesicles)
     
     # Display range - what we show in histograms (can be narrower)
-    display_min_nm: float = 40.0  # Display minimum
-    display_max_nm: float = 200.0 # Display maximum
+    display_min_nm: float = 30.0  # Display minimum
+    display_max_nm: float = 1050.0 # Display maximum
     
     # Histogram bin configuration
     default_bin_count: int = 20

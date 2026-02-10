@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react"
 import { useAnalysisStore, type SizeRange } from "@/lib/store"
 import { useApi } from "@/hooks/use-api"
 import { cn } from "@/lib/utils"
-import { ChevronLeft, ChevronRight, Filter, Settings, FileText, Beaker, Thermometer, Loader2, RefreshCw, Database, SlidersHorizontal, Play, RotateCcw, Plus, Trash2, FlaskConical, Shield } from "lucide-react"
+import { ChevronLeft, ChevronRight, Filter, Settings, FileText, Beaker, Thermometer, Loader2, RefreshCw, Database, SlidersHorizontal, Play, RotateCcw, Plus, Trash2, FlaskConical, Shield, Target, CheckCircle2, XCircle } from "lucide-react"
 import { BestPracticesPanel } from "@/components/best-practices-panel"
 import { PreviousAnalyses } from "@/components/previous-analyses"
 import type { ExperimentData } from "@/lib/best-practices"
@@ -307,12 +307,31 @@ function FlowCytometrySidebar() {
     setFcsAnalysisSettings, 
     fcsAnalysis,
     setFCSSizeRanges,
-    setFCSExperimentalConditions 
+    setFCSExperimentalConditions,
+    apiConnected,
   } = useAnalysisStore()
   const { reanalyzeWithSettings } = useApi()
 
   // Dialog state
   const [showConditionsDialog, setShowConditionsDialog] = useState(false)
+
+  // Calibration status for badge
+  const [calStatus, setCalStatus] = useState<{ calibrated: boolean; kit_name?: string; r_squared?: number; n_beads?: number } | null>(null)
+
+  // Fetch calibration status on mount
+  useEffect(() => {
+    if (!apiConnected) return
+    const fetchCalStatus = async () => {
+      try {
+        const { apiClient } = await import("@/lib/api-client")
+        const status = await apiClient.getCalibrationStatus()
+        setCalStatus(status)
+      } catch {
+        // silently fail
+      }
+    }
+    fetchCalStatus()
+  }, [apiConnected])
 
   // Local state initialized from store (with defaults)
   const [wavelength, setWavelength] = useState(fcsAnalysisSettings?.laserWavelength?.toString() || "488")
@@ -507,6 +526,23 @@ function FlowCytometrySidebar() {
 
   return (
     <>
+      {/* Calibration Status Badge */}
+      <div className="mb-3 flex items-center gap-2 px-1 py-1.5 rounded-md border bg-muted/30">
+        <Target className="h-3.5 w-3.5 text-primary shrink-0" />
+        <span className="text-xs truncate flex-1">Bead Calibration</span>
+        {calStatus?.calibrated ? (
+          <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-[10px] px-1.5 py-0 shrink-0">
+            <CheckCircle2 className="h-2.5 w-2.5 mr-0.5" />
+            R²={calStatus.r_squared?.toFixed(3)}
+          </Badge>
+        ) : (
+          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">
+            <XCircle className="h-2.5 w-2.5 mr-0.5" />
+            Not Set
+          </Badge>
+        )}
+      </div>
+
       {/* Experimental Conditions Button */}
       <div className="mb-3">
         <Button

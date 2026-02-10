@@ -44,6 +44,8 @@ from src.database.models import AlertType, AlertSeverity
 from src.parsers.fcs_parser import FCSParser
 from src.parsers.nta_parser import NTAParser
 from src.physics.mie_scatter import MieScatterCalculator, MultiSolutionMieCalculator
+# Import bead calibration for calibrated sizing (CAL-001, Feb 10, 2026)
+from src.physics.bead_calibration import get_active_calibration
 # Import size configuration for consistent filtering (TASK-002 fix, Dec 17, 2025)
 from src.physics.size_config import (
     DEFAULT_SIZE_CONFIG, 
@@ -698,41 +700,92 @@ async def upload_fcs_file(
                 
                 # Calculate particle size using Mie scattering theory
                 # TASK-002 FIX (Dec 17, 2025): Use extended range to avoid edge clustering
+                # CAL-001 (Feb 10, 2026): Check for active bead calibration first
                 particle_size_median_nm = None
+                active_calibration = get_active_calibration()
+                sizing_method_used = 'uncalibrated_mie'  # Track which method was used
+                
                 if fsc_channel and fsc_stats.get('median'):
                     try:
-                        # Initialize Mie calculator (488nm laser, typical EV RI, PBS medium)
-                        mie_calc = MieScatterCalculator(
-                            wavelength_nm=488.0,
-                            n_particle=1.40,
-                            n_medium=1.33
-                        )
-                        # Estimate diameter from FSC median intensity
-                        # Uses extended range from size_config (30-220nm) to avoid clamping
-                        diameter_nm, success = mie_calc.diameter_from_scatter(
-                            fsc_intensity=fsc_stats['median'],
-                            # min_diameter/max_diameter now default to SIZE_CONFIG values (30-220nm)
-                        )
-                        if success:
-                            particle_size_median_nm = float(diameter_nm)
-                            logger.info(f"✨ Estimated particle size: {particle_size_median_nm:.1f} nm")
+                        if active_calibration and active_calibration.is_fitted:
+                            # === CALIBRATED PATH (preferred) ===
+                            # Use bead-calibrated transfer function for accurate sizing
+                            median_fsc = np.array([fsc_stats['median']])
+                            cal_diameter = active_calibration.diameter_from_fsc(median_fsc)
+                            particle_size_median_nm = float(cal_diameter[0])
+                            sizing_method_used = 'bead_calibrated'
+                            logger.info(f"✨ CALIBRATED particle size: {particle_size_median_nm:.1f} nm (bead calibration)")
+                        else:
+                            # === UNCALIBRATED FALLBACK ===
+                            # Initialize Mie calculator (488nm laser, typical EV RI, PBS medium)
+                            mie_calc = MieScatterCalculator(
+                                wavelength_nm=488.0,
+                                n_particle=1.40,
+                                n_medium=1.33
+                            )
+                            diameter_nm, success = mie_calc.diameter_from_scatter(
+                                fsc_intensity=fsc_stats['median'],
+                            )
+                            if success:
+                                particle_size_median_nm = float(diameter_nm)
+                                logger.info(f"✨ Estimated particle size: {particle_size_median_nm:.1f} nm (uncalibrated Mie)")
                     except Exception as mie_error:
                         logger.warning(f"⚠️ Mie calculation failed: {mie_error}")
                 
                 # ============================================================
                 # MULTI-SOLUTION MIE THEORY (Jan 2026)
+                # CAL-001 (Feb 10, 2026): Bead calibration path added
                 # ============================================================
-                # Use wavelength ratio disambiguation when VSSC and BSSC available
-                # This provides ~24% more accurate sizing by handling non-monotonic
-                # Mie scattering curve (one scatter value = multiple possible sizes)
+                # Priority order:
+                # 1. Bead-calibrated sizing (if active calibration exists)
+                # 2. Multi-solution Mie with VSSC/BSSC ratio disambiguation
+                # 3. Single-solution Mie fallback
                 
                 # Calculate size distribution percentiles using Mie theory
                 size_statistics = None
                 computed_sizes = None  # Will store actual sizes for std calculation
                 
+                # === BEAD-CALIBRATED PATH (highest priority) ===
+                if active_calibration and active_calibration.is_fitted:
+                    try:
+                        logger.info(f"🎯 Using BEAD-CALIBRATED sizing (transfer function from bead standards)")
+                        
+                        # Choose best scatter channel for calibration
+                        cal_channel = ssc_channel  # Default to SSC
+                        if vssc1_h_channel and vssc1_h_channel in parsed_data.columns:
+                            cal_channel = vssc1_h_channel  # Prefer VSSC for violet-calibrated curves
+                        
+                        sample_size = min(10000, len(parsed_data))
+                        np.random.seed(42)
+                        scatter_all = np.asarray(parsed_data[cal_channel].values, dtype=np.float64)
+                        positive_scatter = scatter_all[scatter_all > 0]
+                        if len(positive_scatter) > sample_size:
+                            positive_scatter = np.random.choice(positive_scatter, size=sample_size, replace=False)
+                        
+                        cal_result = active_calibration.calculate_sizes(positive_scatter, filter_range=True)
+                        
+                        size_statistics = {
+                            'd10': cal_result.d10,
+                            'd50': cal_result.d50,
+                            'd90': cal_result.d90,
+                            'mean': cal_result.mean,
+                            'std': cal_result.std,
+                            'method': 'bead_calibrated',
+                        }
+                        computed_sizes = cal_result.diameters
+                        sizing_method_used = 'bead_calibrated'
+                        
+                        logger.info(f"📏 CALIBRATED Size: D10={cal_result.d10:.1f}, D50={cal_result.d50:.1f}, D90={cal_result.d90:.1f} nm")
+                        logger.info(f"   Valid fraction: {cal_result.valid_fraction:.1%} of {len(positive_scatter)} events")
+                        
+                    except Exception as cal_error:
+                        logger.warning(f"⚠️ Bead calibration sizing failed: {cal_error}, falling back to Mie theory")
+                        active_calibration = None  # Force fallback
+                
                 # Check if we can use multi-solution (need VSSC and BSSC channels)
                 vssc_channel_for_multi = vssc1_h_channel or vssc2_h_channel
                 can_use_multi_solution = (
+                    size_statistics is None and  # Only if calibration didn't work
                     vssc_channel_for_multi is not None and 
                     bssc_h_channel is not None and
                     vssc_channel_for_multi in parsed_data.columns and
@@ -822,7 +875,7 @@ async def upload_fcs_file(
                         can_use_multi_solution = False  # Trigger fallback
                 
                 # === SINGLE-SOLUTION FALLBACK ===
-                if not can_use_multi_solution and ssc_channel and ssc_channel in parsed_data.columns:
+                if size_statistics is None and not can_use_multi_solution and ssc_channel and ssc_channel in parsed_data.columns:
                     try:
                         logger.info(f"🔬 Using single-solution Mie sizing (no VSSC/BSSC pair available)")
                         mie_calc = MieScatterCalculator(wavelength_nm=488.0, n_particle=1.40, n_medium=1.33)

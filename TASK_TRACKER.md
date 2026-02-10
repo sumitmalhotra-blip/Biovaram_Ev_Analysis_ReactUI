@@ -1,6 +1,6 @@
 # BioVaram EV Analysis Platform - Master Task Tracker
 ## Created: January 21, 2026
-## Last Updated: February 9, 2026
+## Last Updated: February 10, 2026
 
 ---
 
@@ -27,11 +27,11 @@
 
 ### Key Updates from Meeting with Surya Pratap Singh:
 
-1. **Bead Calibration - CONFIRMED POLYSTYRENE:**
+1. **Bead Calibration - ✅ COMPLETED (Feb 10, 2026):**
    - Surya confirmed calibration beads are polystyrene (n=1.59)
-   - **BLOCKING:** Still need bead kit datasheet with exact nm sizes
-   - Sumit created document with questions → Parvesh to share with Surya
-   - Action: Get datasheet to complete CAL-001
+   - **RESOLVED:** Bead datasheet obtained (nanoViS D03231, Lot 4894789)
+   - Full 7-size calibration implemented: 40, 80, 108, 142, 304, 600, 1020 nm
+   - CAL-001 fully complete — backend + frontend + documentation
 
 2. **Distribution Analysis - Left-Skewed is EXPECTED:**
    - Surya: "It is not necessary that all particles will fall into Gaussian distribution only"
@@ -981,8 +981,9 @@ qext, qsca, qback, g = miepython.single_sphere(self.m, x, 0)
 | Field | Value |
 |-------|-------|
 | **Priority** | 🔴 CRITICAL |
-| **Status** | 🔄 BLOCKED - Waiting for Bead Datasheet |
+| **Status** | ✅ COMPLETED |
 | **Source** | Feb 2, 2026 calibration analysis session |
+| **Completed** | February 10, 2026 |
 | **Description** | Use polystyrene calibration beads to convert arbitrary SSC units to physical diameter |
 
 **Problem Identified:**
@@ -990,16 +991,29 @@ qext, qsca, qback, g = miepython.single_sphere(self.m, x, 0)
 - Without calibration, Mie theory alone gives D50=337nm (wrong!)
 - With bead calibration, D50=75.5nm (matches expected exosome size!)
 
-**Calibration Beads Analyzed:**
-| File | Events | Range | Populations |
-|------|--------|-------|-------------|
-| Nano Vis Low.fcs | 179,465 | 40-150nm | 17 detected |
-| Nano Vis High.fcs | 124,189 | 140-1000nm | 12 detected |
+**Bead Datasheet Obtained: Beckman Coulter nanoViS D03231**
+- Lot: 4894789, RI=1.591 at 590nm, Polystyrene latex, NIST-traceable (TEM)
+- 7 unique sizes: 40, 80, 108, 142, 304, 600, 1020 nm
 
-**Preliminary Calibration Curve:**
-```
-log(diameter) = 0.3051 × log(VSSC) + 0.8532
-```
+**Implementation Summary (Feb 10, 2026):**
+
+Backend:
+- [x] Bead datasheet JSON config: `config/bead_standards/nanovis_d03231.json`
+- [x] Enhanced `bead_calibration.py` with peak detection (KDE + find_peaks), datasheet loader, auto-calibration pipeline
+- [x] Calibration REST API router: 6 endpoints at `/api/v1/calibration/`
+- [x] Upload pipeline wired with 3-tier sizing: bead-cal → multi-Mie → single-Mie
+- [x] Samples re-analysis wired with calibration priority
+- [x] Size config extended: 20–1100 nm (was 30–220 nm)
+
+Frontend:
+- [x] TypeScript interfaces + API client methods for calibration
+- [x] `bead-calibration-panel.tsx` — auto-fit, manual entry, calibration curve chart
+- [x] Sidebar calibration status badge (green "Calibrated" / gray "Not Set")
+
+Documentation:
+- [x] `docs/CALIBRATION_OPTIMIZATION.md` — full optimization document
+- `backend/docs/technical/BEAD_CALIBRATION_GUIDE.md` — technical guide
+- `backend/docs/technical/BEAD_KIT_FORM.md` — form for lab team
 
 **PC3 EXO1 Results Comparison:**
 | Metric | Before | After | Expected |
@@ -1007,23 +1021,6 @@ log(diameter) = 0.3051 × log(VSSC) + 0.8532
 | D50 | 337nm | **75.5nm** | 50-100nm |
 | Medium (50-200nm) | 40.8% | **88.8%** | 85-95% |
 | Large (>200nm) | 59.2% | **5.2%** | <5% |
-
-**Feb 4, 2026 Meeting Update:**
-- ✅ **CONFIRMED:** Beads are POLYSTYRENE (n=1.59)
-- 🔴 **BLOCKING:** Need bead kit datasheet with exact nm sizes for each population
-- Sumit created document with questions → Parvesh to share with Surya
-- Surya promised to provide answers immediately once he receives document
-
-**Pending Items:**
-- [ ] 🔴 **BLOCKING:** Get exact bead sizes from kit datasheet
-- [ ] Build refined calibration curve with all 15+ bead populations
-- [ ] Save calibration to `config/calibration/` as JSON
-- [ ] Integrate into upload workflow
-- [ ] Add calibration UI to frontend
-
-**Documentation Created:**
-- `backend/docs/technical/BEAD_CALIBRATION_GUIDE.md` - Full technical guide
-- `backend/docs/technical/BEAD_KIT_FORM.md` - Form for lab team to fill
 
 ---
 

@@ -41,6 +41,11 @@ from src.api.routers import upload, samples, jobs  # type: ignore[import-not-fou
 from src.api.routers import analysis  # type: ignore[import-not-found]
 from src.api.routers import auth  # type: ignore[import-not-found]
 from src.api.routers import alerts  # CRMIT-003: Alert System
+try:
+    from src.api.routers import calibration as calibration_router  # CAL-001
+    _has_calibration_router = True
+except ImportError:
+    _has_calibration_router = False
 from src.database.connection import init_database, close_connections, check_connection
 
 settings = get_settings()
@@ -293,6 +298,22 @@ app.include_router(
     prefix=f"{settings.api_prefix}/alerts",
     tags=["Alerts"]
 )
+
+# CAL-001: Bead Calibration (Feb 10, 2026)
+if _has_calibration_router:
+    app.include_router(
+        calibration_router.router,
+        prefix=f"{settings.api_prefix}/calibration",
+        tags=["Calibration"]
+    )
+
+# CAL-001: Bead Calibration (Feb 10, 2026)
+if _has_calibration_router:
+    app.include_router(
+        calibration_router.router,
+        prefix=f"{settings.api_prefix}/calibration",
+        tags=["Calibration"]
+    )
 
 
 # ============================================================================

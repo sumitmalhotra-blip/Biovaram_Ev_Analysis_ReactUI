@@ -708,6 +708,10 @@ async def get_scatter_data(
         fsc_values = sampled_data[fsc_ch].values
         ssc_values = sampled_data[ssc_ch].values
         
+        # Check for active bead calibration (CAL-001, Feb 10, 2026)
+        from src.physics.bead_calibration import get_active_calibration
+        active_calibration = get_active_calibration()
+        
         # Check for multi-solution Mie capability (VSSC + BSSC channels)
         multi_solution_info = detect_multi_solution_channels(channels)
         can_use_multi_solution = (
@@ -717,8 +721,26 @@ async def get_scatter_data(
         )
         
         # Calculate diameters using appropriate method
+        # Priority: 1. Bead calibration  2. Multi-solution Mie  3. Single-solution Mie
         try:
-            if can_use_multi_solution:
+            if active_calibration and active_calibration.is_fitted:
+                # === BEAD-CALIBRATED (HIGHEST PRIORITY) ===
+                logger.info(f"🎯 Using BEAD-CALIBRATED sizing for scatter data")
+                cal_scatter = np.asarray(ssc_values, dtype=np.float64)
+                cal_positive = cal_scatter[cal_scatter > 0]
+                if len(cal_positive) > 0:
+                    diameters = np.full(len(ssc_values), np.nan)
+                    pos_mask = cal_scatter > 0
+                    cal_diameters = active_calibration.diameter_from_fsc(cal_scatter[pos_mask])
+                    diameters[pos_mask] = cal_diameters
+                    success_mask = pos_mask & ~np.isnan(diameters) & (diameters > 0)
+                    valid_diameter_count = int(np.sum(success_mask))
+                    logger.info(f"📐 Calibrated: {valid_diameter_count}/{len(ssc_values)} valid diameters")
+                else:
+                    diameters = np.zeros(len(ssc_values))
+                    success_mask = np.zeros(len(ssc_values), dtype=bool)
+                    valid_diameter_count = 0
+            elif can_use_multi_solution:
                 # === MULTI-SOLUTION MIE (PREFERRED) ===
                 from src.physics.mie_scatter import MultiSolutionMieCalculator
                 

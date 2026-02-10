@@ -8,6 +8,7 @@ import { AnalysisResults } from "./analysis-results"
 import { ComparisonAnalysisView } from "./comparison-analysis-view"
 import { ColumnMapping } from "./column-mapping"
 import { FCSBestPracticesGuide } from "./best-practices-guide"
+import { BeadCalibrationPanel } from "./bead-calibration-panel"
 import { ExperimentalConditionsDialog, type ExperimentalConditions, type FileMetadata } from "@/components/experimental-conditions-dialog"
 import { useAnalysisStore } from "@/lib/store"
 import { useApi } from "@/hooks/use-api"
@@ -73,6 +74,9 @@ export function FlowCytometryTab() {
 
       {/* Best Practices Guide - show before upload to help users prepare */}
       {!hasFile && !hasResults && <FCSBestPracticesGuide />}
+
+      {/* Bead Calibration Panel - always visible for calibration management */}
+      <BeadCalibrationPanel />
 
       {/* Upload Mode Toggle with Reset Button */}
       <Card className="card-3d">

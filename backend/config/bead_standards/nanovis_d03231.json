@@ -1,0 +1,122 @@
+{
+  "kit_part_number": "D03231",
+  "product_name": "nanoViS Nanoscale Sizing Standards",
+  "lot_number": "4894789",
+  "manufacturer": "Beckman Coulter, Inc.",
+  "manufacture_date": "2025-08-14",
+  "expiration_date": "2026-08-14",
+  "quality_cert_date": "2025-08-18",
+  "storage_condition": "2-8°C",
+  "material": "polystyrene_latex",
+  "refractive_index": 1.591,
+  "ri_measurement_wavelength_nm": 590,
+  "ri_measurement_temperature_c": 20,
+  "size_measurement_method": "TEM",
+  "nist_traceable": true,
+  "appearance": "Colorless suspension",
+  "subcomponents": {
+    "nanoViS_Low": {
+      "sub_lot": "3043946",
+      "description": "nanoViS Low - small EV range (44-144nm)",
+      "overall_refractive_index": 1.591,
+      "overall_appearance": "Colorless suspension",
+      "beads": [
+        {
+          "label": "44nm",
+          "diameter_nm": 40,
+          "diameter_um": 0.040,
+          "spec_min_um": 0.040,
+          "spec_max_um": 0.048,
+          "cv_pct": 11.5,
+          "target_concentration_ww": 9.8e-7,
+          "concentration_particles_per_ml": 2.78e8
+        },
+        {
+          "label": "80nm",
+          "diameter_nm": 80,
+          "diameter_um": 0.080,
+          "spec_min_um": 0.078,
+          "spec_max_um": 0.082,
+          "cv_pct": 6.9,
+          "target_concentration_ww": 2.1e-6,
+          "concentration_particles_per_ml": 7.60e7
+        },
+        {
+          "label": "105nm",
+          "diameter_nm": 108,
+          "diameter_um": 0.108,
+          "spec_min_um": 0.102,
+          "spec_max_um": 0.108,
+          "cv_pct": 5.2,
+          "target_concentration_ww": 1.8e-6,
+          "concentration_particles_per_ml": 2.97e7
+        },
+        {
+          "label": "144nm",
+          "diameter_nm": 142,
+          "diameter_um": 0.142,
+          "spec_min_um": 0.140,
+          "spec_max_um": 0.148,
+          "cv_pct": 3.8,
+          "target_concentration_ww": 1.0e-5,
+          "concentration_particles_per_ml": 6.65e7
+        }
+      ]
+    },
+    "nanoViS_High": {
+      "sub_lot": "3043947",
+      "description": "nanoViS High - large EV / microvesicle range (144-1000nm)",
+      "overall_refractive_index": 1.591,
+      "overall_appearance": "Colorless suspension",
+      "beads": [
+        {
+          "label": "144nm",
+          "diameter_nm": 142,
+          "diameter_um": 0.142,
+          "spec_min_um": 0.140,
+          "spec_max_um": 0.148,
+          "cv_pct": 3.8,
+          "target_concentration_ww": 5.2e-6,
+          "concentration_particles_per_ml": 3.33e7
+        },
+        {
+          "label": "300nm",
+          "diameter_nm": 304,
+          "diameter_um": 0.304,
+          "spec_min_um": 0.285,
+          "spec_max_um": 0.315,
+          "cv_pct": 4.9,
+          "target_concentration_ww": 2.4e-5,
+          "concentration_particles_per_ml": 1.57e7
+        },
+        {
+          "label": "600nm",
+          "diameter_nm": 600,
+          "diameter_um": 0.600,
+          "spec_min_um": 0.570,
+          "spec_max_um": 0.630,
+          "cv_pct": 2.2,
+          "target_concentration_ww": 1.9e-4,
+          "concentration_particles_per_ml": 1.62e7
+        },
+        {
+          "label": "1000nm",
+          "diameter_nm": 1020,
+          "diameter_um": 1.020,
+          "spec_min_um": 0.950,
+          "spec_max_um": 1.050,
+          "cv_pct": 2.6,
+          "target_concentration_ww": 1.4e-3,
+          "concentration_particles_per_ml": 2.34e7
+        }
+      ]
+    }
+  },
+  "unique_bead_diameters_nm": [40, 80, 108, 142, 304, 600, 1020],
+  "notes": [
+    "Mean particle sizes determined from TEM, traceable to NIST standards",
+    "Refractive index evaluated at 590nm and 20°C",
+    "144nm bead is shared between Low and High subcomponents (overlap point)",
+    "Diameters in nm are the mean measured values, not the rounded labels"
+  ]
+}
