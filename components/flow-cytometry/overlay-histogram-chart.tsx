@@ -26,49 +26,90 @@ export function OverlayHistogramChart({
 
   // PERFORMANCE FIX: Memoize histogram data generation
   const histogramData = useMemo(() => {
-    if (!primaryResults && !secondaryResults) return []
+    if (!primaryResults && !secondaryResults) return { data: [], isApproximate: true }
 
-    // Create bins for histogram
-    const bins = 50
-    const data: Array<{
-      bin: string
-      binValue: number
-      primary: number
-      secondary: number
-    }> = []
+    // Try to use actual scatter data from secondary analysis (stored in zustand)
+    const secondaryScatter = secondaryFcsAnalysis.scatterData ?? []
 
-    // Get the statistics from primary or secondary using correct FCSResult fields
-    const primaryMean = parameter === "FSC-A" 
+    // Determine the value extractor based on parameter
+    const extractValue = (point: { x: number; y: number; diameter?: number }) => {
+      if (parameter === "FSC-A") return point.x
+      if (parameter === "SSC-A") return point.y
+      if (parameter === "size" && point.diameter) return point.diameter
+      return point.x
+    }
+
+    // Collect real values where available
+    const secondaryValues = secondaryScatter.length > 0
+      ? secondaryScatter.map(extractValue).filter(v => v != null && isFinite(v))
+      : []
+
+    // If we have real scatter data for at least one side, use data-driven binning
+    const hasRealData = secondaryValues.length > 0
+
+    // Calculate range from real data or summary stats
+    const primaryMean = parameter === "FSC-A"
       ? (primaryResults?.fsc_mean || primaryResults?.size_statistics?.mean || 100)
-      : (primaryResults?.ssc_mean || 50)
+      : parameter === "SSC-A"
+        ? (primaryResults?.ssc_mean || 50)
+        : (primaryResults?.size_statistics?.mean || primaryResults?.particle_size_median_nm || 100)
     const primaryStd = primaryResults?.size_statistics?.std || primaryMean * 0.3
-    
-    const secondaryMean = parameter === "FSC-A" 
+
+    const secondaryMean = parameter === "FSC-A"
       ? (secondaryResults?.fsc_mean || secondaryResults?.size_statistics?.mean || 100)
-      : (secondaryResults?.ssc_mean || 50)
+      : parameter === "SSC-A"
+        ? (secondaryResults?.ssc_mean || 50)
+        : (secondaryResults?.size_statistics?.mean || secondaryResults?.particle_size_median_nm || 100)
     const secondaryStd = secondaryResults?.size_statistics?.std || secondaryMean * 0.3
 
-    const minVal = Math.min(
-      primaryResults ? primaryMean - 3 * primaryStd : Infinity, 
-      secondaryResults ? secondaryMean - 3 * secondaryStd : Infinity
-    )
-    const maxVal = Math.max(
-      primaryResults ? primaryMean + 3 * primaryStd : -Infinity, 
-      secondaryResults ? secondaryMean + 3 * secondaryStd : -Infinity
-    )
+    // Determine bin range
+    let minVal: number, maxVal: number
+    if (hasRealData && secondaryValues.length > 0) {
+      const sorted = [...secondaryValues].sort((a, b) => a - b)
+      const q01 = sorted[Math.floor(sorted.length * 0.01)] ?? sorted[0]
+      const q99 = sorted[Math.floor(sorted.length * 0.99)] ?? sorted[sorted.length - 1]
+      minVal = Math.min(
+        q01,
+        primaryResults ? primaryMean - 3 * primaryStd : Infinity
+      )
+      maxVal = Math.max(
+        q99,
+        primaryResults ? primaryMean + 3 * primaryStd : -Infinity
+      )
+    } else {
+      minVal = Math.min(
+        primaryResults ? primaryMean - 3 * primaryStd : Infinity,
+        secondaryResults ? secondaryMean - 3 * secondaryStd : Infinity
+      )
+      maxVal = Math.max(
+        primaryResults ? primaryMean + 3 * primaryStd : -Infinity,
+        secondaryResults ? secondaryMean + 3 * secondaryStd : -Infinity
+      )
+    }
+
+    const bins = 50
     const binSize = (maxVal - minVal) / bins
+    const data: Array<{ bin: string; binValue: number; primary: number; secondary: number }> = []
 
     for (let i = 0; i < bins; i++) {
       const binStart = minVal + i * binSize
+      const binEnd = binStart + binSize
       const binMid = binStart + binSize / 2
 
-      // Gaussian distribution approximation for visualization
-      const primaryValue = primaryResults 
+      // Primary: Gaussian approximation from summary stats (no event data in store)
+      const primaryValue = primaryResults
         ? Math.exp(-0.5 * Math.pow((binMid - primaryMean) / primaryStd, 2)) * 100
         : 0
-      const secondaryValue = secondaryResults
-        ? Math.exp(-0.5 * Math.pow((binMid - secondaryMean) / secondaryStd, 2)) * 100
-        : 0
+
+      // Secondary: Use real scatter data if available, else Gaussian fallback
+      let secondaryValue: number
+      if (hasRealData && secondaryValues.length > 0) {
+        secondaryValue = secondaryValues.filter(v => v >= binStart && v < binEnd).length
+      } else {
+        secondaryValue = secondaryResults
+          ? Math.exp(-0.5 * Math.pow((binMid - secondaryMean) / secondaryStd, 2)) * 100
+          : 0
+      }
 
       data.push({
         bin: binMid.toFixed(0),
@@ -78,8 +119,16 @@ export function OverlayHistogramChart({
       })
     }
 
-    return data
-  }, [primaryResults, secondaryResults, parameter])
+    // Scale primary Gaussian to match secondary event count order of magnitude for visual comparison
+    if (hasRealData && primaryResults) {
+      const maxSecondary = Math.max(...data.map(d => d.secondary), 1)
+      const maxPrimary = Math.max(...data.map(d => d.primary), 1)
+      const scale = maxSecondary / maxPrimary
+      data.forEach(d => { d.primary = Math.round(d.primary * scale) })
+    }
+
+    return { data, isApproximate: !hasRealData }
+  }, [primaryResults, secondaryResults, secondaryFcsAnalysis.scatterData, parameter])
 
   if (!primaryResults) {
     return (
@@ -98,6 +147,7 @@ export function OverlayHistogramChart({
   }
 
   const hasOverlay = overlayConfig.enabled && secondaryResults
+  const { data: chartData, isApproximate } = histogramData
 
   return (
     <Card className="card-3d">
@@ -136,13 +186,18 @@ export function OverlayHistogramChart({
                 Overlay
               </Badge>
             )}
+            {isApproximate && (
+              <Badge variant="outline" className="text-xs text-amber-500 border-amber-500/50">
+                Approximated
+              </Badge>
+            )}
           </div>
         </div>
       </CardHeader>
       <CardContent>
         <div className="h-[300px]">
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={histogramData}>
+            <ComposedChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
               <XAxis 
                 dataKey="bin" 

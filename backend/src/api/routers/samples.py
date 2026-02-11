@@ -2278,6 +2278,14 @@ class ReanalyzeRequest(BaseModel):
     anomaly_method: str = Field(default="zscore", description="Anomaly method: zscore, iqr, both")
     zscore_threshold: float = Field(default=3.0, ge=1.0, le=10.0, description="Z-score threshold")
     iqr_factor: float = Field(default=1.5, ge=1.0, le=5.0, description="IQR factor for outlier detection")
+    fsc_angle_range: Optional[list[float]] = Field(
+        default=None,
+        description="Forward scatter collection angle range in degrees, e.g. [0.5, 15]"
+    )
+    ssc_angle_range: Optional[list[float]] = Field(
+        default=None,
+        description="Side scatter collection angle range in degrees, e.g. [15, 150]"
+    )
     size_ranges: list[dict] = Field(
         default=[
             {"name": "Small EVs", "min": 30, "max": 100},
@@ -2484,7 +2492,9 @@ async def reanalyze_sample(
             mie_calc = MieScatterCalculator(
                 wavelength_nm=request.wavelength_nm,
                 n_particle=request.n_particle,
-                n_medium=request.n_medium
+                n_medium=request.n_medium,
+                fsc_angle_range=request.fsc_angle_range,
+                ssc_angle_range=request.ssc_angle_range
             )
             sizing_method = "single_mie"
             logger.info(f"🔬 Re-analyze using single-solution Mie: λ={request.wavelength_nm}nm")

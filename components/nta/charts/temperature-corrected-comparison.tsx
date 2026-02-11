@@ -30,44 +30,101 @@ interface DistributionDataPoint {
   correctedSize?: number
 }
 
-// Generate size distribution data with temperature correction
+// NTA bin definitions for percentage-based data
+const NTA_BINS = [
+  { key: "bin_50_80nm_pct" as const, min: 50, max: 80 },
+  { key: "bin_80_100nm_pct" as const, min: 80, max: 100 },
+  { key: "bin_100_120nm_pct" as const, min: 100, max: 120 },
+  { key: "bin_120_150nm_pct" as const, min: 120, max: 150 },
+  { key: "bin_150_200nm_pct" as const, min: 150, max: 200 },
+  { key: "bin_200_plus_pct" as const, min: 200, max: 350 },
+]
+
+// Deterministic pseudo-random variation to avoid hydration mismatch
+const seededVar = (seed: number, range = 0.1): number => {
+  const x = Math.sin(seed * 9999) * 10000
+  return 1 - range / 2 + (x - Math.floor(x)) * range
+}
+
+// Generate size distribution data with temperature correction — uses REAL data when available
 function generateDistributionData(
   results: NTAResult | undefined,
   correctionFactor: number,
   applyCorrection: boolean
-): DistributionDataPoint[] {
-  const data: DistributionDataPoint[] = []
-  const centerSize = results?.median_size_nm || 145
-  const spread = (results?.d90_nm && results?.d10_nm) 
-    ? (results.d90_nm - results.d10_nm) / 2 
+): { data: DistributionDataPoint[]; isReal: boolean } {
+  if (!results) return { data: [], isReal: false }
+
+  // Strategy 1: Use size_distribution array from NTA instrument
+  if (results.size_distribution && Array.isArray(results.size_distribution) && results.size_distribution.length > 0) {
+    const raw = results.size_distribution
+      .filter((d: any) => d.size != null)
+      .map((d: any) => ({ size: d.size as number, count: (d.count ?? d.concentration ?? 0) as number }))
+      .sort((a: { size: number }, b: { size: number }) => a.size - b.size)
+    if (raw.length > 0) {
+      const data: DistributionDataPoint[] = raw.map((d) => {
+        const correctedSize = applyCorrection ? d.size * correctionFactor : d.size
+        return {
+          size: d.size,
+          rawCount: d.count,
+          correctedCount: d.count, // counts stay the same, size axis shifts
+          correctedSize: applyCorrection ? correctedSize : undefined,
+        }
+      })
+      return { data, isReal: true }
+    }
+  }
+
+  // Strategy 2: Reconstruct from bin percentages
+  const hasBins = NTA_BINS.some(bin => {
+    const val = (results as any)[bin.key]
+    return val != null && val > 0
+  })
+  if (hasBins) {
+    const totalConc = results.concentration_particles_ml || 1e8
+    const data: DistributionDataPoint[] = []
+    NTA_BINS.forEach(bin => {
+      const pct = (results as any)[bin.key] as number | undefined
+      if (pct != null && pct > 0) {
+        const binWidth = bin.max - bin.min
+        const steps = Math.max(1, Math.round(binWidth / 5))
+        const countPerStep = Math.round((pct / 100 * totalConc) / steps)
+        for (let s = 0; s < steps; s++) {
+          const size = bin.min + (s + 0.5) * (binWidth / steps)
+          const correctedSize = applyCorrection ? size * correctionFactor : size
+          data.push({
+            size: Math.round(size),
+            rawCount: countPerStep,
+            correctedCount: countPerStep,
+            correctedSize: applyCorrection ? correctedSize : undefined,
+          })
+        }
+      }
+    })
+    if (data.length > 0) return { data: data.sort((a, b) => a.size - b.size), isReal: true }
+  }
+
+  // Strategy 3: Gaussian fallback (estimated, not real)
+  const centerSize = results.median_size_nm || 145
+  const spread = (results.d90_nm && results.d10_nm)
+    ? (results.d90_nm - results.d10_nm) / 2
     : 60
-  
+  const data: DistributionDataPoint[] = []
   for (let size = 0; size <= 500; size += 5) {
-    // Raw distribution centered on measured median
     const rawCount = Math.max(0, 3000 * Math.exp(-Math.pow((size - centerSize) / spread, 2)))
-    
-    // Corrected distribution: sizes are adjusted by correction factor
-    // If correction factor > 1, particles appear larger at reference temp
-    // If correction factor < 1, particles appear smaller at reference temp
     const correctedCenterSize = centerSize * correctionFactor
     const correctedSpread = spread * correctionFactor
-    const correctedCount = applyCorrection 
+    const correctedCount = applyCorrection
       ? Math.max(0, 3000 * Math.exp(-Math.pow((size - correctedCenterSize) / correctedSpread, 2)))
       : rawCount
-    
-    // Use deterministic variation based on index to avoid hydration mismatch
     const index = size / 5
-    const variation1 = 0.95 + ((Math.sin(index * 7) + 1) / 2) * 0.1
-    const variation2 = 0.95 + ((Math.sin(index * 11 + 3) + 1) / 2) * 0.1
-    
     data.push({
       size,
-      rawCount: Math.round(rawCount * variation1),
-      correctedCount: Math.round(correctedCount * variation2),
+      rawCount: Math.round(rawCount * seededVar(index * 7)),
+      correctedCount: Math.round(correctedCount * seededVar(index * 11 + 3)),
       correctedSize: applyCorrection ? size * correctionFactor : undefined,
     })
   }
-  return data
+  return { data, isReal: false }
 }
 
 // Calculate statistics for a distribution
@@ -94,7 +151,7 @@ export function TemperatureCorrectedComparison({ data: results }: TemperatureCor
   const mediaType = ntaAnalysisSettings?.mediaType ?? "Water"
   
   // Generate distribution data
-  const distributionData = useMemo(
+  const { data: distributionData, isReal } = useMemo(
     () => generateDistributionData(results, correctionFactor, applyCorrection),
     [results, correctionFactor, applyCorrection]
   )
@@ -169,6 +226,11 @@ export function TemperatureCorrectedComparison({ data: results }: TemperatureCor
             <Badge variant="outline">
               Factor: {correctionFactor.toFixed(4)}
             </Badge>
+            {!isReal && (
+              <Badge variant="outline" className="text-xs text-amber-500 border-amber-500/50">
+                Estimated
+              </Badge>
+            )}
           </div>
         </div>
       </CardHeader>

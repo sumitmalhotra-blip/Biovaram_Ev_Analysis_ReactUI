@@ -998,6 +998,35 @@ function FlowCytometrySidebar() {
 }
 
 function NTASidebar() {
+  const { ntaAnalysisSettings, setNtaAnalysisSettings } = useAnalysisStore()
+
+  // Compute viscosity correction factor from temperatures
+  // Using Stokes-Einstein: D ∝ T/η, so size correction ≈ (η_ref/η_meas) × (T_meas/T_ref)
+  const computeCorrectionFactor = (measTemp: number, refTemp: number, mediaType: string) => {
+    // PBS viscosity approximation (mPa·s) using Arrhenius model
+    const viscosity = (temp: number) => {
+      const base = mediaType === "water" ? 1.002 : mediaType === "culture" ? 1.20 : 1.02 // PBS default
+      return base * Math.exp(1800 * (1 / (273.15 + temp) - 1 / 293.15))
+    }
+    const etaMeas = viscosity(measTemp)
+    const etaRef = viscosity(refTemp)
+    return Number(((etaRef / etaMeas) * ((273.15 + measTemp) / (273.15 + refTemp))).toFixed(4))
+  }
+
+  const handleTempChange = (field: "measurementTemp" | "referenceTemp", value: number) => {
+    const newMeas = field === "measurementTemp" ? value : ntaAnalysisSettings.measurementTemp
+    const newRef = field === "referenceTemp" ? value : ntaAnalysisSettings.referenceTemp
+    const correctionFactor = computeCorrectionFactor(newMeas, newRef, ntaAnalysisSettings.mediaType)
+    setNtaAnalysisSettings({ [field]: value, correctionFactor })
+  }
+
+  const handleMediaChange = (mediaType: string) => {
+    const correctionFactor = computeCorrectionFactor(
+      ntaAnalysisSettings.measurementTemp, ntaAnalysisSettings.referenceTemp, mediaType
+    )
+    setNtaAnalysisSettings({ mediaType, correctionFactor })
+  }
+
   return (
     <Accordion type="multiple" defaultValue={["temp", "viz"]} className="space-y-2">
       <AccordionItem value="temp" className="border rounded-lg px-3">
@@ -1010,28 +1039,39 @@ function NTASidebar() {
         <AccordionContent className="space-y-4 pb-4">
           <div className="flex items-center justify-between">
             <Label className="text-xs text-muted-foreground">Enable Correction</Label>
-            <Switch defaultChecked />
+            <Switch
+              checked={ntaAnalysisSettings.applyTemperatureCorrection}
+              onCheckedChange={(checked) => setNtaAnalysisSettings({ applyTemperatureCorrection: checked })}
+            />
           </div>
 
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Measurement Temp (°C)</Label>
             <div className="flex items-center gap-2">
-              <Slider defaultValue={[22]} min={15} max={40} step={0.5} className="flex-1" />
-              <span className="text-sm font-mono w-12">22°C</span>
+              <Slider
+                value={[ntaAnalysisSettings.measurementTemp]}
+                onValueChange={([v]) => handleTempChange("measurementTemp", v)}
+                min={15} max={40} step={0.5} className="flex-1"
+              />
+              <span className="text-sm font-mono w-12">{ntaAnalysisSettings.measurementTemp}°C</span>
             </div>
           </div>
 
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Reference Temp (°C)</Label>
             <div className="flex items-center gap-2">
-              <Slider defaultValue={[25]} min={15} max={40} step={0.5} className="flex-1" />
-              <span className="text-sm font-mono w-12">25°C</span>
+              <Slider
+                value={[ntaAnalysisSettings.referenceTemp]}
+                onValueChange={([v]) => handleTempChange("referenceTemp", v)}
+                min={15} max={40} step={0.5} className="flex-1"
+              />
+              <span className="text-sm font-mono w-12">{ntaAnalysisSettings.referenceTemp}°C</span>
             </div>
           </div>
 
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Medium Type</Label>
-            <Select defaultValue="pbs">
+            <Select value={ntaAnalysisSettings.mediaType} onValueChange={handleMediaChange}>
               <SelectTrigger className="h-9">
                 <SelectValue />
               </SelectTrigger>
@@ -1046,7 +1086,7 @@ function NTASidebar() {
 
           <div className="p-2 rounded bg-secondary/50 text-xs">
             <span className="text-muted-foreground">Correction Factor: </span>
-            <span className="font-mono text-primary">0.9876</span>
+            <span className="font-mono text-primary">{ntaAnalysisSettings.correctionFactor}</span>
           </div>
         </AccordionContent>
       </AccordionItem>
@@ -1056,20 +1096,30 @@ function NTASidebar() {
         <AccordionContent className="space-y-4 pb-4">
           <div className="flex items-center justify-between">
             <Label className="text-xs text-muted-foreground">Show Percentile Lines</Label>
-            <Switch defaultChecked />
+            <Switch
+              checked={ntaAnalysisSettings.showPercentileLines}
+              onCheckedChange={(checked) => setNtaAnalysisSettings({ showPercentileLines: checked })}
+            />
           </div>
 
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Bin Size</Label>
             <div className="flex items-center gap-2">
-              <Slider defaultValue={[10]} min={5} max={50} step={5} className="flex-1" />
-              <span className="text-sm font-mono w-12">10nm</span>
+              <Slider
+                value={[ntaAnalysisSettings.binSize]}
+                onValueChange={([v]) => setNtaAnalysisSettings({ binSize: v })}
+                min={5} max={50} step={5} className="flex-1"
+              />
+              <span className="text-sm font-mono w-12">{ntaAnalysisSettings.binSize}nm</span>
             </div>
           </div>
 
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Y-Axis</Label>
-            <Select defaultValue="count">
+            <Select
+              value={ntaAnalysisSettings.yAxisMode}
+              onValueChange={(v) => setNtaAnalysisSettings({ yAxisMode: v as "count" | "normalized" })}
+            >
               <SelectTrigger className="h-9">
                 <SelectValue />
               </SelectTrigger>

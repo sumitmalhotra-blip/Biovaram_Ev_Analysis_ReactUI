@@ -20,16 +20,63 @@ const seededVariation = (seed: number): number => {
   return (x - Math.floor(x)) * 0.2 + 0.9 // Returns 0.9-1.1
 }
 
-// Generate NTA size distribution data from results
-const generateData = (results?: NTAResult, label?: string) => {
-  const data = []
-  const centerSize = results?.median_size_nm || 145
-  const spread = (results?.d90_nm && results?.d10_nm) 
-    ? (results.d90_nm - results.d10_nm) / 2 
+// NTA bin definitions for percentage-based fallback
+const NTA_BINS = [
+  { key: "bin_50_80nm_pct" as const, min: 50, max: 80, label: "50-80nm" },
+  { key: "bin_80_100nm_pct" as const, min: 80, max: 100, label: "80-100nm" },
+  { key: "bin_100_120nm_pct" as const, min: 100, max: 120, label: "100-120nm" },
+  { key: "bin_120_150nm_pct" as const, min: 120, max: 150, label: "120-150nm" },
+  { key: "bin_150_200nm_pct" as const, min: 150, max: 200, label: "150-200nm" },
+  { key: "bin_200_plus_pct" as const, min: 200, max: 350, label: "200+nm" },
+]
+
+// Generate NTA size distribution data from results — uses REAL data when available
+const generateData = (results?: NTAResult, _label?: string): { data: Array<{ size: number; count: number }>, isReal: boolean } => {
+  if (!results) return { data: [], isReal: false }
+
+  // Strategy 1: Use size_distribution array from NTA instrument (most accurate)
+  if (results.size_distribution && Array.isArray(results.size_distribution) && results.size_distribution.length > 0) {
+    const data = results.size_distribution
+      .filter((d: any) => d.size != null)
+      .map((d: any) => ({
+        size: d.size,
+        count: d.count ?? d.concentration ?? 0,
+      }))
+      .sort((a: { size: number }, b: { size: number }) => a.size - b.size)
+    if (data.length > 0) return { data, isReal: true }
+  }
+
+  // Strategy 2: Reconstruct from bin percentages (real summary data)
+  const hasBins = NTA_BINS.some(bin => {
+    const val = (results as any)[bin.key]
+    return val != null && val > 0
+  })
+  if (hasBins) {
+    const totalConc = results.concentration_particles_ml || 1e8  // use concentration or normalize to 1e8
+    const data: Array<{ size: number; count: number }> = []
+    
+    NTA_BINS.forEach(bin => {
+      const pct = (results as any)[bin.key] as number | undefined
+      if (pct != null && pct > 0) {
+        const binWidth = bin.max - bin.min
+        const steps = Math.max(1, Math.round(binWidth / 5)) // ~5nm resolution
+        const countPerStep = Math.round((pct / 100 * totalConc) / steps)
+        for (let s = 0; s < steps; s++) {
+          const size = bin.min + (s + 0.5) * (binWidth / steps)
+          data.push({ size: Math.round(size), count: countPerStep })
+        }
+      }
+    })
+    if (data.length > 0) return { data: data.sort((a, b) => a.size - b.size), isReal: true }
+  }
+
+  // Strategy 3: Gaussian fallback from summary stats (estimated, not real)
+  const centerSize = results.median_size_nm || 145
+  const spread = (results.d90_nm && results.d10_nm)
+    ? (results.d90_nm - results.d10_nm) / 2
     : 60
-  
+  const data: Array<{ size: number; count: number }> = []
   for (let size = 0; size <= 500; size += 5) {
-    // Single peak distribution centered on median
     const count = Math.max(0, 3000 * Math.exp(-Math.pow((size - centerSize) / spread, 2)))
     const index = size / 5
     data.push({
@@ -37,7 +84,7 @@ const generateData = (results?: NTAResult, label?: string) => {
       count: Math.round(count * seededVariation(index)),
     })
   }
-  return data
+  return { data, isReal: false }
 }
 
 // Merge primary and secondary data for overlay view
@@ -84,14 +131,14 @@ export function NTASizeDistributionChart({
   
   const hasOverlay = !!secondaryResults
   
-  const primaryData = useMemo(() => generateData(results), [results])
-  const secondaryData = useMemo(() => generateData(secondaryResults), [secondaryResults])
+  const { data: primaryData, isReal: primaryIsReal } = useMemo(() => generateData(results), [results])
+  const { data: secondaryDataArr, isReal: secondaryIsReal } = useMemo(() => generateData(secondaryResults), [secondaryResults])
   
   // Overlay merged data
   const overlayData = useMemo(() => {
     if (!hasOverlay) return primaryData.map(d => ({ ...d, primaryCount: d.count }))
-    return mergeDataForOverlay(primaryData, secondaryData)
-  }, [primaryData, secondaryData, hasOverlay])
+    return mergeDataForOverlay(primaryData, secondaryDataArr)
+  }, [primaryData, secondaryDataArr, hasOverlay])
   
   const d10 = results?.d10_nm || 90
   const d50 = results?.d50_nm || results?.median_size_nm || 145
@@ -104,6 +151,13 @@ export function NTASizeDistributionChart({
   
   return (
     <div className="space-y-3">
+      {/* Data source indicator */}
+      {!primaryIsReal && results && (
+        <Badge variant="outline" className="text-xs text-amber-500 border-amber-500/50">
+          Estimated from summary statistics
+        </Badge>
+      )}
+
       {/* Overlay controls */}
       {hasOverlay && showOverlayControls && (
         <div className="flex items-center justify-between">

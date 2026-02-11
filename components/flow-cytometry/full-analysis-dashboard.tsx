@@ -152,6 +152,10 @@ export function FullAnalysisDashboard({
           <SizeDistributionChart 
             height={height} 
             compact={compact}
+            sizeData={scatterData?.filter(p => p.diameter != null && p.diameter > 0).map(p => p.diameter as number)}
+            d10={results.size_statistics?.d10}
+            d50={results.size_statistics?.d50}
+            d90={results.size_statistics?.d90}
             secondarySizeData={hasOverlay ? secondarySizeData : undefined}
             secondaryD10={hasOverlay ? secondaryResults?.size_statistics?.d10 : undefined}
             secondaryD50={hasOverlay ? secondaryResults?.size_statistics?.d50 : undefined}

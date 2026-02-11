@@ -245,6 +245,21 @@ export interface NTAAnalysisSettings {
   referenceTemp: number
   mediaType: string
   correctionFactor: number
+  // Visualization options
+  showPercentileLines: boolean
+  binSize: number
+  yAxisMode: "count" | "normalized"
+}
+
+export const defaultNTAAnalysisSettings: NTAAnalysisSettings = {
+  applyTemperatureCorrection: true,
+  measurementTemp: 22,
+  referenceTemp: 25,
+  mediaType: "pbs",
+  correctionFactor: 0.9876,
+  showPercentileLines: true,
+  binSize: 10,
+  yAxisMode: "count",
 }
 
 // ============================================
@@ -457,8 +472,8 @@ export interface AnalysisState {
   // Analysis Settings
   fcsAnalysisSettings: FCSAnalysisSettings | null
   setFcsAnalysisSettings: (settings: Partial<FCSAnalysisSettings>) => void
-  ntaAnalysisSettings: NTAAnalysisSettings | null
-  setNtaAnalysisSettings: (settings: NTAAnalysisSettings) => void
+  ntaAnalysisSettings: NTAAnalysisSettings
+  setNtaAnalysisSettings: (settings: Partial<NTAAnalysisSettings>) => void
   crossComparisonSettings: CrossComparisonSettings
   setCrossComparisonSettings: (settings: CrossComparisonSettings) => void
 
@@ -812,8 +827,10 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
       ? { ...state.fcsAnalysisSettings, ...settings }
       : settings as FCSAnalysisSettings 
   })),
-  ntaAnalysisSettings: null,
-  setNtaAnalysisSettings: (settings) => set({ ntaAnalysisSettings: settings }),
+  ntaAnalysisSettings: defaultNTAAnalysisSettings,
+  setNtaAnalysisSettings: (settings) => set((state) => ({
+    ntaAnalysisSettings: { ...state.ntaAnalysisSettings, ...settings }
+  })),
   crossComparisonSettings: {
     discrepancyThreshold: 15,
     normalizeHistograms: true,

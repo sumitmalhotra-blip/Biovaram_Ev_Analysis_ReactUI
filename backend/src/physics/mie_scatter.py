@@ -114,7 +114,9 @@ class MieScatterCalculator:
         self,
         wavelength_nm: float = 488.0,
         n_particle: float = 1.40,
-        n_medium: float = 1.33
+        n_medium: float = 1.33,
+        fsc_angle_range: Optional[list[float]] = None,
+        ssc_angle_range: Optional[list[float]] = None
     ):
         """
         Initialize Mie calculator for specific optical configuration.
@@ -157,6 +159,11 @@ class MieScatterCalculator:
         self.wavelength_nm = wavelength_nm
         self.n_particle = n_particle
         self.n_medium = n_medium
+        
+        # Detector angle ranges (degrees) for angle-resolved scatter calculations
+        # Default: ZE5 Bio-Rad typical geometry
+        self.fsc_angle_range = fsc_angle_range or [0.5, 15.0]
+        self.ssc_angle_range = ssc_angle_range or [15.0, 150.0]
         
         # Relative refractive index (complex number for miepython)
         # Imaginary part = 0 for non-absorbing particles
