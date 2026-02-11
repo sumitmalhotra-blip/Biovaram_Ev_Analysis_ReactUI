@@ -18,9 +18,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession  # type: ignore[import-not-found]
 from sqlalchemy import select, func  # type: ignore[import-not-found]
 from loguru import logger
+import uuid
 
 from src.database.connection import get_session
 from src.database.models import ProcessingJob, Sample  # type: ignore[import-not-found]
+from src.api.auth_middleware import optional_auth
 
 router = APIRouter()
 
@@ -236,6 +238,7 @@ async def get_job_status(
 @router.delete("/{job_id}", response_model=dict)
 async def cancel_job(
     job_id: str,
+    current_user: dict | None = Depends(optional_auth),
     db: AsyncSession = Depends(get_session)
 ):
     """
@@ -312,6 +315,7 @@ async def cancel_job(
 @router.post("/{job_id}/retry", response_model=dict)
 async def retry_job(
     job_id: str,
+    current_user: dict | None = Depends(optional_auth),
     db: AsyncSession = Depends(get_session)
 ):
     """
@@ -354,18 +358,34 @@ async def retry_job(
                 detail=f"Can only retry failed jobs. Current status: {job_status}"
             )
         
-        # TODO: Create new job with same parameters
-        # For now, just return mock response
-        import uuid
+        # Create a new processing job with same type and sample
         new_job_id = str(uuid.uuid4())
+        job_type = str(getattr(job, 'job_type', 'unknown'))
+        sample_id = getattr(job, 'sample_id', None)
+
+        new_job = ProcessingJob(
+            job_id=new_job_id,
+            job_type=job_type,
+            sample_id=sample_id,
+            status="pending",
+            progress_percent=0,
+            current_step="Queued for retry",
+        )
+        db.add(new_job)
+
+        # Mark original job as superseded
+        job.current_step = f"Superseded by retry job {new_job_id}"  # type: ignore[assignment]
         
-        logger.info(f"🔄 Retrying job: {job_id} → {new_job_id}")
+        await db.commit()
+        
+        logger.info(f"🔄 Retrying job: {job_id} → {new_job_id} (type={job_type}, sample={sample_id})")
         
         return {
             "success": True,
             "message": "Job requeued successfully",
             "original_job_id": job_id,
-            "new_job_id": new_job_id
+            "new_job_id": new_job_id,
+            "job_type": job_type,
         }
         
     except HTTPException:

@@ -28,6 +28,7 @@ from loguru import logger
 
 from src.api.config import get_settings
 from src.database.connection import get_session
+from src.api.auth_middleware import optional_auth
 from src.database.models import Sample, FCSResult, NTAResult, ProcessingJob  # type: ignore[import-not-found]
 from src.database.crud import (
     create_sample,
@@ -518,6 +519,7 @@ async def upload_fcs_file(
     wavelength_nm: Optional[float] = Form(None, description="Laser wavelength for Mie calculations (default: 488.0)"),
     n_particle: Optional[float] = Form(None, description="Particle refractive index (default: 1.40)"),
     n_medium: Optional[float] = Form(None, description="Medium refractive index (default: 1.33)"),
+    current_user: dict | None = Depends(optional_auth),
     db: AsyncSession = Depends(get_session)
 ):
     """
@@ -1212,6 +1214,7 @@ async def upload_nta_file(
     operator: Optional[str] = Form(None),
     notes: Optional[str] = Form(None),
     user_id: Optional[int] = Form(None),
+    current_user: dict | None = Depends(optional_auth),
     db: AsyncSession = Depends(get_session)
 ):
     """
@@ -1542,6 +1545,7 @@ async def upload_nta_file(
 async def upload_nta_pdf(
     file: UploadFile = File(...),
     linked_sample_id: Optional[str] = Form(None),
+    current_user: dict | None = Depends(optional_auth),
     db: AsyncSession = Depends(get_session)
 ):
     """
@@ -1641,6 +1645,7 @@ async def upload_nta_pdf(
 @router.post("/batch", response_model=dict)
 async def upload_batch(
     files: list[UploadFile] = File(...),
+    current_user: dict | None = Depends(optional_auth),
     db: AsyncSession = Depends(get_session)
 ):
     """

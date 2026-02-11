@@ -17,7 +17,8 @@ Date: February 10, 2026
 """
 
 from typing import Optional, List, Dict, Any
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from src.api.auth_middleware import optional_auth
 from pydantic import BaseModel, Field
 from loguru import logger
 from pathlib import Path
@@ -188,6 +189,7 @@ async def fit_calibration_from_fcs(
     wavelength_nm: float = Query(405.0, description="Laser wavelength for the scatter channel"),
     fit_method: str = Query("power", description="Fit method: power, polynomial, interpolate"),
     set_as_active: bool = Query(True, description="Set as active calibration"),
+    current_user: dict | None = Depends(optional_auth),
 ):
     """
     Fit a bead calibration curve from an uploaded bead FCS file.
@@ -297,7 +299,10 @@ async def fit_calibration_from_fcs(
 
 
 @router.post("/fit-manual", response_model=dict)
-async def fit_calibration_manual(request: ManualCalibrationRequest):
+async def fit_calibration_manual(
+    request: ManualCalibrationRequest,
+    current_user: dict | None = Depends(optional_auth),
+):
     """
     Fit calibration from manually provided bead scatter values.
     
@@ -355,7 +360,9 @@ async def fit_calibration_manual(request: ManualCalibrationRequest):
 
 
 @router.delete("/active", response_model=dict)
-async def remove_active_calibration():
+async def remove_active_calibration(
+    current_user: dict | None = Depends(optional_auth),
+):
     """Remove the active calibration (revert to uncalibrated Mie theory)."""
     try:
         import datetime

@@ -1008,6 +1008,42 @@ class ApiClient {
     }
   }
 
+  /**
+   * Request a password reset email.
+   * Always returns success to prevent email enumeration.
+   */
+  async requestPasswordReset(email: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/auth/forgot-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Password reset request failed:", error);
+      // Return success to prevent email enumeration on network error
+      return { success: true, message: "If the email exists, a reset link has been sent." };
+    }
+  }
+
+  /**
+   * Reset password using a valid reset token.
+   */
+  async resetPassword(token: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/auth/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, new_password: newPassword }),
+      });
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Password reset failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
   // =========================================================================
   // Experimental Conditions (TASK-009)
   // =========================================================================

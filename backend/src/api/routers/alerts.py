@@ -35,6 +35,7 @@ from src.database.crud import (
     delete_alert,
 )
 from src.database.models import AlertSeverity, AlertType
+from src.api.auth_middleware import optional_auth
 
 
 router = APIRouter()
@@ -234,6 +235,7 @@ async def acknowledge_single_alert(
     alert_id: int,
     acknowledged_by: Optional[int] = Body(None, description="User ID of acknowledger"),
     notes: Optional[str] = Body(None, description="Acknowledgment notes"),
+    current_user: dict | None = Depends(optional_auth),
     db: AsyncSession = Depends(get_session)
 ):
     """
@@ -295,6 +297,7 @@ async def acknowledge_alerts_batch(
     alert_ids: List[int] = Body(..., description="List of alert IDs to acknowledge"),
     acknowledged_by: Optional[int] = Body(None, description="User ID of acknowledger"),
     notes: Optional[str] = Body(None, description="Acknowledgment notes"),
+    current_user: dict | None = Depends(optional_auth),
     db: AsyncSession = Depends(get_session)
 ):
     """
@@ -355,6 +358,7 @@ async def acknowledge_alerts_batch(
 @router.delete("/{alert_id}", response_model=dict)
 async def delete_single_alert(
     alert_id: int,
+    current_user: dict | None = Depends(optional_auth),
     db: AsyncSession = Depends(get_session)
 ):
     """
@@ -407,6 +411,7 @@ async def create_new_alert(
     user_id: Optional[int] = Body(None, description="User ID"),
     sample_name: Optional[str] = Body(None, description="Sample name for display"),
     metadata: Optional[dict] = Body(None, description="Additional metadata"),
+    current_user: dict | None = Depends(optional_auth),
     db: AsyncSession = Depends(get_session)
 ):
     """

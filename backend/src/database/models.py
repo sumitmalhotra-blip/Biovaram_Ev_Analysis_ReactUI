@@ -8,11 +8,11 @@ Tables:
 1. samples          - Master sample registry
 2. fcs_results      - Flow cytometry analysis results
 3. nta_results      - Nanoparticle tracking analysis results
-4. tem_results      - Transmission electron microscopy results (future)
-5. processing_jobs  - Async processing job queue
-6. qc_reports       - Quality control reports
-7. users            - User accounts (future)
-8. audit_log        - Activity audit trail
+4. processing_jobs  - Async processing job queue
+5. qc_reports       - Quality control reports
+6. users            - User accounts
+7. alerts           - Alert system (CRMIT-003)
+8. experimental_conditions - Experiment metadata (TASK-009)
 
 Author: CRMIT Backend Team
 Date: November 21, 2025
@@ -52,19 +52,10 @@ class QCStatus(str, enum.Enum):
     FAIL = "fail"
 
 
-class InstrumentType(str, enum.Enum):
-    """Instrument type."""
-    FCS = "fcs"
-    NTA = "nta"
-    TEM = "tem"
-    WESTERN_BLOT = "western_blot"
-
-
-class UserRole(str, enum.Enum):
-    """User role for access control."""
-    USER = "user"
-    RESEARCHER = "researcher"
-    ADMIN = "admin"
+# NOTE: InstrumentType and UserRole enums were removed in Phase 4 cleanup.
+# QCReport.instrument_type and User.role use plain String(20) columns instead.
+# If enum-level validation is needed in the future, add them back and
+# change the column types to Enum(...).
 
 
 class AlertSeverity(str, enum.Enum):
@@ -114,7 +105,7 @@ class User(Base):
     
     # Status
     is_active = Column(Boolean, nullable=False, default=True)
-    email_verified = Column(Boolean, nullable=False, default=False)
+    email_verified = Column(Boolean, nullable=False, default=False)  # TODO: implement email verification flow
     
     # Timestamps
     created_at = Column(DateTime, nullable=False, server_default=func.now())
@@ -156,8 +147,8 @@ class Sample(Base):
     treatment = Column(String(50), nullable=True, index=True)  # e.g., "CD81", "ISO", "Control"
     concentration_ug = Column(Float, nullable=True)  # Antibody concentration (µg)
     preparation_method = Column(String(50), nullable=True)  # e.g., "SEC", "Centrifugation"
-    passage_number = Column(Integer, nullable=True)  # Cell passage number
-    fraction_number = Column(Integer, nullable=True)  # Fraction number (F10, F16, etc.)
+    passage_number = Column(Integer, nullable=True)  # Cell passage number — TODO: wire in upload
+    fraction_number = Column(Integer, nullable=True)  # Fraction number — TODO: wire in upload
     
     # Timestamps
     experiment_date = Column(DateTime, nullable=True)
@@ -236,6 +227,7 @@ class FCSResult(Base):
     particle_size_d90_nm = Column(Float, nullable=True)
     
     # Marker Expression (% positive events)
+    # TODO: cd9 and cd63 are never written by upload — implement marker gating or remove
     cd9_positive_pct = Column(Float, nullable=True)
     cd81_positive_pct = Column(Float, nullable=True)
     cd63_positive_pct = Column(Float, nullable=True)
@@ -245,7 +237,7 @@ class FCSResult(Base):
     
     # Quality Metrics
     debris_pct = Column(Float, nullable=True)  # % events in debris gate
-    doublets_pct = Column(Float, nullable=True)  # % doublet events
+    doublets_pct = Column(Float, nullable=True)  # % doublet events — TODO: implement doublet detection
     
     # File Reference (nullable - may not have parquet file initially)
     parquet_file_path = Column(Text, nullable=True)
@@ -289,7 +281,7 @@ class NTAResult(Base):
     
     # Concentration
     concentration_particles_ml = Column(Float, nullable=True)
-    concentration_particles_ml_error = Column(Float, nullable=True)
+    # NOTE: concentration_particles_ml_error is never written — kept for future error-bar support
     
     # Size Bins (percentage in each bin)
     bin_30_50nm_pct = Column(Float, nullable=True)
@@ -583,39 +575,9 @@ class Alert(Base):
         }
 
 
-# ============================================================================
-# Audit Log
-# ============================================================================
-
-class AuditLog(Base):
-    """
-    Activity audit trail for compliance and debugging.
-    
-    Tracks all significant actions (uploads, deletions, QC overrides, etc.).
-    """
-    __tablename__ = "audit_log"
-    
-    # Primary Key
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    
-    # Action Details
-    action = Column(String(100), nullable=False, index=True)  # "upload_fcs", "delete_sample", etc.
-    entity_type = Column(String(50), nullable=False)  # "sample", "fcs_result", etc.
-    entity_id = Column(Integer, nullable=True)
-    
-    # User (optional - for future auth)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
-    username = Column(String(100), nullable=True)
-    
-    # Details
-    details = Column(JSON, nullable=True)  # Arbitrary action details
-    ip_address = Column(String(45), nullable=True)  # IPv6-compatible
-    
-    # Timestamps
-    timestamp = Column(DateTime, nullable=False, server_default=func.now(), index=True)
-    
-    def __repr__(self) -> str:
-        return f"<AuditLog(id={self.id}, action='{self.action}', timestamp='{self.timestamp}')>"
+# NOTE: AuditLog model was removed in Phase 4 cleanup.
+# It had zero CRUD operations and zero router references.
+# If audit logging is needed, re-implement with proper middleware integration.
 
 
 # ============================================================================

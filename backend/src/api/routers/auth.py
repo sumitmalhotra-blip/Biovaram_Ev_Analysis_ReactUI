@@ -5,11 +5,13 @@ Authentication Router
 Endpoints for user authentication and registration.
 
 Endpoints:
-- POST /auth/register  - Register new user
-- POST /auth/login     - Login and get token
-- GET  /auth/me        - Get current user profile
-- PUT  /auth/profile   - Update user profile
-- POST /auth/logout    - Logout (client-side token removal)
+- POST /auth/register          - Register new user
+- POST /auth/login             - Login and get token
+- GET  /auth/me                - Get current user profile
+- PUT  /auth/profile           - Update user profile
+- POST /auth/forgot-password   - Request password reset
+- POST /auth/reset-password    - Reset password with token
+- POST /auth/logout            - Logout (client-side token removal)
 
 Author: CRMIT Backend Team
 Date: December 26, 2025
@@ -18,6 +20,7 @@ Date: December 26, 2025
 from datetime import datetime
 from typing import Optional
 import bcrypt
+import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr, Field
@@ -400,4 +403,151 @@ async def list_users(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to list users: {str(e)}"
+        )
+
+
+# ============================================================================
+# Password Reset Endpoints
+# ============================================================================
+
+# In-memory store for password reset tokens (use Redis in production)
+_password_reset_tokens: dict[str, dict] = {}
+
+
+class ForgotPasswordRequest(BaseModel):
+    """Request body for forgot password."""
+    email: EmailStr = Field(..., description="User email address")
+
+
+class ResetPasswordRequest(BaseModel):
+    """Request body for resetting password."""
+    token: str = Field(..., description="Password reset token")
+    new_password: str = Field(..., min_length=8, description="New password (min 8 characters)")
+
+
+@router.post("/forgot-password", response_model=dict)
+async def forgot_password(
+    request: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    Request a password reset. Generates a token and logs it.
+
+    In production, this should send an email with a reset link.
+    For now, the token is stored in-memory and returned in server logs.
+
+    **Request Body:**
+    ```json
+    { "email": "user@example.com" }
+    ```
+
+    **Response (always success to prevent email enumeration):**
+    ```json
+    { "success": true, "message": "If the email exists, a reset link has been sent." }
+    ```
+    """
+    try:
+        # Check if user exists (don't reveal whether email is registered)
+        result = await db.execute(
+            select(User).where(User.email == request.email)
+        )
+        user = result.scalar_one_or_none()
+
+        if user:
+            # Generate a secure reset token
+            token = secrets.token_urlsafe(32)
+            _password_reset_tokens[token] = {
+                "user_id": user.id,
+                "email": str(user.email),
+                "created_at": datetime.utcnow(),
+            }
+            logger.info(
+                f"🔑 Password reset requested for {request.email} — "
+                f"token: {token[:8]}... (full token in debug log)"
+            )
+            logger.debug(f"🔑 Full reset token for {request.email}: {token}")
+        else:
+            logger.info(f"🔑 Password reset requested for unknown email: {request.email}")
+
+        # Always return success to prevent email enumeration
+        return {
+            "success": True,
+            "message": "If the email exists, a reset link has been sent.",
+        }
+
+    except Exception as e:
+        logger.exception(f"❌ Forgot password failed: {e}")
+        # Still return success for security
+        return {
+            "success": True,
+            "message": "If the email exists, a reset link has been sent.",
+        }
+
+
+@router.post("/reset-password", response_model=dict)
+async def reset_password(
+    request: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    Reset a user's password using a valid reset token.
+
+    **Request Body:**
+    ```json
+    { "token": "abc123...", "new_password": "newsecurepassword123" }
+    ```
+    """
+    try:
+        token_data = _password_reset_tokens.get(request.token)
+
+        if not token_data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired reset token",
+            )
+
+        # Check token age (expire after 1 hour)
+        from datetime import timedelta
+        age = datetime.utcnow() - token_data["created_at"]
+        if age > timedelta(hours=1):
+            del _password_reset_tokens[request.token]
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Reset token has expired. Please request a new one.",
+            )
+
+        # Find user
+        result = await db.execute(
+            select(User).where(User.id == token_data["user_id"])
+        )
+        user = result.scalar_one_or_none()
+
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found",
+            )
+
+        # Update password
+        new_hash = hash_password(request.new_password)
+        user.password_hash = new_hash  # type: ignore[assignment]
+        await db.commit()
+
+        # Invalidate token
+        del _password_reset_tokens[request.token]
+
+        logger.info(f"✅ Password reset successful for {token_data['email']}")
+
+        return {
+            "success": True,
+            "message": "Password has been reset successfully. You can now log in.",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"❌ Password reset failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Password reset failed: {str(e)}",
         )

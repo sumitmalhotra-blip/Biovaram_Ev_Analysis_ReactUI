@@ -5,8 +5,9 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ComposedChart } from "recharts"
 import { useAnalysisStore } from "@/lib/store"
+import { apiClient } from "@/lib/api-client"
 import { Layers, Eye, EyeOff } from "lucide-react"
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 
 interface OverlayHistogramChartProps {
   title?: string
@@ -21,6 +22,27 @@ export function OverlayHistogramChart({
   const [showPrimary, setShowPrimary] = useState(true)
   const [showSecondary, setShowSecondary] = useState(true)
 
+  // Fetch primary scatter data on-demand (not stored in global state)
+  const [primaryScatter, setPrimaryScatter] = useState<Array<{ x: number; y: number; diameter?: number }>>([])
+  const primarySampleId = fcsAnalysis.sampleId
+
+  useEffect(() => {
+    if (!primarySampleId) return
+    let cancelled = false
+    const fetchPrimaryScatter = async () => {
+      try {
+        const result = await apiClient.getScatterData(primarySampleId, 10000)
+        if (!cancelled && result?.data) {
+          setPrimaryScatter(result.data)
+        }
+      } catch {
+        // Scatter data is optional — Gaussian fallback still works
+      }
+    }
+    fetchPrimaryScatter()
+    return () => { cancelled = true }
+  }, [primarySampleId])
+
   const primaryResults = fcsAnalysis.results
   const secondaryResults = secondaryFcsAnalysis.results
 
@@ -28,7 +50,7 @@ export function OverlayHistogramChart({
   const histogramData = useMemo(() => {
     if (!primaryResults && !secondaryResults) return { data: [], isApproximate: true }
 
-    // Try to use actual scatter data from secondary analysis (stored in zustand)
+    // Try to use actual scatter data
     const secondaryScatter = secondaryFcsAnalysis.scatterData ?? []
 
     // Determine the value extractor based on parameter
@@ -40,14 +62,18 @@ export function OverlayHistogramChart({
     }
 
     // Collect real values where available
+    const primaryValues = primaryScatter.length > 0
+      ? primaryScatter.map(extractValue).filter(v => v != null && isFinite(v))
+      : []
     const secondaryValues = secondaryScatter.length > 0
       ? secondaryScatter.map(extractValue).filter(v => v != null && isFinite(v))
       : []
 
-    // If we have real scatter data for at least one side, use data-driven binning
-    const hasRealData = secondaryValues.length > 0
+    const hasRealPrimary = primaryValues.length > 0
+    const hasRealSecondary = secondaryValues.length > 0
+    const hasRealData = hasRealPrimary || hasRealSecondary
 
-    // Calculate range from real data or summary stats
+    // Calculate summary stats as fallback
     const primaryMean = parameter === "FSC-A"
       ? (primaryResults?.fsc_mean || primaryResults?.size_statistics?.mean || 100)
       : parameter === "SSC-A"
@@ -62,20 +88,24 @@ export function OverlayHistogramChart({
         : (secondaryResults?.size_statistics?.mean || secondaryResults?.particle_size_median_nm || 100)
     const secondaryStd = secondaryResults?.size_statistics?.std || secondaryMean * 0.3
 
-    // Determine bin range
+    // Determine bin range from all available data
+    const allValues = [...primaryValues, ...secondaryValues]
     let minVal: number, maxVal: number
-    if (hasRealData && secondaryValues.length > 0) {
-      const sorted = [...secondaryValues].sort((a, b) => a - b)
+    if (allValues.length > 0) {
+      const sorted = [...allValues].sort((a, b) => a - b)
       const q01 = sorted[Math.floor(sorted.length * 0.01)] ?? sorted[0]
       const q99 = sorted[Math.floor(sorted.length * 0.99)] ?? sorted[sorted.length - 1]
-      minVal = Math.min(
-        q01,
-        primaryResults ? primaryMean - 3 * primaryStd : Infinity
-      )
-      maxVal = Math.max(
-        q99,
-        primaryResults ? primaryMean + 3 * primaryStd : -Infinity
-      )
+      minVal = q01
+      maxVal = q99
+      // Expand range to include Gaussian tails if needed
+      if (!hasRealPrimary && primaryResults) {
+        minVal = Math.min(minVal, primaryMean - 3 * primaryStd)
+        maxVal = Math.max(maxVal, primaryMean + 3 * primaryStd)
+      }
+      if (!hasRealSecondary && secondaryResults) {
+        minVal = Math.min(minVal, secondaryMean - 3 * secondaryStd)
+        maxVal = Math.max(maxVal, secondaryMean + 3 * secondaryStd)
+      }
     } else {
       minVal = Math.min(
         primaryResults ? primaryMean - 3 * primaryStd : Infinity,
@@ -96,14 +126,19 @@ export function OverlayHistogramChart({
       const binEnd = binStart + binSize
       const binMid = binStart + binSize / 2
 
-      // Primary: Gaussian approximation from summary stats (no event data in store)
-      const primaryValue = primaryResults
-        ? Math.exp(-0.5 * Math.pow((binMid - primaryMean) / primaryStd, 2)) * 100
-        : 0
+      // Primary: Use real scatter data if available, else Gaussian fallback
+      let primaryValue: number
+      if (hasRealPrimary) {
+        primaryValue = primaryValues.filter(v => v >= binStart && v < binEnd).length
+      } else {
+        primaryValue = primaryResults
+          ? Math.exp(-0.5 * Math.pow((binMid - primaryMean) / primaryStd, 2)) * 100
+          : 0
+      }
 
       // Secondary: Use real scatter data if available, else Gaussian fallback
       let secondaryValue: number
-      if (hasRealData && secondaryValues.length > 0) {
+      if (hasRealSecondary) {
         secondaryValue = secondaryValues.filter(v => v >= binStart && v < binEnd).length
       } else {
         secondaryValue = secondaryResults
@@ -119,16 +154,18 @@ export function OverlayHistogramChart({
       })
     }
 
-    // Scale primary Gaussian to match secondary event count order of magnitude for visual comparison
-    if (hasRealData && primaryResults) {
-      const maxSecondary = Math.max(...data.map(d => d.secondary), 1)
-      const maxPrimary = Math.max(...data.map(d => d.primary), 1)
-      const scale = maxSecondary / maxPrimary
-      data.forEach(d => { d.primary = Math.round(d.primary * scale) })
+    // Scale Gaussian side to match event-data side for visual comparison
+    if (hasRealPrimary !== hasRealSecondary) {
+      const realSide = hasRealPrimary ? "primary" : "secondary"
+      const gaussSide = hasRealPrimary ? "secondary" : "primary"
+      const maxReal = Math.max(...data.map(d => d[realSide as keyof typeof d] as number), 1)
+      const maxGauss = Math.max(...data.map(d => d[gaussSide as keyof typeof d] as number), 1)
+      const scale = maxReal / maxGauss
+      data.forEach(d => { (d as Record<string, number>)[gaussSide] = Math.round((d[gaussSide as keyof typeof d] as number) * scale) })
     }
 
     return { data, isApproximate: !hasRealData }
-  }, [primaryResults, secondaryResults, secondaryFcsAnalysis.scatterData, parameter])
+  }, [primaryResults, secondaryResults, primaryScatter, secondaryFcsAnalysis.scatterData, parameter])
 
   if (!primaryResults) {
     return (
