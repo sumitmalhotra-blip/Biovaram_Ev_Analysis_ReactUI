@@ -73,6 +73,17 @@ interface ClusteredScatterChartProps {
   height?: number
   onClusterClick?: (cluster: ClusterData) => void
   apiBaseUrl?: string
+  xChannel?: string
+  yChannel?: string
+}
+
+// Get API base URL from environment (same logic as api-client.ts)
+const getApiBaseUrl = () => {
+  let base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+  if (base.endsWith("/api/v1")) {
+    base = base.replace(/\/api\/v1$/, "")
+  }
+  return `${base}/api/v1`
 }
 
 // Chart padding/margins
@@ -99,8 +110,11 @@ export function ClusteredScatterChart({
   yLabel = "SSC",
   height = 500,
   onClusterClick,
-  apiBaseUrl = "http://localhost:8000/api"
+  xChannel,
+  yChannel,
+  apiBaseUrl
 }: ClusteredScatterChartProps) {
+  const resolvedApiBaseUrl = apiBaseUrl || getApiBaseUrl()
   const svgRef = useRef<SVGSVGElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -140,8 +154,16 @@ export function ClusteredScatterChart({
     setError(null)
     
     try {
-      let url = `${apiBaseUrl}/samples/${sampleId}/clustered-scatter?zoom_level=${level}`
+      let url = `${resolvedApiBaseUrl}/samples/${sampleId}/clustered-scatter?zoom_level=${level}`
       
+      // Pass user-selected channels if provided
+      if (xChannel) {
+        url += `&fsc_channel=${encodeURIComponent(xChannel)}`
+      }
+      if (yChannel) {
+        url += `&ssc_channel=${encodeURIComponent(yChannel)}`
+      }
+
       if (level === 3 && vp) {
         url += `&viewport_x_min=${vp.x_min}&viewport_x_max=${vp.x_max}`
         url += `&viewport_y_min=${vp.y_min}&viewport_y_max=${vp.y_max}`
@@ -170,7 +192,7 @@ export function ClusteredScatterChart({
     } finally {
       setLoading(false)
     }
-  }, [apiBaseUrl, sampleId, viewport])
+  }, [resolvedApiBaseUrl, sampleId, viewport, xChannel, yChannel])
 
   // Fetch on mount and zoom change
   useEffect(() => {

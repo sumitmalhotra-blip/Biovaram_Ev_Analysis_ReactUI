@@ -361,8 +361,15 @@ export function useApi() {
       setFCSError(null)
 
       try {
-        // Include user_id in metadata for ownership
-        const uploadMetadata = { ...metadata, user_id: userId }
+        // Include user_id and Mie settings in metadata for ownership and physics
+        const fcsSettings = useAnalysisStore.getState().fcsAnalysisSettings
+        const uploadMetadata = { 
+          ...metadata, 
+          user_id: userId,
+          wavelength_nm: fcsSettings?.laserWavelength,
+          n_particle: fcsSettings?.particleRI,
+          n_medium: fcsSettings?.mediumRI,
+        }
         
         const response = await retryWithBackoff(
           () => apiClient.uploadFCS(file, uploadMetadata),

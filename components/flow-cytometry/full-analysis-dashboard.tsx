@@ -201,7 +201,22 @@ export function FullAnalysisDashboard({
           />
         )
       case "theory":
-        return <TheoryVsMeasuredChart />
+        return <TheoryVsMeasuredChart 
+          primaryMeasuredData={
+            scatterData.length > 0
+              ? scatterData
+                  .filter(p => p.diameter && p.diameter > 0 && p.y > 0)
+                  .map(p => ({ diameter: p.diameter as number, intensity: p.y }))
+              : undefined
+          }
+          secondaryMeasuredData={
+            hasOverlay && secondaryScatterData.length > 0
+              ? secondaryScatterData
+                  .filter(p => p.diameter && p.diameter > 0 && p.y > 0)
+                  .map(p => ({ diameter: p.diameter as number, intensity: p.y }))
+              : undefined
+          }
+        />
       case "event-size":
         return sampleId ? (
           <EventVsSizeChart

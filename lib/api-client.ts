@@ -96,6 +96,77 @@ export interface FCSResult {
   fsc_cv_pct?: number;
   ssc_cv_pct?: number;
   noise_events_removed?: number;
+  // Multi-solution Mie statistics (returned by upload when VSSC+BSSC channels present)
+  multi_solution_mie?: {
+    available: boolean;
+    used: boolean;
+    vssc_channel?: string;
+    bssc_channel?: string;
+    stats?: {
+      events_analyzed: number;
+      events_with_1_solution: number;
+      events_with_2_solutions: number;
+      events_with_3_plus_solutions: number;
+      d10?: number;
+      d50?: number;
+      d90?: number;
+    };
+  };
+}
+
+// Distribution Analysis Response types
+export interface DistributionFit {
+  name: string;
+  params: Record<string, number>;
+  aic: number;
+  bic: number;
+  ks_statistic: number;
+  ks_pvalue: number;
+  log_likelihood: number;
+}
+
+export interface DistributionOverlay {
+  x: number[];
+  y: number[];
+  name: string;
+}
+
+export interface DistributionAnalysisResponse {
+  sample_id: string;
+  n_samples: number;
+  normality_tests: {
+    tests: Record<string, {
+      statistic: number;
+      p_value: number;
+      is_normal: boolean;
+    }>;
+    is_normal: boolean;
+    conclusion: string;
+  };
+  distribution_fits: {
+    fits: Record<string, DistributionFit>;
+    best_fit_aic: string;
+    recommendation: string;
+    recommendation_reason: string;
+  };
+  summary_statistics: {
+    mean: number;
+    median: number;
+    d10: number;
+    d50: number;
+    d90: number;
+    skewness: number;
+    skew_interpretation: string;
+    kurtosis?: number;
+  };
+  conclusion: {
+    is_normal: boolean;
+    recommended_distribution: string;
+    use_median: boolean;
+    central_tendency: number;
+    central_tendency_metric: string;
+  };
+  overlays?: Record<string, DistributionOverlay>;
 }
 
 export interface NTAResult {
@@ -474,6 +545,9 @@ class ApiClient {
       operator?: string;
       notes?: string;
       user_id?: number;
+      wavelength_nm?: number;
+      n_particle?: number;
+      n_medium?: number;
     }
   ): Promise<UploadResponse> {
     try {
@@ -488,6 +562,9 @@ class ApiClient {
       if (metadata?.operator) formData.append("operator", metadata.operator);
       if (metadata?.notes) formData.append("notes", metadata.notes);
       if (metadata?.user_id) formData.append("user_id", metadata.user_id.toString());
+      if (metadata?.wavelength_nm) formData.append("wavelength_nm", metadata.wavelength_nm.toString());
+      if (metadata?.n_particle) formData.append("n_particle", metadata.n_particle.toString());
+      if (metadata?.n_medium) formData.append("n_medium", metadata.n_medium.toString());
 
       const response = await fetch(`${this.baseUrl}/upload/fcs`, {
         method: "POST",
@@ -906,6 +983,45 @@ class ApiClient {
       return this.handleResponse(response);
     } catch (error) {
       console.error("[API] Get scatter data failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  // =========================================================================
+  // Distribution Analysis
+  // =========================================================================
+
+  /**
+   * Get comprehensive distribution analysis including normality tests,
+   * distribution fitting (Normal, Log-normal, Gamma, Weibull), and overlay curves.
+   */
+  async getDistributionAnalysis(
+    sampleId: string,
+    options?: {
+      wavelength_nm?: number;
+      n_particle?: number;
+      n_medium?: number;
+      include_overlays?: boolean;
+    }
+  ): Promise<DistributionAnalysisResponse> {
+    try {
+      const params = new URLSearchParams();
+      if (options?.wavelength_nm) params.append("wavelength_nm", options.wavelength_nm.toString());
+      if (options?.n_particle) params.append("n_particle", options.n_particle.toString());
+      if (options?.n_medium) params.append("n_medium", options.n_medium.toString());
+      if (options?.include_overlays !== undefined) params.append("include_overlays", options.include_overlays.toString());
+
+      const queryString = params.toString();
+      const url = `${this.baseUrl}/samples/${sampleId}/distribution-analysis${queryString ? `?${queryString}` : ""}`;
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Get distribution analysis failed:", error);
       this.handleNetworkError(error);
     }
   }

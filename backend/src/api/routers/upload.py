@@ -515,6 +515,9 @@ async def upload_fcs_file(
     operator: Optional[str] = Form(None),
     notes: Optional[str] = Form(None),
     user_id: Optional[int] = Form(None),
+    wavelength_nm: Optional[float] = Form(None, description="Laser wavelength for Mie calculations (default: 488.0)"),
+    n_particle: Optional[float] = Form(None, description="Particle refractive index (default: 1.40)"),
+    n_medium: Optional[float] = Form(None, description="Medium refractive index (default: 1.33)"),
     db: AsyncSession = Depends(get_session)
 ):
     """
@@ -717,11 +720,14 @@ async def upload_fcs_file(
                             logger.info(f"✨ CALIBRATED particle size: {particle_size_median_nm:.1f} nm (bead calibration)")
                         else:
                             # === UNCALIBRATED FALLBACK ===
-                            # Initialize Mie calculator (488nm laser, typical EV RI, PBS medium)
+                            # Use user-provided params or defaults
+                            mie_wl = wavelength_nm if wavelength_nm is not None else 488.0
+                            mie_np = n_particle if n_particle is not None else 1.40
+                            mie_nm = n_medium if n_medium is not None else 1.33
                             mie_calc = MieScatterCalculator(
-                                wavelength_nm=488.0,
-                                n_particle=1.40,
-                                n_medium=1.33
+                                wavelength_nm=mie_wl,
+                                n_particle=mie_np,
+                                n_medium=mie_nm
                             )
                             diameter_nm, success = mie_calc.diameter_from_scatter(
                                 fsc_intensity=fsc_stats['median'],
@@ -740,6 +746,11 @@ async def upload_fcs_file(
                 # 1. Bead-calibrated sizing (if active calibration exists)
                 # 2. Multi-solution Mie with VSSC/BSSC ratio disambiguation
                 # 3. Single-solution Mie fallback
+                
+                # User-provided or default Mie parameters
+                mie_wl = wavelength_nm if wavelength_nm is not None else 488.0
+                mie_np = n_particle if n_particle is not None else 1.40
+                mie_nm = n_medium if n_medium is not None else 1.33
                 
                 # Calculate size distribution percentiles using Mie theory
                 size_statistics = None
@@ -799,7 +810,7 @@ async def upload_fcs_file(
                         logger.info(f"   VSSC channel (405nm): {vssc_channel_for_multi}")
                         logger.info(f"   BSSC channel (488nm): {bssc_h_channel}")
                         
-                        multi_mie_calc = MultiSolutionMieCalculator(n_particle=1.40, n_medium=1.33)
+                        multi_mie_calc = MultiSolutionMieCalculator(n_particle=mie_np, n_medium=mie_nm)
                         
                         # Sample events for analysis
                         sample_size = min(10000, len(parsed_data))
@@ -878,7 +889,7 @@ async def upload_fcs_file(
                 if size_statistics is None and not can_use_multi_solution and ssc_channel and ssc_channel in parsed_data.columns:
                     try:
                         logger.info(f"🔬 Using single-solution Mie sizing (no VSSC/BSSC pair available)")
-                        mie_calc = MieScatterCalculator(wavelength_nm=488.0, n_particle=1.40, n_medium=1.33)
+                        mie_calc = MieScatterCalculator(wavelength_nm=mie_wl, n_particle=mie_np, n_medium=mie_nm)
                         
                         # Sample SSC values and convert to sizes using fast batch method
                         sample_size = min(10000, len(parsed_data))
@@ -923,7 +934,7 @@ async def upload_fcs_file(
                 debris_pct = None
                 if fsc_channel and fsc_channel in parsed_data.columns:
                     try:
-                        mie_calc = MieScatterCalculator(wavelength_nm=488.0, n_particle=1.40, n_medium=1.33)
+                        mie_calc = MieScatterCalculator(wavelength_nm=mie_wl, n_particle=mie_np, n_medium=mie_nm)
                         # Use FAST batch calculation (sample 10000 events)
                         sample_size = min(10000, len(parsed_data))
                         sampled_fsc = parsed_data[fsc_channel].sample(n=sample_size, random_state=42).values

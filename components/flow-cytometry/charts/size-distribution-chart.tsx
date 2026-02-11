@@ -14,13 +14,15 @@ import {
   Brush,
   ComposedChart,
   Area,
+  Line,
 } from "recharts"
 import { InteractiveChartWrapper, EnhancedChartTooltip } from "@/components/charts/interactive-chart-wrapper"
 import { CHART_COLORS } from "@/lib/store"
 import { useAnalysisStore, type SizeRange, type ScatterDataPoint } from "@/lib/store"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Eye, EyeOff, Layers } from "lucide-react"
+import { Eye, EyeOff, Layers, BarChart3, TrendingUp } from "lucide-react"
+import type { DistributionAnalysisResponse } from "@/lib/api-client"
 
 interface SizeDistributionChartProps {
   data?: Array<{
@@ -45,6 +47,9 @@ interface SizeDistributionChartProps {
   secondaryD10?: number
   secondaryD50?: number
   secondaryD90?: number
+  // Distribution analysis results (normality tests, fits, overlays)
+  distributionAnalysis?: DistributionAnalysisResponse | null
+  distributionLoading?: boolean
 }
 
 // Generate sample histogram data with configurable bins and dynamic ranges
@@ -212,6 +217,8 @@ export function SizeDistributionChart({
   secondaryD10,
   secondaryD50,
   secondaryD90,
+  distributionAnalysis,
+  distributionLoading,
 }: SizeDistributionChartProps) {
   // TASK-019: Get histogram bins from store settings
   // Also get dynamic size ranges from store and overlay config
@@ -222,6 +229,56 @@ export function SizeDistributionChart({
   // Overlay visibility controls
   const [showPrimary, setShowPrimary] = useState(true)
   const [showSecondary, setShowSecondary] = useState(true)
+  const [showFitOverlay, setShowFitOverlay] = useState(true)
+  
+  // Distribution fit color mapping
+  const FIT_COLORS: Record<string, string> = {
+    normal: "#ef4444",     // Red
+    lognorm: "#8b5cf6",    // Purple (recommended for EVs)
+    gamma: "#f59e0b",      // Amber
+    weibull_min: "#06b6d4", // Cyan
+  }
+  const FIT_LABELS: Record<string, string> = {
+    normal: "Normal",
+    lognorm: "Log-Normal",
+    gamma: "Gamma",
+    weibull_min: "Weibull",
+  }
+
+  // Convert distribution overlays to chart data points
+  const fitOverlayData = useMemo(() => {
+    if (!distributionAnalysis?.overlays || !showFitOverlay) return null
+    
+    const overlays = distributionAnalysis.overlays
+    const bestFit = distributionAnalysis.distribution_fits?.best_fit_aic || "lognorm"
+    
+    // Merge all overlay x/y_scaled into a single array of data points
+    // Each overlay has x[] and y_scaled[] arrays
+    const allX = new Set<number>()
+    for (const [name, overlay] of Object.entries(overlays)) {
+      if (overlay?.x) {
+        overlay.x.forEach((v: number) => allX.add(Math.round(v)))
+      }
+    }
+    
+    const sortedX = Array.from(allX).sort((a, b) => a - b)
+    
+    return sortedX.map(xVal => {
+      const point: Record<string, number | null> = { fitX: xVal }
+      for (const [name, overlay] of Object.entries(overlays)) {
+        if (overlay?.x && overlay?.y_scaled) {
+          // Find the closest index
+          const idx = overlay.x.findIndex((v: number) => Math.round(v) >= xVal)
+          if (idx >= 0 && idx < overlay.y_scaled.length) {
+            point[`fit_${name}`] = Math.round(overlay.y_scaled[idx])
+          } else {
+            point[`fit_${name}`] = null
+          }
+        }
+      }
+      return point
+    })
+  }, [distributionAnalysis, showFitOverlay])
   
   // Check if overlay is active - allow demo data generation when no real secondary size data
   const hasRealSecondaryData = (secondarySizeData?.length || 0) > 0
@@ -295,6 +352,35 @@ export function SizeDistributionChart({
     </div>
   ) : null
 
+  // Distribution fit controls (shown when analysis data available)
+  const fitControls = distributionAnalysis ? (
+    <div className="flex items-center gap-2 mb-2">
+      <Button
+        variant={showFitOverlay ? "default" : "outline"}
+        size="sm"
+        className="h-7 text-xs gap-1"
+        onClick={() => setShowFitOverlay(!showFitOverlay)}
+      >
+        <TrendingUp className="h-3 w-3" />
+        {showFitOverlay ? "Hide Fits" : "Show Fits"}
+      </Button>
+      {distributionAnalysis.distribution_fits?.best_fit_aic && (
+        <Badge variant="outline" className="text-xs" style={{ borderColor: FIT_COLORS[distributionAnalysis.distribution_fits.best_fit_aic] || "#8b5cf6" }}>
+          Best: {FIT_LABELS[distributionAnalysis.distribution_fits.best_fit_aic] || distributionAnalysis.distribution_fits.best_fit_aic}
+        </Badge>
+      )}
+      {distributionAnalysis.normality_tests && (
+        <Badge variant={distributionAnalysis.normality_tests.is_normal ? "default" : "secondary"} className="text-xs">
+          {distributionAnalysis.normality_tests.is_normal ? "Normal" : "Non-Normal"}
+        </Badge>
+      )}
+    </div>
+  ) : distributionLoading ? (
+    <div className="flex items-center gap-2 mb-2">
+      <Badge variant="outline" className="text-xs animate-pulse">Loading distribution fits...</Badge>
+    </div>
+  ) : null
+
   return (
     <InteractiveChartWrapper
       title={hasOverlay ? "Size Distribution (Overlay)" : "Size Distribution"}
@@ -302,7 +388,7 @@ export function SizeDistributionChart({
       chartType="histogram"
       showControls={showControls && !compact}
       height={height}
-      headerContent={overlayControls}
+      headerContent={<>{overlayControls}{fitControls}</>}
     >
       {/* Use ComposedChart for overlay mode, BarChart for single file */}
       {hasOverlay ? (
@@ -424,7 +510,14 @@ export function SizeDistributionChart({
         </ResponsiveContainer>
       ) : (
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} barCategoryGap={0}>
+          <ComposedChart data={fitOverlayData && showFitOverlay 
+            ? data.map((item, idx) => {
+                // Merge fit overlay data by matching the size/fitX values
+                const fitPoint = fitOverlayData?.find(f => f.fitX !== null && Math.abs((f.fitX as number) - (item.size as number)) < 15)
+                return { ...item, ...(fitPoint || {}) }
+              })
+            : data
+          } barCategoryGap={0}>
             <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
             <XAxis
               dataKey="size"
@@ -461,6 +554,21 @@ export function SizeDistributionChart({
               </>
             )}
 
+            {/* Distribution fit overlay lines */}
+            {showFitOverlay && distributionAnalysis?.overlays && Object.entries(distributionAnalysis.overlays).map(([name]) => (
+              <Line
+                key={`fit_${name}`}
+                type="monotone"
+                dataKey={`fit_${name}`}
+                stroke={FIT_COLORS[name] || "#888"}
+                strokeWidth={name === distributionAnalysis.distribution_fits?.best_fit_aic ? 3 : 1.5}
+                strokeDasharray={name === distributionAnalysis.distribution_fits?.best_fit_aic ? undefined : "4 4"}
+                dot={false}
+                name={FIT_LABELS[name] || name}
+                connectNulls
+              />
+            ))}
+
             {/* Percentile lines */}
             <ReferenceLine
               x={d10}
@@ -491,8 +599,48 @@ export function SizeDistributionChart({
                 tickFormatter={(value) => `${value}nm`}
               />
             )}
-          </BarChart>
+          </ComposedChart>
         </ResponsiveContainer>
+      )}
+
+      {/* Distribution Analysis Summary Panel */}
+      {distributionAnalysis && (
+        <div className="mt-3 space-y-2">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+            {distributionAnalysis.overlays && Object.entries(distributionAnalysis.overlays).map(([name, overlay]) => {
+              const fit = distributionAnalysis.distribution_fits?.fits?.[name]
+              const isBest = name === distributionAnalysis.distribution_fits?.best_fit_aic
+              return (
+                <div
+                  key={name}
+                  className={`p-2 rounded-lg border ${isBest ? 'border-primary bg-primary/5' : 'border-border'}`}
+                >
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: FIT_COLORS[name] || "#888" }} />
+                    <span className="font-medium">{FIT_LABELS[name] || name}</span>
+                    {isBest && <Badge variant="default" className="text-[10px] px-1 py-0">Best</Badge>}
+                  </div>
+                  {fit && (
+                    <div className="text-muted-foreground space-y-0.5">
+                      <div>AIC: {typeof fit.aic === 'number' ? fit.aic.toFixed(1) : fit.aic}</div>
+                      {fit.ks_pvalue !== undefined && <div>KS p: {fit.ks_pvalue.toFixed(4)}</div>}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          {distributionAnalysis.conclusion && (
+            <div className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-2">
+              <span className="font-medium">Recommendation:</span>{" "}
+              {distributionAnalysis.conclusion.recommended_distribution === "lognorm" ? "Log-Normal" : distributionAnalysis.conclusion.recommended_distribution}
+              {" "}— Use {distributionAnalysis.conclusion.central_tendency_metric} = {distributionAnalysis.conclusion.central_tendency?.toFixed(1)} nm
+              {distributionAnalysis.summary_statistics?.skew_interpretation && (
+                <span className="ml-2">({distributionAnalysis.summary_statistics.skew_interpretation})</span>
+              )}
+            </div>
+          )}
+        </div>
       )}
     </InteractiveChartWrapper>
   )

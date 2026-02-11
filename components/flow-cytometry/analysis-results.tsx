@@ -80,6 +80,10 @@ export function AnalysisResults() {
   
   // UI-002: Clustered scatter view mode for large datasets
   const [scatterViewMode, setScatterViewMode] = useState<"standard" | "clustered">("standard")
+  
+  // Distribution analysis state
+  const [distributionAnalysis, setDistributionAnalysis] = useState<import("@/lib/api-client").DistributionAnalysisResponse | null>(null)
+  const [distributionLoading, setDistributionLoading] = useState(false)
 
   // Use real results from the API
   const results = fcsAnalysis.results
@@ -224,6 +228,42 @@ export function AnalysisResults() {
     return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [overlayConfig.enabled, secondarySampleId, secondaryResults])
+
+  // Load distribution analysis (normality tests + distribution fitting)
+  useEffect(() => {
+    let cancelled = false
+    if (sampleId && results) {
+      setDistributionLoading(true)
+      import("@/lib/api-client").then(({ apiClient }) => {
+        apiClient.getDistributionAnalysis(sampleId, {
+          wavelength_nm: fcsAnalysisSettings?.laserWavelength,
+          n_particle: fcsAnalysisSettings?.particleRI,
+          n_medium: fcsAnalysisSettings?.mediumRI,
+          include_overlays: true,
+        })
+          .then((data) => {
+            if (!cancelled && data) {
+              setDistributionAnalysis(data)
+              console.log('[AnalysisResults] Distribution analysis loaded:', {
+                isNormal: data.normality_tests?.is_normal,
+                bestFit: data.distribution_fits?.best_fit_aic,
+                recommendation: data.conclusion?.recommended_distribution
+              })
+            }
+          })
+          .catch((err) => {
+            console.warn("[AnalysisResults] Distribution analysis failed (non-critical):", err)
+          })
+          .finally(() => {
+            if (!cancelled) setDistributionLoading(false)
+          })
+      })
+    } else {
+      setDistributionAnalysis(null)
+    }
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sampleId, results, fcsAnalysisSettings?.laserWavelength, fcsAnalysisSettings?.particleRI, fcsAnalysisSettings?.mediumRI])
 
   // Load real size bins from backend - PERFORMANCE FIX: Removed callback from deps
   // Also refreshes when Mie settings or size ranges change
@@ -772,6 +812,8 @@ export function AnalysisResults() {
                 secondaryD10={secondaryResults?.size_statistics?.d10}
                 secondaryD50={secondaryResults?.size_statistics?.d50}
                 secondaryD90={secondaryResults?.size_statistics?.d90}
+                distributionAnalysis={distributionAnalysis}
+                distributionLoading={distributionLoading}
               />
             </TabsContent>
 
@@ -789,7 +831,22 @@ export function AnalysisResults() {
                   <Pin className="h-4 w-4" />
                 </Button>
               </div>
-              <TheoryVsMeasuredChart />
+              <TheoryVsMeasuredChart 
+                primaryMeasuredData={
+                  scatterData.length > 0 
+                    ? scatterData
+                        .filter(p => p.diameter && p.diameter > 0 && p.y > 0)
+                        .map(p => ({ diameter: p.diameter as number, intensity: p.y }))
+                    : undefined
+                }
+                secondaryMeasuredData={
+                  secondaryScatterData && secondaryScatterData.length > 0
+                    ? secondaryScatterData
+                        .filter(p => p.diameter && p.diameter > 0 && p.y > 0)
+                        .map(p => ({ diameter: p.diameter as number, intensity: p.y }))
+                    : undefined
+                }
+              />
             </TabsContent>
 
             <TabsContent value="fsc-ssc" className="space-y-4">
@@ -850,6 +907,8 @@ export function AnalysisResults() {
                   title={`${xChannel} vs ${yChannel} (Clustered)`}
                   xLabel={xChannel}
                   yLabel={yChannel}
+                  xChannel={xChannel}
+                  yChannel={yChannel}
                   height={500}
                   onClusterClick={(cluster) => {
                     toast({

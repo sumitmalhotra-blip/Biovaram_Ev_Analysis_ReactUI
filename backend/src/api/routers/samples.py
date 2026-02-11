@@ -760,6 +760,9 @@ async def get_scatter_data(
                 success_mask = ~np.isnan(diameters) & (diameters > 0)
                 valid_diameter_count = int(np.sum(success_mask))
                 
+                # Store num_solutions for per-event multi-solution metadata
+                multi_solution_num = num_solutions
+                
                 logger.info(f"📐 Multi-solution: {valid_diameter_count}/{len(ssc_blue)} valid diameters")
             else:
                 # === SINGLE-SOLUTION MIE (FALLBACK) ===
@@ -787,6 +790,14 @@ async def get_scatter_data(
             valid_diameter_count = 0
         
         scatter_data = []
+        sizing_method_used = "none"
+        if active_calibration and active_calibration.is_fitted:
+            sizing_method_used = "bead_calibrated"
+        elif can_use_multi_solution:
+            sizing_method_used = "multi_solution_mie"
+        else:
+            sizing_method_used = "single_solution_mie"
+        
         for idx, orig_idx in enumerate(sampled_indices):
             fsc_val = float(fsc_values[idx])
             ssc_val = float(ssc_values[idx])
@@ -801,6 +812,10 @@ async def get_scatter_data(
             if success_mask[idx] and diameters[idx] > 0:
                 point_data["diameter"] = round(float(diameters[idx]), 1)
             
+            # Add num_solutions if multi-solution Mie was used
+            if can_use_multi_solution and 'multi_solution_num' in dir():
+                point_data["num_solutions"] = int(multi_solution_num[idx])
+            
             scatter_data.append(point_data)
         
         logger.success(f"✅ Returned {len(scatter_data)} scatter points ({valid_diameter_count} with diameter) for {sample_id}")
@@ -814,7 +829,8 @@ async def get_scatter_data(
                 "fsc": fsc_ch,
                 "ssc": ssc_ch,
                 "available": channels  # Include all available channels for UI
-            }
+            },
+            "sizing_method": sizing_method_used,
         }
         
     except HTTPException:
@@ -2358,8 +2374,62 @@ async def reanalyze_sample(
         particle_size_median_nm = None
         size_distribution = None
         custom_bins = {}
+        sizing_method = None
         
-        if can_use_multi_solution:
+        # === BEAD-CALIBRATED PATH (highest priority, same as upload) ===
+        active_calibration = None
+        try:
+            from src.physics.bead_calibration import get_active_calibration
+            active_calibration = get_active_calibration()
+        except Exception:
+            pass
+        
+        if active_calibration and active_calibration.is_fitted:
+            try:
+                logger.info(f"🎯 Re-analyze using BEAD-CALIBRATED sizing")
+                sizing_method = "bead_calibrated"
+                
+                cal_channel = ssc_channel
+                # Prefer VSSC for violet-calibrated curves
+                if multi_solution_info.get('vssc_channel') and multi_solution_info['vssc_channel'] in parsed_data.columns:
+                    cal_channel = multi_solution_info['vssc_channel']
+                
+                sample_size = min(10000, len(parsed_data))
+                np.random.seed(42)
+                sample_indices = np.random.choice(len(parsed_data), size=sample_size, replace=False)
+                scatter_sample = np.asarray(parsed_data[cal_channel].values[sample_indices], dtype=np.float64)
+                
+                pos_mask = scatter_sample > 0
+                if np.sum(pos_mask) > 0:
+                    cal_diameters = active_calibration.diameter_from_fsc(scatter_sample[pos_mask])
+                    valid_cal = cal_diameters[~np.isnan(cal_diameters) & (cal_diameters > 0)]
+                    
+                    if len(valid_cal) > 0:
+                        particle_size_median_nm = float(np.median(valid_cal))
+                        size_distribution = {
+                            'd10': float(np.percentile(valid_cal, 10)),
+                            'd50': float(np.percentile(valid_cal, 50)),
+                            'd90': float(np.percentile(valid_cal, 90)),
+                            'mean': float(np.mean(valid_cal)),
+                            'std': float(np.std(valid_cal))
+                        }
+                        
+                        scale_factor = len(parsed_data) / sample_size
+                        for range_def in request.size_ranges:
+                            name = range_def.get('name', f"{range_def['min']}-{range_def['max']}nm")
+                            min_size = range_def.get('min', 0)
+                            max_size = range_def.get('max', 1000)
+                            count = np.sum((valid_cal >= min_size) & (valid_cal < max_size))
+                            custom_bins[name] = {
+                                'count': int(count * scale_factor),
+                                'percentage': float(count / len(valid_cal) * 100) if len(valid_cal) > 0 else 0
+                            }
+                        logger.info(f"📐 Bead-calibrated: {len(valid_cal)} valid diameters, median={particle_size_median_nm:.1f}nm")
+            except Exception as cal_err:
+                logger.warning(f"⚠️ Bead calibration failed in reanalyze, falling back: {cal_err}")
+                active_calibration = None  # Fall through to Mie methods
+        
+        if particle_size_median_nm is None and can_use_multi_solution:
             # === MULTI-SOLUTION MIE (PREFERRED) ===
             from src.physics.mie_scatter import MultiSolutionMieCalculator
             
@@ -2407,7 +2477,8 @@ async def reanalyze_sample(
                         'count': int(count * scale_factor),
                         'percentage': float(count / len(valid_sizes) * 100) if len(valid_sizes) > 0 else 0
                     }
-        else:
+        
+        if particle_size_median_nm is None and not can_use_multi_solution:
             # === SINGLE-SOLUTION MIE (FALLBACK) ===
             from src.physics.mie_scatter import MieScatterCalculator
             mie_calc = MieScatterCalculator(
@@ -2415,6 +2486,7 @@ async def reanalyze_sample(
                 n_particle=request.n_particle,
                 n_medium=request.n_medium
             )
+            sizing_method = "single_mie"
             logger.info(f"🔬 Re-analyze using single-solution Mie: λ={request.wavelength_nm}nm")
             
             # Calculate particle size from FSC median
@@ -2430,31 +2502,30 @@ async def reanalyze_sample(
                 except Exception as mie_error:
                     logger.warning(f"⚠️ Mie calculation failed: {mie_error}")
             
-            # Calculate size distribution
+            # Calculate size distribution using batch operation for performance
             if fsc_channel and fsc_channel in parsed_data.columns:
                 try:
                     # Sample for performance
                     sample_size = min(10000, len(parsed_data))
-                    sampled_fsc = parsed_data[fsc_channel].sample(n=sample_size, random_state=42)
+                    sampled_fsc = parsed_data[fsc_channel].sample(n=sample_size, random_state=42).values
                     
-                    sizes = []
-                    for fsc_val in sampled_fsc:
-                        size, success = mie_calc.diameter_from_scatter(
-                            fsc_intensity=float(fsc_val),
-                            min_diameter=10.0,
-                            max_diameter=500.0
-                        )
-                        if success and size > 0:
-                            sizes.append(size)
+                    # Use batch diameter calculation (100-1000× faster than per-event loop)
+                    fsc_array = np.asarray(sampled_fsc, dtype=np.float64)
+                    sizes_array, success_mask = mie_calc.diameters_from_scatter_normalized(
+                        fsc_intensities=fsc_array,
+                        min_diameter=10.0,
+                        max_diameter=500.0
+                    )
+                    valid_sizes = sizes_array[success_mask & (sizes_array > 0)]
                     
-                    if sizes:
-                        sizes_array = np.array(sizes)
+                    if len(valid_sizes) > 0:
+                        particle_size_median_nm = float(np.median(valid_sizes))
                         size_distribution = {
-                            'd10': float(np.percentile(sizes_array, 10)),
-                            'd50': float(np.percentile(sizes_array, 50)),
-                            'd90': float(np.percentile(sizes_array, 90)),
-                            'mean': float(np.mean(sizes_array)),
-                            'std': float(np.std(sizes_array))
+                            'd10': float(np.percentile(valid_sizes, 10)),
+                            'd50': float(np.percentile(valid_sizes, 50)),
+                            'd90': float(np.percentile(valid_sizes, 90)),
+                            'mean': float(np.mean(valid_sizes)),
+                            'std': float(np.std(valid_sizes))
                         }
                         
                         # Calculate custom size range bins
@@ -2463,10 +2534,10 @@ async def reanalyze_sample(
                             name = range_def.get('name', f"{range_def['min']}-{range_def['max']}nm")
                             min_size = range_def.get('min', 0)
                             max_size = range_def.get('max', 1000)
-                            count = np.sum((sizes_array >= min_size) & (sizes_array < max_size))
+                            count = np.sum((valid_sizes >= min_size) & (valid_sizes < max_size))
                             custom_bins[name] = {
                                 'count': int(count * scale_factor),
-                                'percentage': float(count / len(sizes_array) * 100) if sizes_array.size > 0 else 0
+                                'percentage': float(count / len(valid_sizes) * 100) if len(valid_sizes) > 0 else 0
                             }
                             
                 except Exception as size_error:
@@ -2534,6 +2605,7 @@ async def reanalyze_sample(
                 'particle_size_median_nm': particle_size_median_nm,
                 'size_statistics': size_distribution,
                 'custom_size_bins': custom_bins,
+                'sizing_method': sizing_method or ('multi_mie' if can_use_multi_solution else 'single_mie'),
             },
             'anomaly_data': anomaly_data,
         }

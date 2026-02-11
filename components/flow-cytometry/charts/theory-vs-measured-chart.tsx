@@ -33,35 +33,70 @@ const generateData = (
   generateSecondaryDemo?: boolean
 ) => {
   const data = []
+  
+  // If we have real measured data, bin/average it by diameter and compute theory relative to measurements
+  const primaryBins = new Map<number, number[]>()
+  const secondaryBins = new Map<number, number[]>()
+  
+  if (measuredData && measuredData.length > 0) {
+    // Bin measured data into 10nm buckets
+    for (const point of measuredData) {
+      const bin = Math.round(point.diameter / 10) * 10
+      if (bin >= 20 && bin <= 500) {
+        if (!primaryBins.has(bin)) primaryBins.set(bin, [])
+        primaryBins.get(bin)!.push(point.intensity)
+      }
+    }
+  }
+  
+  if (secondaryMeasuredData && secondaryMeasuredData.length > 0) {
+    for (const point of secondaryMeasuredData) {
+      const bin = Math.round(point.diameter / 10) * 10
+      if (bin >= 20 && bin <= 500) {
+        if (!secondaryBins.has(bin)) secondaryBins.set(bin, [])
+        secondaryBins.get(bin)!.push(point.intensity)
+      }
+    }
+  }
+  
+  const hasPrimaryData = primaryBins.size > 0
 
   for (let diameter = 20; diameter <= 500; diameter += 10) {
-    // Simplified Mie scattering intensity (theoretical)
+    // Simplified Mie scattering intensity (theoretical approximation)
+    // Uses Rayleigh-Mie transition: intensity ~ d^4 for small particles, with exponential decay for large
     const theory = Math.pow(diameter / 100, 4) * 1000 * Math.exp(-diameter / 300)
     
-    // Use deterministic variation based on index to avoid hydration mismatch
     const index = (diameter - 20) / 10
-    const primaryVariation = 0.85 + ((Math.sin(index * 0.7) + 1) / 2) * 0.3
-    const secondaryVariation = 0.80 + ((Math.sin(index * 1.1 + 2) + 1) / 2) * 0.35
     
-    // Primary measured - from props or generate with deterministic noise
-    const primaryMeasured = measuredData 
-      ? measuredData.find(d => Math.abs(d.diameter - diameter) < 5)?.intensity 
-      : theory * primaryVariation
+    // Primary measured - from binned real data or generate demo
+    let primaryMeasured: number | null = null
+    if (primaryBins.has(diameter) && primaryBins.get(diameter)!.length > 0) {
+      const values = primaryBins.get(diameter)!
+      // Use median of the bin for robustness
+      values.sort((a, b) => a - b)
+      primaryMeasured = Math.round(values[Math.floor(values.length / 2)])
+    } else if (!hasPrimaryData) {
+      // Demo mode with deterministic noise
+      const primaryVariation = 0.85 + ((Math.sin(index * 0.7) + 1) / 2) * 0.3
+      primaryMeasured = Math.round(theory * primaryVariation)
+    }
     
-    // Secondary measured - from props, generate demo if overlay enabled, or undefined
-    let secondaryMeasured: number | undefined
-    if (secondaryMeasuredData) {
-      secondaryMeasured = secondaryMeasuredData.find(d => Math.abs(d.diameter - diameter) < 5)?.intensity
-    } else if (generateSecondaryDemo) {
-      // Generate demo secondary data with different variation pattern
-      secondaryMeasured = theory * secondaryVariation
+    // Secondary measured
+    let secondaryMeasured: number | null = null
+    if (secondaryBins.has(diameter) && secondaryBins.get(diameter)!.length > 0) {
+      const values = secondaryBins.get(diameter)!
+      values.sort((a, b) => a - b)
+      secondaryMeasured = Math.round(values[Math.floor(values.length / 2)])
+    } else if (!secondaryMeasuredData && generateSecondaryDemo) {
+      const secondaryVariation = 0.80 + ((Math.sin(index * 1.1 + 2) + 1) / 2) * 0.35
+      secondaryMeasured = Math.round(theory * secondaryVariation)
     }
 
     data.push({
       diameter,
       theory: Math.round(theory),
-      primaryMeasured: primaryMeasured ? Math.round(primaryMeasured) : null,
-      secondaryMeasured: secondaryMeasured ? Math.round(secondaryMeasured) : null,
+      primaryMeasured,
+      secondaryMeasured,
     })
   }
 
@@ -87,6 +122,30 @@ export function TheoryVsMeasuredChart({
   const data = useMemo(() => {
     return generateData(primaryMeasuredData, secondaryMeasuredData, hasOverlay ?? undefined)
   }, [primaryMeasuredData, secondaryMeasuredData, hasOverlay])
+  
+  // Calculate real deviation statistics from theory vs measured
+  const deviationStats = useMemo(() => {
+    const primary: number[] = []
+    const secondary: number[] = []
+    
+    data.forEach(point => {
+      if (point.theory > 0 && point.primaryMeasured && point.primaryMeasured > 0) {
+        primary.push(Math.abs(point.primaryMeasured - point.theory) / point.theory * 100)
+      }
+      if (point.theory > 0 && point.secondaryMeasured && point.secondaryMeasured > 0) {
+        secondary.push(Math.abs(point.secondaryMeasured - point.theory) / point.theory * 100)
+      }
+    })
+    
+    const avg = (arr: number[]) => arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0
+    
+    return {
+      primaryDeviation: primary.length > 0 ? `±${avg(primary).toFixed(1)}%` : "N/A",
+      secondaryDeviation: secondary.length > 0 ? `±${avg(secondary).toFixed(1)}%` : "N/A",
+      hasPrimaryData: primary.length > 0,
+      hasSecondaryData: secondary.length > 0,
+    }
+  }, [data])
   
   return (
     <Card className="card-3d">
@@ -232,7 +291,7 @@ export function TheoryVsMeasuredChart({
                 {fcsAnalysis.file?.name?.slice(0, 25) || 'Primary'}
               </p>
               <p className="text-muted-foreground">
-                Deviation from theory: <span className="font-medium">±12.3%</span>
+                Deviation from theory: <span className="font-medium">{deviationStats.primaryDeviation}</span>
               </p>
             </div>
             <div className="p-3 rounded-lg" style={{ backgroundColor: `${overlayConfig.secondaryColor}20` }}>
@@ -240,7 +299,7 @@ export function TheoryVsMeasuredChart({
                 {secondaryFcsAnalysis.file?.name?.slice(0, 25) || 'Comparison'}
               </p>
               <p className="text-muted-foreground">
-                Deviation from theory: <span className="font-medium">±15.7%</span>
+                Deviation from theory: <span className="font-medium">{deviationStats.secondaryDeviation}</span>
               </p>
             </div>
           </div>
