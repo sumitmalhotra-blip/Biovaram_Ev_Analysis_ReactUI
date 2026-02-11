@@ -17,39 +17,79 @@ interface SizeCategoryData {
 interface SizeCategoryBreakdownProps {
   totalEvents: number
   medianSize?: number
-  // In a real implementation, you'd pass size data array to calculate these
-  // For now, we'll calculate from available statistics or use defaults
+  diameters?: number[]
 }
 
-export function SizeCategoryBreakdown({ totalEvents, medianSize }: SizeCategoryBreakdownProps) {
-  // Calculate size categories based on median and distribution
-  // In production, this would analyze actual size data
-  const categories: SizeCategoryData[] = [
-    {
-      name: "Small EVs / Exomeres",
-      range: "<50 nm",
-      count: Math.floor(totalEvents * 0.15), // ~15% typically
-      percentage: 15,
-      color: "cyan",
-      description: "Small extracellular vesicles and exomeres",
-    },
-    {
-      name: "Exosomes",
-      range: "50-200 nm",
-      count: Math.floor(totalEvents * 0.70), // ~70% typically
-      percentage: 70,
-      color: "purple",
-      description: "Classic exosome size range",
-    },
-    {
-      name: "Large EVs / Microvesicles",
-      range: ">200 nm",
-      count: Math.floor(totalEvents * 0.15), // ~15% typically
-      percentage: 15,
-      color: "amber",
-      description: "Microvesicles and large extracellular vesicles",
-    },
-  ]
+export function SizeCategoryBreakdown({ totalEvents, medianSize, diameters }: SizeCategoryBreakdownProps) {
+  // Calculate real size categories from actual diameter data when available
+  const categories: SizeCategoryData[] = (() => {
+    if (diameters && diameters.length > 0) {
+      const validDiameters = diameters.filter(d => d > 0 && isFinite(d))
+      const total = validDiameters.length
+      if (total === 0) return defaultCategories(totalEvents)
+
+      const smallEVs = validDiameters.filter(d => d < 50).length
+      const exosomes = validDiameters.filter(d => d >= 50 && d <= 200).length
+      const largeEVs = validDiameters.filter(d => d > 200).length
+
+      return [
+        {
+          name: "Small EVs / Exomeres",
+          range: "<50 nm",
+          count: smallEVs,
+          percentage: parseFloat(((smallEVs / total) * 100).toFixed(1)),
+          color: "cyan",
+          description: "Small extracellular vesicles and exomeres",
+        },
+        {
+          name: "Exosomes",
+          range: "50-200 nm",
+          count: exosomes,
+          percentage: parseFloat(((exosomes / total) * 100).toFixed(1)),
+          color: "purple",
+          description: "Classic exosome size range",
+        },
+        {
+          name: "Large EVs / Microvesicles",
+          range: ">200 nm",
+          count: largeEVs,
+          percentage: parseFloat(((largeEVs / total) * 100).toFixed(1)),
+          color: "amber",
+          description: "Microvesicles and large extracellular vesicles",
+        },
+      ]
+    }
+    return defaultCategories(totalEvents)
+  })()
+
+  function defaultCategories(events: number): SizeCategoryData[] {
+    return [
+      {
+        name: "Small EVs / Exomeres",
+        range: "<50 nm",
+        count: 0,
+        percentage: 0,
+        color: "cyan",
+        description: "Small extracellular vesicles and exomeres",
+      },
+      {
+        name: "Exosomes",
+        range: "50-200 nm",
+        count: 0,
+        percentage: 0,
+        color: "purple",
+        description: "Classic exosome size range",
+      },
+      {
+        name: "Large EVs / Microvesicles",
+        range: ">200 nm",
+        count: 0,
+        percentage: 0,
+        color: "amber",
+        description: "Microvesicles and large extracellular vesicles",
+      },
+    ]
+  }
 
   // Determine dominant population
   const dominantCategory = categories.reduce((prev, current) =>
@@ -149,7 +189,11 @@ export function SizeCategoryBreakdown({ totalEvents, medianSize }: SizeCategoryB
         {/* EV Classification Info */}
         <div className="rounded-lg border bg-secondary/30 p-3">
           <p className="text-xs text-muted-foreground">
-            <strong className="text-foreground">Note:</strong> Classification based on MISEV2018 guidelines. 
+            <strong className="text-foreground">Note:</strong>{" "}
+            {diameters && diameters.length > 0
+              ? `Classification based on MISEV2018 guidelines from ${diameters.filter(d => d > 0 && isFinite(d)).length.toLocaleString()} measured particle diameters. `
+              : "No diameter data available — upload and analyze an FCS file with Mie scattering to see real size classification. "
+            }
             Exosomes (50-200nm) typically contain tetraspanins (CD9, CD63, CD81). 
             Microvesicles (&gt;200nm) are shed from plasma membrane.
           </p>

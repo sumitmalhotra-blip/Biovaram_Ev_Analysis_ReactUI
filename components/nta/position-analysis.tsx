@@ -272,11 +272,11 @@ export function PositionAnalysis({
   const [showGrid, setShowGrid] = useState(true)
   const [showStats, setShowStats] = useState(true)
 
-  // Use provided data or generate mock data
+  // Use provided data or show empty state
   const positionData = useMemo(() => {
     if (data && data.length > 0) return data
-    return generateMockPositionData(150, frameWidth, frameHeight)
-  }, [data, frameWidth, frameHeight])
+    return []
+  }, [data])
 
   // Filter by size range
   const filteredData = useMemo(() => {
@@ -313,6 +313,40 @@ export function PositionAnalysis({
     a.download = "nta_position_data.csv"
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  if (positionData.length === 0) {
+    return (
+      <Card className={cn("card-3d", className)}>
+        <CardHeader className="pb-2">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-primary/10">
+              <MapPin className="h-4 w-4 text-primary" />
+            </div>
+            <div>
+              <CardTitle className="text-base md:text-lg">Position Analysis</CardTitle>
+              <CardDescription className="text-xs">
+                Spatial distribution of detected particles
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col items-center justify-center py-12 text-center space-y-3">
+            <div className="p-3 rounded-full bg-muted/50">
+              <AlertTriangle className="h-8 w-8 text-muted-foreground/60" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-muted-foreground">Position Data Not Available</p>
+              <p className="text-xs text-muted-foreground/70 max-w-sm">
+                Multi-position capture data from the NTA instrument is required for spatial analysis. 
+                This feature requires NTA files with per-position particle tracking data.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    )
   }
 
   return (

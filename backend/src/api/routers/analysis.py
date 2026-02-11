@@ -677,12 +677,12 @@ async def export_to_parquet(
             
             if request.include_statistics:
                 fcs_dict.update({
-                    "fsc_cv_pct": fcs_data.fsc_cv_pct,
-                    "ssc_cv_pct": fcs_data.ssc_cv_pct,
+                    "fsc_cv_pct": fcs_data.fsc_cv,
+                    "ssc_cv_pct": fcs_data.ssc_cv,
                     "particle_size_median_nm": fcs_data.particle_size_median_nm,
                     "particle_size_mean_nm": fcs_data.particle_size_mean_nm,
-                    "noise_events_removed": fcs_data.noise_events_removed,
-                    "gated_events": fcs_data.gated_events,
+                    "debris_pct": fcs_data.debris_pct,
+                    "cd81_positive_pct": fcs_data.cd81_positive_pct,
                 })
             
             data_frames.append(pd.DataFrame([fcs_dict]))

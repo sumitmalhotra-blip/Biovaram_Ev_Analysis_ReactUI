@@ -174,7 +174,7 @@ async def get_samples(
         query = query.where(Sample.processing_status == processing_status)
     
     # Apply pagination and ordering
-    query = query.order_by(Sample.acquisition_date.desc()).offset(skip).limit(limit)
+    query = query.order_by(Sample.upload_timestamp.desc()).offset(skip).limit(limit)
     
     result = await db.execute(query)
     return list(result.scalars().all())

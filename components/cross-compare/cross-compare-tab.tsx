@@ -766,7 +766,10 @@ export function CrossCompareTab() {
                   <Pin className="h-4 w-4" />
                 </Button>
               </div>
-              <DiscrepancyChart />
+              <DiscrepancyChart
+                fcsStats={{ d10: fcsStats.d10, d50: fcsStats.d50, d90: fcsStats.d90, std: fcsStats.std }}
+                ntaStats={{ d10: ntaStats.d10, d50: ntaStats.d50, d90: ntaStats.d90, std: ntaStats.std }}
+              />
 
               <Card className="bg-secondary/30 shadow-inner">
                 <CardContent className="p-4">

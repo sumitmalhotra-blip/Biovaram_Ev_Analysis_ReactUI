@@ -32,6 +32,7 @@ import { EventVsSizeChart } from "./charts/event-vs-size-chart"
 import { FullAnalysisDashboard } from "./full-analysis-dashboard"
 import { StatisticsCards } from "./statistics-cards"
 import { ParticleSizeVisualization } from "./particle-size-visualization"
+import { SizeCategoryBreakdown } from "./size-category-breakdown"
 import { CustomSizeRanges } from "./custom-size-ranges"
 import { AnomalySummaryCard } from "./anomaly-summary-card"
 import { AnomalyEventsTable, type AnomalyEvent } from "./anomaly-events-table"
@@ -689,6 +690,18 @@ export function AnalysisResults() {
           scatterData={scatterData}
         />
       ) : null}
+
+      {/* EV Size Category Breakdown — uses real diameter data from scatter analysis */}
+      {scatterData.length > 0 && (
+        <SizeCategoryBreakdown
+          totalEvents={totalEvents}
+          medianSize={medianSize}
+          diameters={scatterData
+            .filter((p) => p.diameter !== undefined && p.diameter > 0)
+            .map((p) => p.diameter as number)
+          }
+        />
+      )}
 
       {/* Custom Size Range Analysis */}
       <CustomSizeRanges 

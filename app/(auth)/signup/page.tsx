@@ -24,8 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Loader2, UserPlus, Beaker, AlertCircle, Check } from "lucide-react";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+import { apiClient } from "@/lib/api-client";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -73,27 +72,14 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
-      // Register user - use hardcoded URL to avoid env issues
-      const registerUrl = "http://localhost:8000/api/v1/auth/register";
-      console.log("Registering at:", registerUrl);
-      
-      const response = await fetch(registerUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: formData.email,
-          password: formData.password,
-          name: formData.name,
-          organization: formData.organization || undefined,
-          role: formData.role,
-        }),
+      // Register user via API client (uses dynamic URL resolution)
+      const data = await apiClient.registerUser({
+        email: formData.email,
+        password: formData.password,
+        name: formData.name,
+        organization: formData.organization || undefined,
+        role: formData.role,
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.detail || "Registration failed");
-      }
 
       // Auto sign in after registration
       const signInResult = await signIn("credentials", {

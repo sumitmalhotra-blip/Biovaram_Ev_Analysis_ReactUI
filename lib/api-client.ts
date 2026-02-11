@@ -788,6 +788,212 @@ class ApiClient {
   }
 
   // =========================================================================
+  // Channel Configuration
+  // =========================================================================
+
+  /**
+   * Get current FCS channel configuration (instruments, FSC/SSC channels).
+   */
+  async getChannelConfig(): Promise<{
+    success: boolean;
+    active_instrument: string;
+    instruments: string[];
+    fsc_channels: string[];
+    ssc_channels: string[];
+    preferred: {
+      for_size_analysis: [string, string];
+      for_scatter_plot: [string, string];
+    };
+  }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/samples/channel-config`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Get channel config failed:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update FCS channel configuration (active instrument, custom mapping).
+   */
+  async updateChannelConfig(params: {
+    instrument?: string;
+    fsc_channel?: string;
+    ssc_channel?: string;
+    save?: boolean;
+  }): Promise<{
+    success: boolean;
+    message: string;
+    active_instrument: string;
+    preferred_fsc: string;
+    preferred_ssc: string;
+    saved: boolean;
+  }> {
+    try {
+      const queryParams = new URLSearchParams();
+      if (params.instrument) queryParams.set("instrument", params.instrument);
+      if (params.fsc_channel) queryParams.set("fsc_channel", params.fsc_channel);
+      if (params.ssc_channel) queryParams.set("ssc_channel", params.ssc_channel);
+      if (params.save !== undefined) queryParams.set("save", String(params.save));
+
+      const response = await fetch(`${this.baseUrl}/samples/channel-config?${queryParams}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+      });
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Update channel config failed:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get available channels for a specific FCS sample.
+   */
+  async getAvailableChannels(sampleId: string): Promise<{
+    success: boolean;
+    sample_id: string;
+    channels_info: Array<{
+      name: string;
+      index: number;
+      stats: { min: number; max: number; mean: number; std: number };
+    }>;
+    detected_fsc: string[];
+    detected_ssc: string[];
+    active_instrument: string;
+    recommendation: { fsc: string; ssc: string };
+  }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/samples/${sampleId}/available-channels`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Get available channels failed:", error);
+      throw error;
+    }
+  }
+
+  // =========================================================================
+  // User Profile & Management
+  // =========================================================================
+
+  /**
+   * Get user profile by ID.
+   */
+  async getUserProfile(userId: number): Promise<{
+    id: number;
+    email: string;
+    name: string;
+    role: string;
+    organization: string;
+    is_active: boolean;
+    last_login?: string;
+    created_at: string;
+  }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/auth/me/${userId}`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Get user profile failed:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update user profile (name, organization).
+   */
+  async updateUserProfile(userId: number, data: {
+    name?: string;
+    organization?: string;
+  }): Promise<{
+    id: number;
+    email: string;
+    name: string;
+    role: string;
+    organization: string;
+    is_active: boolean;
+    last_login?: string;
+    created_at: string;
+  }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/auth/profile/${userId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Update user profile failed:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * List all users (admin only).
+   */
+  async listUsers(skip: number = 0, limit: number = 100): Promise<Array<{
+    id: number;
+    email: string;
+    name: string;
+    role: string;
+    organization: string;
+    is_active: boolean;
+    last_login?: string;
+    created_at: string;
+  }>> {
+    try {
+      const response = await fetch(`${this.baseUrl}/auth/users?skip=${skip}&limit=${limit}`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] List users failed:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Register a new user account.
+   */
+  async registerUser(data: {
+    email: string;
+    password: string;
+    name: string;
+    organization?: string;
+    role?: string;
+  }): Promise<{
+    id: number;
+    email: string;
+    name: string;
+    role: string;
+    organization: string;
+    is_active: boolean;
+    created_at: string;
+  }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Register user failed:", error);
+      throw error;
+    }
+  }
+
+  // =========================================================================
   // Experimental Conditions (TASK-009)
   // =========================================================================
 
