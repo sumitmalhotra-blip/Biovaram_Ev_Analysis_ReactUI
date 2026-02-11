@@ -72,6 +72,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
               name: data.user.name,
               role: data.user.role || "user",
               organization: data.user.organization,
+              backendToken: data.access_token || null,
             }
           }
 
@@ -91,6 +92,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.name = user.name
         token.role = (user as User).role
         token.organization = (user as User).organization
+        token.backendToken = (user as Record<string, unknown>).backendToken ?? null
       }
       return token
     },
@@ -101,6 +103,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         session.user.name = token.name as string
         session.user.role = token.role as "user" | "admin" | "researcher" | "lab_manager"
         session.user.organization = token.organization as string | null
+        // Expose backend token so api-client can use it
+        ;(session as Record<string, unknown>).backendToken = token.backendToken ?? null
       }
       return session
     },

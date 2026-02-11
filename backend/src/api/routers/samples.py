@@ -23,6 +23,7 @@ from loguru import logger
 
 from src.database.connection import get_session
 from src.database.models import Sample, FCSResult, NTAResult, QCReport, ProcessingJob  # type: ignore[import-not-found]
+from src.api.auth_middleware import optional_auth
 
 router = APIRouter()
 
@@ -498,6 +499,7 @@ async def get_nta_results(
 @router.delete("/{sample_id}", response_model=dict)
 async def delete_sample(
     sample_id: str,
+    current_user: dict | None = Depends(optional_auth),
     db: AsyncSession = Depends(get_session)
 ):
     """
@@ -526,6 +528,10 @@ async def delete_sample(
     ```
     """
     try:
+        # Log auth context
+        user_info = f"user={current_user.get('sub', 'unknown')}" if current_user else "unauthenticated"
+        logger.info(f"🗑️  Delete sample {sample_id} requested by {user_info}")
+
         # Get sample
         query = select(Sample).where(Sample.sample_id == sample_id)
         result = await db.execute(query)

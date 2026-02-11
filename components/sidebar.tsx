@@ -333,6 +333,47 @@ function FlowCytometrySidebar() {
     fetchCalStatus()
   }, [apiConnected])
 
+  // Fetch channel config on mount
+  useEffect(() => {
+    if (!apiConnected) return
+    const fetchChannelConfig = async () => {
+      setChannelConfigLoading(true)
+      try {
+        const { apiClient } = await import("@/lib/api-client")
+        const config = await apiClient.getChannelConfig()
+        if (config.success) {
+          setInstruments(config.instruments || [])
+          setActiveInstrument(config.active_instrument || "")
+          setFscChannels(config.fsc_channels || [])
+          setSscChannels(config.ssc_channels || [])
+          setSelectedFsc(config.preferred?.for_size_analysis?.[0] || config.fsc_channels?.[0] || "")
+          setSelectedSsc(config.preferred?.for_size_analysis?.[1] || config.ssc_channels?.[0] || "")
+        }
+      } catch {
+        // silently fail
+      } finally {
+        setChannelConfigLoading(false)
+      }
+    }
+    fetchChannelConfig()
+  }, [apiConnected])
+
+  // Handle channel config update  
+  const handleChannelConfigUpdate = useCallback(async (params: { instrument?: string; fsc_channel?: string; ssc_channel?: string }) => {
+    try {
+      const { apiClient } = await import("@/lib/api-client")
+      const result = await apiClient.updateChannelConfig({ ...params, save: true })
+      if (result.success) {
+        if (params.instrument) setActiveInstrument(result.active_instrument)
+        if (params.fsc_channel) setSelectedFsc(result.preferred_fsc)
+        if (params.ssc_channel) setSelectedSsc(result.preferred_ssc)
+        toast({ title: "Channel config updated", description: result.message })
+      }
+    } catch {
+      toast({ variant: "destructive", title: "Failed to update channel config" })
+    }
+  }, [toast])
+
   // Local state initialized from store (with defaults)
   const [wavelength, setWavelength] = useState(fcsAnalysisSettings?.laserWavelength?.toString() || "488")
   const [medium, setMedium] = useState("pbs")
@@ -346,6 +387,15 @@ function FlowCytometrySidebar() {
   // Angle range state for Mie scattering integration
   const [fscAngleRange, setFscAngleRange] = useState<[number, number]>(fcsAnalysisSettings?.fscAngleRange || [1, 15])
   const [sscAngleRange, setSscAngleRange] = useState<[number, number]>(fcsAnalysisSettings?.sscAngleRange || [85, 95])
+
+  // Channel config state (loaded from backend)
+  const [channelConfigLoading, setChannelConfigLoading] = useState(false)
+  const [instruments, setInstruments] = useState<string[]>([])
+  const [activeInstrument, setActiveInstrument] = useState<string>("")
+  const [fscChannels, setFscChannels] = useState<string[]>([])
+  const [sscChannels, setSscChannels] = useState<string[]>([])
+  const [selectedFsc, setSelectedFsc] = useState<string>("")
+  const [selectedSsc, setSelectedSsc] = useState<string>("")
   // Custom size range editing state
   const [editingRanges, setEditingRanges] = useState(false)
   const [newRangeName, setNewRangeName] = useState("")
@@ -562,6 +612,73 @@ function FlowCytometrySidebar() {
       </div>
 
       <Accordion type="multiple" defaultValue={["params", "angles", "analysis", "categories"]} className="space-y-2">
+        <AccordionItem value="instrument" className="border rounded-lg px-3">
+          <AccordionTrigger className="text-sm font-medium py-3">
+            <span className="flex items-center gap-2">
+              <Database className="h-4 w-4 text-primary" />
+              Instrument / Channels
+            </span>
+          </AccordionTrigger>
+          <AccordionContent className="space-y-4 pb-4">
+            {channelConfigLoading ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Loading channel config...
+              </div>
+            ) : instruments.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No channel config available. Upload an FCS file first.</p>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Instrument</Label>
+                  <Select value={activeInstrument} onValueChange={(v) => handleChannelConfigUpdate({ instrument: v })}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="Select instrument" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {instruments.map((inst) => (
+                        <SelectItem key={inst} value={inst}>{inst}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {fscChannels.length > 0 && (
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">FSC Channel</Label>
+                    <Select value={selectedFsc} onValueChange={(v) => handleChannelConfigUpdate({ fsc_channel: v })}>
+                      <SelectTrigger className="h-9">
+                        <SelectValue placeholder="Select FSC" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {fscChannels.map((ch) => (
+                          <SelectItem key={ch} value={ch}>{ch}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {sscChannels.length > 0 && (
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">SSC Channel</Label>
+                    <Select value={selectedSsc} onValueChange={(v) => handleChannelConfigUpdate({ ssc_channel: v })}>
+                      <SelectTrigger className="h-9">
+                        <SelectValue placeholder="Select SSC" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sscChannels.map((ch) => (
+                          <SelectItem key={ch} value={ch}>{ch}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </>
+            )}
+          </AccordionContent>
+        </AccordionItem>
+
         <AccordionItem value="params" className="border rounded-lg px-3">
           <AccordionTrigger className="text-sm font-medium py-3">
             <span className="flex items-center gap-2">

@@ -27,6 +27,7 @@ from loguru import logger
 
 from src.database.connection import get_session
 from src.database.models import User
+from src.api.auth_middleware import create_access_token, create_refresh_token
 
 router = APIRouter()
 
@@ -72,10 +73,13 @@ class UserResponse(BaseModel):
 
 
 class AuthResponse(BaseModel):
-    """Authentication response with user data."""
+    """Authentication response with user data and JWT tokens."""
     success: bool
     message: str
     user: Optional[UserResponse] = None
+    access_token: Optional[str] = None
+    refresh_token: Optional[str] = None
+    token_type: str = "bearer"
 
 
 # ============================================================================
@@ -248,10 +252,21 @@ async def login_user(
         
         logger.info(f"✅ User logged in: {request.email}")
         
+        # Create JWT tokens
+        token_data = {
+            "sub": str(user.id),
+            "email": str(user.email),
+            "role": str(user.role or "user"),
+        }
+        access_token = create_access_token(token_data)
+        refresh_token = create_refresh_token(token_data)
+        
         return AuthResponse(
             success=True,
             message="Login successful",
-            user=UserResponse.model_validate(user)
+            user=UserResponse.model_validate(user),
+            access_token=access_token,
+            refresh_token=refresh_token,
         )
         
     except HTTPException:

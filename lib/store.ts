@@ -381,8 +381,6 @@ export interface AnalysisState {
   // Local samples (for offline/fallback)
   samples: LocalSample[]
   addSample: (sample: LocalSample) => void
-  removeSample: (id: string) => void
-  clearSamples: () => void
 
   // FCS Analysis State
   fcsAnalysis: FCSAnalysisState
@@ -440,10 +438,8 @@ export interface AnalysisState {
 
   // Processing Jobs
   processingJobs: ProcessingJob[]
-  setProcessingJobs: (jobs: ProcessingJob[]) => void
   addProcessingJob: (job: ProcessingJob) => void
   updateProcessingJob: (jobId: string, updates: Partial<ProcessingJob>) => void
-  removeProcessingJob: (jobId: string) => void
 
   // Pinned Charts
   pinnedCharts: PinnedChart[]
@@ -461,13 +457,6 @@ export interface AnalysisState {
   saveImage: (image: SavedImage) => void
   removeImage: (id: string) => void
   clearSavedImages: () => void
-  updateImageMetadata: (id: string, metadata: Partial<SavedImage['metadata']>) => void
-
-  // Cross-Compare Selection
-  selectedFCSSample: APISample | null
-  setSelectedFCSSample: (sample: APISample | null) => void
-  selectedNTASample: APISample | null
-  setSelectedNTASample: (sample: APISample | null) => void
 
   // Analysis Settings
   fcsAnalysisSettings: FCSAnalysisSettings | null
@@ -603,11 +592,6 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
     set((state) => ({
       samples: [...state.samples, sample],
     })),
-  removeSample: (id) =>
-    set((state) => ({
-      samples: state.samples.filter((s) => s.id !== id),
-    })),
-  clearSamples: () => set({ samples: [] }),
 
   // FCS Analysis
   fcsAnalysis: initialFCSAnalysis,
@@ -758,7 +742,6 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
 
   // Processing Jobs
   processingJobs: [],
-  setProcessingJobs: (jobs) => set({ processingJobs: jobs }),
   addProcessingJob: (job) =>
     set((state) => ({
       processingJobs: [...state.processingJobs, job],
@@ -768,10 +751,6 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
       processingJobs: state.processingJobs.map((job) =>
         job.id === jobId ? { ...job, ...updates } : job
       ),
-    })),
-  removeProcessingJob: (jobId) =>
-    set((state) => ({
-      processingJobs: state.processingJobs.filter((job) => job.id !== jobId),
     })),
 
   // Pinned Charts
@@ -805,20 +784,6 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
       savedImages: state.savedImages.filter((img) => img.id !== id),
     })),
   clearSavedImages: () => set({ savedImages: [] }),
-  updateImageMetadata: (id, metadata) =>
-    set((state) => ({
-      savedImages: state.savedImages.map((img) =>
-        img.id === id
-          ? { ...img, metadata: { ...img.metadata, ...metadata } }
-          : img
-      ),
-    })),
-
-  // Cross-Compare
-  selectedFCSSample: null,
-  setSelectedFCSSample: (sample) => set({ selectedFCSSample: sample }),
-  selectedNTASample: null,
-  setSelectedNTASample: (sample) => set({ selectedNTASample: sample }),
 
   // Analysis Settings
   fcsAnalysisSettings: null,

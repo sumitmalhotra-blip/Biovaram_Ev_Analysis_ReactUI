@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -17,10 +17,16 @@ import {
   Table2,
   FileSpreadsheet,
   FileJson,
-  FileText
+  FileText,
+  Layers,
+  Upload,
+  X,
+  Loader2
 } from "lucide-react"
 import { useAnalysisStore } from "@/lib/store"
-import { useToast } from "@/hooks/use-toast"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
 import { NTASizeDistributionChart } from "./charts/nta-size-distribution-chart"
 import { ConcentrationProfileChart } from "./charts/concentration-profile-chart"
 import { TemperatureCorrectedComparison } from "./charts/temperature-corrected-comparison"
@@ -46,12 +52,39 @@ interface NTAAnalysisResultsProps {
 }
 
 export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisResultsProps) {
-  const { pinChart, resetNTAAnalysis, secondaryNtaAnalysis, ntaOverlayEnabled } = useAnalysisStore()
+  const { pinChart, resetNTAAnalysis, secondaryNtaAnalysis, ntaOverlayEnabled, setNtaOverlayEnabled, setSecondaryNTAFile, setSecondaryNTAResults, setSecondaryNTASampleId, setSecondaryNTAAnalyzing, setSecondaryNTAError, resetSecondaryNTAAnalysis } = useAnalysisStore()
   const { toast } = useToast()
   const [activeTab, setActiveTab] = useState("distribution")
   
   // Get secondary results for overlay
   const secondaryResults = ntaOverlayEnabled ? secondaryNtaAnalysis.results : null
+
+  // Handle secondary file upload for overlay comparison
+  const handleSecondaryUpload = useCallback(async (file: File) => {
+    setSecondaryNTAFile(file)
+    setSecondaryNTAAnalyzing(true)
+    setSecondaryNTAError(null)
+    
+    try {
+      const { apiClient } = await import("@/lib/api-client")
+      const response = await apiClient.uploadNTA(file)
+      if (response?.success && response.nta_results) {
+        setSecondaryNTAResults(response.nta_results)
+        setSecondaryNTASampleId(response.sample_id || file.name)
+        setNtaOverlayEnabled(true)
+        toast({
+          title: "Overlay loaded",
+          description: `Secondary NTA file "${file.name}" ready for comparison`,
+        })
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to analyze secondary file"
+      setSecondaryNTAError(msg)
+      toast({ variant: "destructive", title: "Overlay failed", description: msg })
+    } finally {
+      setSecondaryNTAAnalyzing(false)
+    }
+  }, [setSecondaryNTAFile, setSecondaryNTAAnalyzing, setSecondaryNTAError, setSecondaryNTAResults, setSecondaryNTASampleId, setNtaOverlayEnabled, toast])
 
   const handlePin = (chartTitle: string, chartType: "histogram" | "bar" | "line") => {
     pinChart({
@@ -469,6 +502,77 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
           </CardContent>
         </Card>
       </div>
+
+      {/* Comparison Overlay Panel */}
+      <Card className="card-3d">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-purple-500/10">
+                <Layers className="h-4 w-4 text-purple-500" />
+              </div>
+              <CardTitle className="text-base">Comparison Overlay</CardTitle>
+            </div>
+            {secondaryNtaAnalysis.results && (
+              <div className="flex items-center gap-2">
+                <Label className="text-xs text-muted-foreground">Overlay</Label>
+                <Switch
+                  checked={ntaOverlayEnabled}
+                  onCheckedChange={setNtaOverlayEnabled}
+                />
+              </div>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {secondaryNtaAnalysis.isAnalyzing ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Analyzing secondary file...
+            </div>
+          ) : secondaryNtaAnalysis.results ? (
+            <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-lg">
+              <div className="flex items-center gap-2 text-sm">
+                <FileText className="h-4 w-4 text-purple-500" />
+                <span className="font-medium">{secondaryNtaAnalysis.sampleId || secondaryNtaAnalysis.file?.name || "Secondary"}</span>
+                {secondaryNtaAnalysis.results.median_size_nm && (
+                  <Badge variant="outline" className="text-xs">
+                    D50: {secondaryNtaAnalysis.results.median_size_nm.toFixed(1)}nm
+                  </Badge>
+                )}
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => {
+                  resetSecondaryNTAAnalysis()
+                  setNtaOverlayEnabled(false)
+                }}
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">
+                Upload a second NTA file to compare distributions side-by-side.
+              </p>
+              <Input
+                type="file"
+                accept=".txt,.csv"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) handleSecondaryUpload(file)
+                }}
+              />
+            </div>
+          )}
+          {secondaryNtaAnalysis.error && (
+            <p className="text-xs text-destructive mt-2">{secondaryNtaAnalysis.error}</p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Visualization Tabs */}
       <Card className="card-3d">

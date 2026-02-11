@@ -14,6 +14,7 @@ import {
   Loader2
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { apiClient } from "@/lib/api-client"
 import {
   Tooltip,
   TooltipContent,
@@ -72,18 +73,8 @@ interface ClusteredScatterChartProps {
   yLabel?: string
   height?: number
   onClusterClick?: (cluster: ClusterData) => void
-  apiBaseUrl?: string
   xChannel?: string
   yChannel?: string
-}
-
-// Get API base URL from environment (same logic as api-client.ts)
-const getApiBaseUrl = () => {
-  let base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-  if (base.endsWith("/api/v1")) {
-    base = base.replace(/\/api\/v1$/, "")
-  }
-  return `${base}/api/v1`
 }
 
 // Chart padding/margins
@@ -112,9 +103,7 @@ export function ClusteredScatterChart({
   onClusterClick,
   xChannel,
   yChannel,
-  apiBaseUrl
 }: ClusteredScatterChartProps) {
-  const resolvedApiBaseUrl = apiBaseUrl || getApiBaseUrl()
   const svgRef = useRef<SVGSVGElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -154,28 +143,18 @@ export function ClusteredScatterChart({
     setError(null)
     
     try {
-      let url = `${resolvedApiBaseUrl}/samples/${sampleId}/clustered-scatter?zoom_level=${level}`
+      const result: ClusteredScatterResponse = await apiClient.getClusteredScatter(sampleId, {
+        zoom_level: level,
+        fsc_channel: xChannel,
+        ssc_channel: yChannel,
+        ...(level === 3 && vp ? {
+          viewport_x_min: vp.x_min,
+          viewport_x_max: vp.x_max,
+          viewport_y_min: vp.y_min,
+          viewport_y_max: vp.y_max,
+        } : {}),
+      })
       
-      // Pass user-selected channels if provided
-      if (xChannel) {
-        url += `&fsc_channel=${encodeURIComponent(xChannel)}`
-      }
-      if (yChannel) {
-        url += `&ssc_channel=${encodeURIComponent(yChannel)}`
-      }
-
-      if (level === 3 && vp) {
-        url += `&viewport_x_min=${vp.x_min}&viewport_x_max=${vp.x_max}`
-        url += `&viewport_y_min=${vp.y_min}&viewport_y_max=${vp.y_max}`
-      }
-      
-      const response = await fetch(url)
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch data: ${response.statusText}`)
-      }
-      
-      const result: ClusteredScatterResponse = await response.json()
       setData(result)
       
       // Set initial viewport from bounds if not set
@@ -192,7 +171,7 @@ export function ClusteredScatterChart({
     } finally {
       setLoading(false)
     }
-  }, [resolvedApiBaseUrl, sampleId, viewport, xChannel, yChannel])
+  }, [sampleId, viewport, xChannel, yChannel])
 
   // Fetch on mount and zoom change
   useEffect(() => {

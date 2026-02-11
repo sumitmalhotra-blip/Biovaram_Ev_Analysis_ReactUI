@@ -459,6 +459,7 @@ export class NetworkError extends Error {
 class ApiClient {
   private baseUrl: string;
   private isOffline: boolean = false;
+  private authToken: string | null = null;
 
   constructor() {
     // Build base URL, ensuring no double /api/v1 prefix
@@ -470,6 +471,20 @@ class ApiClient {
     }
     this.baseUrl = `${base}${API_PREFIX}`;
     console.log("[API Client] Base URL:", this.baseUrl);
+  }
+
+  // Set JWT auth token (called after login)
+  setAuthToken(token: string | null): void {
+    this.authToken = token;
+  }
+
+  // Get default headers including auth if available
+  private getHeaders(contentType: string = "application/json"): Record<string, string> {
+    const headers: Record<string, string> = { "Content-Type": contentType };
+    if (this.authToken) {
+      headers["Authorization"] = `Bearer ${this.authToken}`;
+    }
+    return headers;
   }
 
   // Check if the API is currently known to be offline
@@ -1189,6 +1204,60 @@ class ApiClient {
       return this.handleResponse(response);
     } catch (error) {
       console.error("[API] Get scatter data failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  /**
+   * Get clustered scatter data for progressive-zoom scatter plots.
+   * Uses KMeans clustering at zoom levels 1-2 and raw points at zoom level 3.
+   */
+  async getClusteredScatter(
+    sampleId: string,
+    options?: {
+      zoom_level?: number;
+      fsc_channel?: string;
+      ssc_channel?: string;
+      viewport_x_min?: number;
+      viewport_x_max?: number;
+      viewport_y_min?: number;
+      viewport_y_max?: number;
+    }
+  ): Promise<{
+    sample_id: string;
+    zoom_level: number;
+    total_events: number;
+    clusters: Array<{
+      id: number; cx: number; cy: number; count: number;
+      radius: number; std_x: number; std_y: number; pct: number;
+      avg_diameter: number | null;
+    }> | null;
+    bounds: { x_min: number; x_max: number; y_min: number; y_max: number };
+    viewport?: { x_min: number; x_max: number; y_min: number; y_max: number };
+    channels: { fsc: string; ssc: string };
+    individual_points: Array<{ x: number; y: number; index: number; diameter?: number }> | null;
+  }> {
+    try {
+      const params = new URLSearchParams();
+      if (options?.zoom_level != null) params.set("zoom_level", String(options.zoom_level));
+      if (options?.fsc_channel) params.set("fsc_channel", options.fsc_channel);
+      if (options?.ssc_channel) params.set("ssc_channel", options.ssc_channel);
+      if (options?.viewport_x_min != null) params.set("viewport_x_min", String(options.viewport_x_min));
+      if (options?.viewport_x_max != null) params.set("viewport_x_max", String(options.viewport_x_max));
+      if (options?.viewport_y_min != null) params.set("viewport_y_min", String(options.viewport_y_min));
+      if (options?.viewport_y_max != null) params.set("viewport_y_max", String(options.viewport_y_max));
+
+      const response = await fetch(
+        `${this.baseUrl}/samples/${sampleId}/clustered-scatter?${params.toString()}`,
+        {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Get clustered scatter failed:", error);
       this.handleNetworkError(error);
     }
   }

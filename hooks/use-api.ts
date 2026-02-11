@@ -762,125 +762,10 @@ export function useApi() {
     [toast]
   )
 
-  // =========================================================================
-  // Batch Upload
-  // =========================================================================
-
-  const uploadBatch = useCallback(
-    async (files: File[]) => {
-      try {
-        const response = await apiClient.uploadBatch(files)
-
-        if (response.success) {
-          // Add all jobs
-          response.job_ids.forEach((jobId, index) => {
-            addProcessingJob({
-              id: jobId,
-              job_type: "batch_upload",
-              status: "pending",
-            })
-          })
-
-          // Refresh samples
-          fetchSamples()
-
-          toast({
-            title: "Batch upload complete",
-            description: `Uploaded ${response.uploaded} files, ${response.failed} failed`,
-          })
-        }
-
-        return response
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Batch upload failed"
-        toast({
-          variant: "destructive",
-          title: "Batch upload failed",
-          description: message,
-        })
-        return null
-      }
-    },
-    [addProcessingJob, fetchSamples, toast]
-  )
-
-  // =========================================================================
-  // Processing Jobs
-  // =========================================================================
-
-  const checkJobStatus = useCallback(
-    async (jobId: string) => {
-      try {
-        const job = await apiClient.getJob(jobId)
-        updateProcessingJob(jobId, job)
-        return job
-      } catch (error) {
-        console.error("[API] Failed to check job status:", error)
-        return null
-      }
-    },
-    [updateProcessingJob]
-  )
-
-  const cancelJob = useCallback(
-    async (jobId: string) => {
-      try {
-        const result = await apiClient.cancelJob(jobId)
-        if (result.success) {
-          updateProcessingJob(jobId, { status: "cancelled" })
-          toast({
-            title: "Job cancelled",
-            description: result.message,
-          })
-        }
-        return result
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to cancel job"
-        toast({
-          variant: "destructive",
-          title: "Failed to cancel job",
-          description: message,
-        })
-        return null
-      }
-    },
-    [updateProcessingJob, toast]
-  )
-
-  const retryJob = useCallback(
-    async (jobId: string) => {
-      try {
-        const result = await apiClient.retryJob(jobId)
-        if (result.success) {
-          addProcessingJob({
-            id: result.new_job_id,
-            job_type: "retry",
-            status: "pending",
-          })
-          toast({
-            title: "Job retry started",
-            description: `New job ID: ${result.new_job_id}`,
-          })
-        }
-        return result
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to retry job"
-        toast({
-          variant: "destructive",
-          title: "Failed to retry job",
-          description: message,
-        })
-        return null
-      }
-    },
-    [addProcessingJob, toast]
-  )
-
   return {
     // Health
     checkHealth,
     startHealthCheck,
-    apiConnected,
 
     // Samples
     fetchSamples,
@@ -951,87 +836,6 @@ export function useApi() {
       },
       [toast]
     ),
-
-    getExperimentalConditions: useCallback(
-      async (sampleId: string) => {
-        if (apiClient.offline) return null
-        
-        try {
-          return await apiClient.getExperimentalConditions(sampleId)
-        } catch (error) {
-          if (!isNetworkError(error)) {
-            const message = getUserFriendlyErrorMessage(error)
-            toast({
-              variant: "destructive",
-              title: "Failed to fetch conditions",
-              description: message,
-            })
-          }
-          return null
-        }
-      },
-      [toast]
-    ),
-
-    updateExperimentalConditions: useCallback(
-      async (
-        sampleId: string,
-        conditions: Partial<{
-          operator: string;
-          temperature_celsius: number;
-          ph: number;
-          substrate_buffer: string;
-          custom_buffer: string;
-          sample_volume_ul: number;
-          dilution_factor: number;
-          antibody_used: string;
-          antibody_concentration_ug: number;
-          incubation_time_min: number;
-          sample_type: string;
-          filter_size_um: number;
-          notes: string;
-        }>
-      ) => {
-        if (apiClient.offline) {
-          toast({
-            variant: "destructive",
-            title: "Backend offline",
-            description: "Cannot update conditions - backend server is not running",
-          })
-          return null
-        }
-
-        try {
-          const response = await apiClient.updateExperimentalConditions(sampleId, conditions)
-          
-          if (response.success) {
-            toast({
-              title: "✅ Conditions updated",
-              description: `Experimental conditions updated for ${sampleId}`,
-            })
-          }
-          
-          return response
-        } catch (error) {
-          const message = getUserFriendlyErrorMessage(error)
-          toast({
-            variant: "destructive",
-            title: "Failed to update conditions",
-            description: message,
-          })
-          return null
-        }
-      },
-      [toast]
-    ),
-
-    // Batch
-    uploadBatch,
-
-    // Jobs
-    checkJobStatus,
-    cancelJob,
-    retryJob,
 
     // Scatter Data & Size Binning
     getScatterData: useCallback(
@@ -1359,78 +1163,6 @@ export function useApi() {
         }
       },
       [setFCSAnalyzing, setFCSError, setFCSResults, toast]
-    ),
-
-    // =========================================================================
-    // Statistical Analysis
-    // =========================================================================
-
-    runStatisticalTests: useCallback(
-      async (
-        groupA: string[],
-        groupB: string[],
-        options?: {
-          metrics?: string[];
-          testTypes?: string[];
-          alpha?: number;
-        }
-      ) => {
-        if (apiClient.offline) {
-          toast({
-            variant: "destructive",
-            title: "Backend offline",
-            description: "Cannot run statistical tests - backend server is not running",
-          })
-          return null
-        }
-
-        try {
-          const response = await apiClient.runStatisticalTests(groupA, groupB, options)
-          
-          toast({
-            title: "✅ Statistical tests complete",
-            description: `${response.summary.significant_tests}/${response.summary.total_tests} tests showed significant differences`,
-          })
-          
-          return response
-        } catch (error) {
-          const message = getUserFriendlyErrorMessage(error)
-          toast({
-            variant: "destructive",
-            title: "Statistical tests failed",
-            description: message,
-          })
-          return null
-        }
-      },
-      [toast]
-    ),
-
-    compareDistributions: useCallback(
-      async (sampleIdA: string, sampleIdB: string, channel: string = "FSC") => {
-        if (apiClient.offline) {
-          toast({
-            variant: "destructive",
-            title: "Backend offline",
-            description: "Cannot compare distributions - backend server is not running",
-          })
-          return null
-        }
-
-        try {
-          const response = await apiClient.compareDistributions(sampleIdA, sampleIdB, channel)
-          return response
-        } catch (error) {
-          const message = getUserFriendlyErrorMessage(error)
-          toast({
-            variant: "destructive",
-            title: "Distribution comparison failed",
-            description: message,
-          })
-          return null
-        }
-      },
-      [toast]
     ),
 
     // =========================================================================
@@ -1871,31 +1603,8 @@ export function useApi() {
     ),
 
     // =========================================================================
-    // Data Split API: Metadata and Values
+    // Data Split API: Values
     // =========================================================================
-
-    /**
-     * Get FCS file metadata only (no event data)
-     */
-    getFCSMetadata: useCallback(
-      async (sampleId: string) => {
-        if (apiClient.offline) return null
-        try {
-          return await retryWithBackoff(() => apiClient.getFCSMetadata(sampleId), {
-            maxAttempts: 2,
-          })
-        } catch (error) {
-          const message = getUserFriendlyErrorMessage(error)
-          toast({
-            variant: "destructive",
-            title: "Failed to fetch FCS metadata",
-            description: message,
-          })
-          return null
-        }
-      },
-      [toast]
-    ),
 
     /**
      * Get FCS per-event size values with Mie calculation
@@ -1941,64 +1650,6 @@ export function useApi() {
           toast({
             variant: "destructive",
             title: "Failed to fetch FCS values",
-            description: message,
-          })
-          return null
-        }
-      },
-      [toast]
-    ),
-
-    /**
-     * Get NTA file metadata only (no measurement data)
-     */
-    getNTAMetadata: useCallback(
-      async (sampleId: string) => {
-        if (apiClient.offline) return null
-        try {
-          return await retryWithBackoff(() => apiClient.getNTAMetadata(sampleId), {
-            maxAttempts: 2,
-          })
-        } catch (error) {
-          const message = getUserFriendlyErrorMessage(error)
-          toast({
-            variant: "destructive",
-            title: "Failed to fetch NTA metadata",
-            description: message,
-          })
-          return null
-        }
-      },
-      [toast]
-    ),
-
-    /**
-     * Get NTA size and concentration values
-     */
-    getNTAValues: useCallback(
-      async (sampleId: string) => {
-        if (apiClient.offline) return null
-        try {
-          const result = await retryWithBackoff(() => apiClient.getNTAValues(sampleId), {
-            maxAttempts: 2,
-          })
-          
-          if (result) {
-            const totalConc = result.concentration_statistics?.total_particles_ml
-            toast({
-              title: "✅ NTA Values Loaded",
-              description: totalConc 
-                ? `${result.data_info.total_bins} bins, ${(totalConc / 1e6).toFixed(1)}M particles/mL`
-                : `${result.data_info.total_bins} size bins loaded`,
-            })
-          }
-          
-          return result
-        } catch (error) {
-          const message = getUserFriendlyErrorMessage(error)
-          toast({
-            variant: "destructive",
-            title: "Failed to fetch NTA values",
             description: message,
           })
           return null

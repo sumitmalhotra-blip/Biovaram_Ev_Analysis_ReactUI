@@ -236,6 +236,13 @@ async def delete_sample(db: AsyncSession, sample_id: str) -> bool:
             logger.warning(f"⚠️ Sample not found for deletion: {sample_id}")
             return False
         
+        # Clean up associated alerts to prevent orphaned records
+        try:
+            if sample.id:
+                await delete_alerts_for_sample(db, sample.id)
+        except Exception as alert_err:
+            logger.warning(f"⚠️ Failed to clean up alerts for sample {sample_id}: {alert_err}")
+        
         await db.delete(sample)
         await db.commit()
         
