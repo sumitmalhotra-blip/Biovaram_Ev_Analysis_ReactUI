@@ -17,7 +17,7 @@ Date: February 10, 2026
 """
 
 from typing import Optional, List, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from src.api.auth_middleware import optional_auth
 from pydantic import BaseModel, Field
 from loguru import logger
@@ -48,6 +48,18 @@ class ManualBeadPoint(BaseModel):
     scatter_mean: float = Field(..., description="Mean scatter intensity for this bead")
     scatter_std: float = Field(0.0, description="Std dev of scatter (optional)")
     cv_pct: float = Field(5.0, description="Diameter CV from manufacturer (%)")
+
+
+class FitCalibrationRequest(BaseModel):
+    """Request to fit calibration from a bead FCS file."""
+    sample_id: str = Field(..., description="Sample ID of the bead FCS file to use")
+    scatter_channel: str = Field("VSSC1-H", description="Scatter channel to use")
+    bead_kit: str = Field("nanovis_d03231.json", description="Bead kit JSON filename")
+    subcomponent: Optional[str] = Field(None, description="Subcomponent filter (nanoViS_Low, nanoViS_High)")
+    instrument_name: str = Field("CytoFLEX_S", description="Instrument name")
+    wavelength_nm: float = Field(405.0, description="Laser wavelength for the scatter channel")
+    fit_method: str = Field("power", description="Fit method: power, polynomial, interpolate")
+    set_as_active: bool = Field(True, description="Set as active calibration")
 
 
 class ManualCalibrationRequest(BaseModel):
@@ -181,18 +193,13 @@ async def get_active():
 
 @router.post("/fit", response_model=dict)
 async def fit_calibration_from_fcs(
-    sample_id: str = Query(..., description="Sample ID of the bead FCS file to use"),
-    scatter_channel: str = Query("VSSC1-H", description="Scatter channel to use"),
-    bead_kit: str = Query("nanovis_d03231.json", description="Bead kit JSON filename"),
-    subcomponent: Optional[str] = Query(None, description="Subcomponent filter (nanoViS_Low, nanoViS_High)"),
-    instrument_name: str = Query("CytoFLEX_S", description="Instrument name"),
-    wavelength_nm: float = Query(405.0, description="Laser wavelength for the scatter channel"),
-    fit_method: str = Query("power", description="Fit method: power, polynomial, interpolate"),
-    set_as_active: bool = Query(True, description="Set as active calibration"),
+    request: FitCalibrationRequest,
     current_user: dict | None = Depends(optional_auth),
 ):
     """
     Fit a bead calibration curve from an uploaded bead FCS file.
+    
+    Accepts JSON body with: sample_id, scatter_channel, bead_kit, etc.
     
     1. Loads the specified bead kit datasheet
     2. Parses the FCS file for the given sample
@@ -205,9 +212,20 @@ async def fit_calibration_from_fcs(
     from src.database.connection import get_session
     from src.database.models import Sample
     
+    # Extract fields from request body
+    sample_id = request.sample_id
+    scatter_channel = request.scatter_channel
+    bead_kit = request.bead_kit
+    subcomponent = request.subcomponent
+    instrument_name = request.instrument_name
+    wavelength_nm = request.wavelength_nm
+    fit_method = request.fit_method
+    set_as_active = request.set_as_active
+    
     try:
         # Find bead datasheet
-        bead_standards_dir = Path(__file__).parent.parent.parent.parent / "config" / "bead_standards"
+        backend_root = Path(__file__).parent.parent.parent.parent
+        bead_standards_dir = backend_root / "config" / "bead_standards"
         datasheet_path = bead_standards_dir / bead_kit
         
         if not datasheet_path.exists():
@@ -217,30 +235,58 @@ async def fit_calibration_from_fcs(
                        f"Available: {[f.name for f in bead_standards_dir.glob('*.json')]}"
             )
         
-        # Find the FCS file path from the database
-        # Try direct file lookup first
+        # Find the FCS file path
+        # Search both settings.upload_dir (relative to CWD) and backend_root/data/uploads
+        from src.api.config import settings
         fcs_file_path = None
         
-        # Check common upload locations
-        data_dir = Path(__file__).parent.parent / "data"
-        possible_paths = [
-            data_dir / "uploads" / f"{sample_id}.fcs",
-            data_dir / "uploads" / sample_id,
-        ]
+        # Build list of upload directories to search
+        upload_dirs = [settings.upload_dir]
+        backend_upload = backend_root / "data" / "uploads"
+        if backend_upload.resolve() != settings.upload_dir.resolve():
+            upload_dirs.append(backend_upload)
         
-        # Also search the nanoFACS directory for bead FCS files
-        nanofacs_dir = Path(__file__).parent.parent / "nanoFACS"
-        if nanofacs_dir.exists():
-            for fcs_file in nanofacs_dir.rglob("*.fcs"):
-                if sample_id.lower() in fcs_file.stem.lower():
-                    possible_paths.append(fcs_file)
-        
-        for p in possible_paths:
-            if p.exists():
-                fcs_file_path = str(p)
+        for upload_dir in upload_dirs:
+            if fcs_file_path:
                 break
+            if not upload_dir.exists():
+                continue
+                
+            # 1. Direct match: sample_id.fcs or sample_id
+            for candidate in [
+                upload_dir / f"{sample_id}.fcs",
+                upload_dir / sample_id,
+            ]:
+                if candidate.exists():
+                    fcs_file_path = str(candidate)
+                    break
+            
+            # 2. Fuzzy match: files are stored as {timestamp}_{original_name}.fcs
+            #    sample_id might be "Nano_Vis_High" while file is "20260122_150433_Nano Vis High.fcs"
+            if fcs_file_path is None:
+                sample_id_lower = sample_id.lower().replace("_", " ")
+                for fcs_file in upload_dir.glob("*.fcs"):
+                    stem = fcs_file.stem.lower()
+                    # Strip timestamp prefix (YYYYMMDD_HHMMSS_)
+                    parts = stem.split("_", 2)
+                    if len(parts) >= 3 and len(parts[0]) == 8 and len(parts[1]) == 6:
+                        name_part = parts[2]
+                    else:
+                        name_part = stem
+                    if sample_id_lower == name_part or sample_id.lower() == name_part.replace(" ", "_"):
+                        fcs_file_path = str(fcs_file)
+                        break
         
-        # Try database lookup
+        # 3. Search nanoFACS directory
+        if fcs_file_path is None:
+            nanofacs_dir = backend_root / "nanoFACS"
+            if nanofacs_dir.exists():
+                for fcs_file in nanofacs_dir.rglob("*.fcs"):
+                    if sample_id.lower() in fcs_file.stem.lower():
+                        fcs_file_path = str(fcs_file)
+                        break
+        
+        # 4. Database lookup
         if fcs_file_path is None:
             try:
                 async for session in get_session():
@@ -280,13 +326,29 @@ async def fit_calibration_from_fcs(
         if set_as_active:
             saved_path = save_as_active_calibration(calib)
         
-        return {
+        # Convert numpy types to native Python for JSON serialization
+        def to_native(obj):
+            if isinstance(obj, dict):
+                return {k: to_native(v) for k, v in obj.items()}
+            elif isinstance(obj, (list, tuple)):
+                return [to_native(v) for v in obj]
+            elif isinstance(obj, np.integer):
+                return int(obj)
+            elif isinstance(obj, np.floating):
+                return float(obj)
+            elif isinstance(obj, np.ndarray):
+                return obj.tolist()
+            elif isinstance(obj, np.bool_):
+                return bool(obj)
+            return obj
+        
+        return to_native({
             "success": True,
             "message": f"Calibration fitted with {diagnostics['n_beads_matched']} bead sizes",
             "set_as_active": set_as_active,
             "saved_path": saved_path,
             "diagnostics": diagnostics,
-        }
+        })
         
     except HTTPException:
         raise

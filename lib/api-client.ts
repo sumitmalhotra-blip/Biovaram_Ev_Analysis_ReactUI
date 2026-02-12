@@ -2512,14 +2512,16 @@ class ApiClient {
     sscChannel?: string
   ): Promise<CalibrationFitResult> {
     try {
-      const params = new URLSearchParams();
-      params.append("sample_id", beadSampleId);
-      params.append("bead_kit", beadStandardFile);
-      if (sscChannel) params.append("scatter_channel", sscChannel);
+      const body: Record<string, unknown> = {
+        sample_id: beadSampleId,
+        bead_kit: beadStandardFile,
+      };
+      if (sscChannel) body.scatter_channel = sscChannel;
 
-      const response = await fetch(`${this.baseUrl}/calibration/fit?${params.toString()}`, {
+      const response = await fetch(`${this.baseUrl}/calibration/fit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
       });
       this.isOffline = false;
       return this.handleResponse(response);
