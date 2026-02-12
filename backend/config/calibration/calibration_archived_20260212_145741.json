@@ -1,21 +1,21 @@
 {
   "version": "2.0",
-  "created_at": "2026-02-12T14:57:41.813203",
+  "created_at": "2026-02-12T14:56:11.215611",
   "instrument_name": "CytoFLEX_S",
   "wavelength_nm": 405.0,
   "fit_method": "power",
   "fit_params": {
-    "a": 1.5473138208580926e-13,
-    "b": 9.60988502676712,
-    "r_squared": 0.764830624903308
+    "a": 1.5549988462336712e-13,
+    "b": 9.608821674181666,
+    "r_squared": 0.7652803335858787
   },
   "calibration_range_nm": [
     40.0,
     108.0
   ],
   "fsc_range": [
-    372.30988988989844,
-    5376524.776472457
+    372.4849961446597,
+    5376400.022680284
   ],
   "bead_datasheet_info": {
     "kit_part_number": "D03231",
@@ -28,24 +28,24 @@
     "40": {
       "diameter_nm": 40.0,
       "diameter_cv": 11.5,
-      "fsc_mean": 372.30988988989844,
-      "fsc_std": 28.90282201429774,
+      "fsc_mean": 372.4849961446597,
+      "fsc_std": 29.24087522513873,
       "n_events": 15898,
       "refractive_index": 1.591
     },
     "80": {
       "diameter_nm": 80.0,
       "diameter_cv": 6.9,
-      "fsc_mean": 2156169.626572947,
-      "fsc_std": 171440.1936611539,
+      "fsc_mean": 2154512.5158222523,
+      "fsc_std": 171774.5121889994,
       "n_events": 4708,
       "refractive_index": 1.591
     },
     "108": {
       "diameter_nm": 108.0,
       "diameter_cv": 5.2,
-      "fsc_mean": 5376524.776472457,
-      "fsc_std": 15081.405807914463,
+      "fsc_mean": 5376400.022680284,
+      "fsc_std": 15031.136027913746,
       "n_events": 23215,
       "refractive_index": 1.591
     }

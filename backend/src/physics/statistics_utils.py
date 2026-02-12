@@ -20,6 +20,23 @@ from dataclasses import dataclass
 from loguru import logger
 
 
+def _to_native(obj):
+    """Recursively convert numpy types to Python native types for JSON serialization."""
+    if isinstance(obj, dict):
+        return {k: _to_native(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [_to_native(v) for v in obj]
+    elif isinstance(obj, (np.integer,)):
+        return int(obj)
+    elif isinstance(obj, (np.floating,)):
+        return float(obj)
+    elif isinstance(obj, (np.bool_,)):
+        return bool(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    return obj
+
+
 @dataclass
 class ModeResult:
     """
@@ -641,7 +658,7 @@ def test_normality(
     # Calculate overall conclusion
     passed_tests = sum(1 for t in tests.values() if t.is_normal)
     total_tests = len(tests)
-    is_normal = passed_tests >= (total_tests / 2)  # Majority vote
+    is_normal = bool(passed_tests >= (total_tests / 2))  # Majority vote
     
     # Generate recommendation based on results
     if is_normal:
@@ -1101,7 +1118,7 @@ def comprehensive_distribution_analysis(
         f"skewness={skew_type}"
     )
     
-    return {
+    result = {
         'normality_tests': normality,
         'distribution_fits': fits,
         'summary_statistics': summary_stats,
@@ -1109,3 +1126,6 @@ def comprehensive_distribution_analysis(
         'conclusion': conclusion,
         'n_samples': n
     }
+
+    # Convert all numpy types to native Python types for JSON serialization
+    return _to_native(result)

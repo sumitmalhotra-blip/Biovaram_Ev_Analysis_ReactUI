@@ -32,8 +32,6 @@ import { EventVsSizeChart } from "./charts/event-vs-size-chart"
 import { FullAnalysisDashboard } from "./full-analysis-dashboard"
 import { StatisticsCards } from "./statistics-cards"
 import { ParticleSizeVisualization } from "./particle-size-visualization"
-import { SizeCategoryBreakdown } from "./size-category-breakdown"
-import { CustomSizeRanges } from "./custom-size-ranges"
 import { AnomalySummaryCard } from "./anomaly-summary-card"
 import { AnomalyEventsTable, type AnomalyEvent } from "./anomaly-events-table"
 import { IndividualFileSummary } from "./individual-file-summary"
@@ -312,11 +310,6 @@ export function AnalysisResults() {
   // forcing all chart children to fully re-render.
   const scatterDiameters = useMemo(() => 
     scatterData.filter(p => p.diameter !== undefined && p.diameter > 0).map(p => p.diameter as number),
-    [scatterData]
-  )
-
-  const scatterDiametersAll = useMemo(() =>
-    scatterData.filter(p => p.diameter !== undefined).map(p => p.diameter as number),
     [scatterData]
   )
 
@@ -747,19 +740,9 @@ export function AnalysisResults() {
         />
       ) : null}
 
-      {/* EV Size Category Breakdown — uses real diameter data from scatter analysis */}
-      {scatterData.length > 0 && (
-        <SizeCategoryBreakdown
-          totalEvents={totalEvents}
-          medianSize={medianSize}
-          diameters={scatterDiameters}
-        />
-      )}
-
-      {/* Custom Size Range Analysis */}
-      <CustomSizeRanges 
-        sizeData={scatterDiametersAll}
-      />
+      {/* NOTE: SizeCategoryBreakdown and CustomSizeRanges removed — 
+           ParticleSizeVisualization above already shows the same size breakdown 
+           with donut chart + per-category detail. Having 3 sections was redundant. */}
 
       {/* Anomaly Detection Summary - show if anomaly data exists */}
       {anomalyData && (
