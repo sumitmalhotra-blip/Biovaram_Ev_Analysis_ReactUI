@@ -157,6 +157,11 @@ async def list_samples(
                 "has_fcs": sample.file_path_fcs is not None,
                 "has_nta": sample.file_path_nta is not None,
                 "has_tem": sample.file_path_tem is not None,
+                "files": {
+                    "fcs": sample.file_path_fcs,
+                    "nta": sample.file_path_nta,
+                    "tem": getattr(sample, 'file_path_tem', None),
+                },
             })
         
         return {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -32,6 +32,7 @@ import {
   Plus,
   Minus,
   Zap,
+  Upload,
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useAnalysisStore } from "@/lib/store"
@@ -61,7 +62,7 @@ interface ManualBeadRow {
 
 export function BeadCalibrationPanel() {
   const { toast } = useToast()
-  const { apiSamples, apiConnected } = useAnalysisStore()
+  const { apiSamples, apiConnected, setApiSamples } = useAnalysisStore()
 
   // Calibration state
   const [calStatus, setCalStatus] = useState<CalibrationStatus | null>(null)
@@ -84,6 +85,10 @@ export function BeadCalibrationPanel() {
   ])
   const [manualKitName, setManualKitName] = useState("")
   const [manualRI, setManualRI] = useState("1.591")
+
+  // Bead file upload state
+  const beadFileInputRef = useRef<HTMLInputElement>(null)
+  const [beadUploading, setBeadUploading] = useState(false)
 
   // ─── Data Fetching ─────────────────────────────────────────────────
 
@@ -271,6 +276,67 @@ export function BeadCalibrationPanel() {
   }
 
   // ─── Manual Row Helpers ────────────────────────────────────────────
+
+  // ─── Bead File Upload Handler ──────────────────────────────────────
+
+  const handleBeadFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    
+    if (!file.name.toLowerCase().endsWith('.fcs')) {
+      toast({
+        title: "Invalid File",
+        description: "Please select an .fcs file containing bead measurements.",
+        variant: "destructive",
+      })
+      // Reset the input so the same file can be selected again
+      if (beadFileInputRef.current) beadFileInputRef.current.value = ""
+      return
+    }
+
+    setBeadUploading(true)
+    try {
+      const response = await apiClient.uploadFCS(file, {
+        treatment: "bead_calibration",
+        notes: "Bead calibration FCS file",
+      })
+
+      if (response?.success) {
+        toast({
+          title: "Bead File Uploaded",
+          description: `${file.name} uploaded as ${response.sample_id}`,
+        })
+        // Auto-select the uploaded sample
+        setSelectedSampleId(response.sample_id)
+        
+        // Refresh samples list so the dropdown updates
+        try {
+          const samplesResp = await apiClient.listSamples({})
+          if (samplesResp?.samples) {
+            setApiSamples(samplesResp.samples)
+          }
+        } catch {
+          // silently fail — the sample was still uploaded
+        }
+      } else {
+        toast({
+          title: "Upload Failed",
+          description: "Could not upload the bead FCS file. Please try again.",
+          variant: "destructive",
+        })
+      }
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Upload failed"
+      toast({
+        title: "Upload Error",
+        description: msg,
+        variant: "destructive",
+      })
+    } finally {
+      setBeadUploading(false)
+      if (beadFileInputRef.current) beadFileInputRef.current.value = ""
+    }
+  }
 
   const addManualRow = () => {
     const nextId = manualRows.length > 0 ? Math.max(...manualRows.map((r) => r.id)) + 1 : 1
@@ -537,22 +603,76 @@ export function BeadCalibrationPanel() {
                   <div className="space-y-1.5">
                     <Label className="text-xs">Bead FCS Sample</Label>
                     {fcsSamples.length === 0 ? (
-                      <p className="text-[11px] text-muted-foreground italic">
-                        No FCS samples found. Upload a bead measurement FCS file first.
-                      </p>
+                      <div className="space-y-2">
+                        <p className="text-[11px] text-muted-foreground italic">
+                          No FCS samples found. Upload a bead measurement FCS file to get started.
+                        </p>
+                        <input
+                          ref={beadFileInputRef}
+                          type="file"
+                          accept=".fcs"
+                          className="hidden"
+                          onChange={handleBeadFileUpload}
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full h-8 text-xs gap-1.5"
+                          onClick={() => beadFileInputRef.current?.click()}
+                          disabled={beadUploading}
+                        >
+                          {beadUploading ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Upload className="h-3 w-3" />
+                          )}
+                          {beadUploading ? "Uploading..." : "Upload Bead FCS File"}
+                        </Button>
+                      </div>
                     ) : (
-                      <Select value={selectedSampleId} onValueChange={setSelectedSampleId}>
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue placeholder="Select bead FCS file..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {fcsSamples.map((s) => (
-                            <SelectItem key={s.sample_id} value={s.sample_id} className="text-xs">
-                              {s.sample_id}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <div className="space-y-1.5">
+                        <div className="flex gap-1.5">
+                          <Select value={selectedSampleId} onValueChange={setSelectedSampleId}>
+                            <SelectTrigger className="h-8 text-xs flex-1">
+                              <SelectValue placeholder="Select bead FCS file..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {fcsSamples.map((s) => (
+                                <SelectItem key={s.sample_id} value={s.sample_id} className="text-xs">
+                                  {s.sample_id}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <input
+                            ref={beadFileInputRef}
+                            type="file"
+                            accept=".fcs"
+                            className="hidden"
+                            onChange={handleBeadFileUpload}
+                          />
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8 shrink-0"
+                                onClick={() => beadFileInputRef.current?.click()}
+                                disabled={beadUploading}
+                              >
+                                {beadUploading ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Upload className="h-3.5 w-3.5" />
+                                )}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" className="text-xs">
+                              Upload a new bead FCS file
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
+                      </div>
                     )}
                   </div>
 

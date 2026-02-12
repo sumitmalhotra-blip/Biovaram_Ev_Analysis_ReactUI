@@ -2513,14 +2513,13 @@ class ApiClient {
   ): Promise<CalibrationFitResult> {
     try {
       const params = new URLSearchParams();
-      params.append("bead_sample_id", beadSampleId);
-      params.append("bead_standard_file", beadStandardFile);
-      if (sscChannel) params.append("ssc_channel", sscChannel);
+      params.append("sample_id", beadSampleId);
+      params.append("bead_kit", beadStandardFile);
+      if (sscChannel) params.append("scatter_channel", sscChannel);
 
-      const response = await fetch(`${this.baseUrl}/calibration/fit`, {
+      const response = await fetch(`${this.baseUrl}/calibration/fit?${params.toString()}`, {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: params.toString(),
+        headers: { "Content-Type": "application/json" },
       });
       this.isOffline = false;
       return this.handleResponse(response);
@@ -2539,9 +2538,14 @@ class ApiClient {
     riParticle?: number
   ): Promise<CalibrationFitResult> {
     try {
-      const body: Record<string, unknown> = { points };
-      if (kitName) body.kit_name = kitName;
-      if (riParticle !== undefined) body.ri_particle = riParticle;
+      // Map frontend field names to backend ManualCalibrationRequest model
+      const bead_points = points.map(p => ({
+        diameter_nm: p.diameter_nm,
+        scatter_mean: p.mean_ssc,
+      }));
+      const body: Record<string, unknown> = { bead_points };
+      if (kitName) body.bead_kit = kitName;
+      if (riParticle !== undefined) body.bead_ri = riParticle;
 
       const response = await fetch(`${this.baseUrl}/calibration/fit-manual`, {
         method: "POST",
