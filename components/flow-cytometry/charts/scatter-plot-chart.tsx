@@ -108,7 +108,7 @@ export function ScatterPlotChart({
 
       {/* Chart */}
       <div style={{ height: `${height}px` }}>
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
           <ScatterChart margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
             <XAxis

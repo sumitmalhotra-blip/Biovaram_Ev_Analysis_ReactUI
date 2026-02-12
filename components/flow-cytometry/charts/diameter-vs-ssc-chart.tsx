@@ -252,7 +252,8 @@ export function DiameterVsSSCChart({
         medianDiameter: sortedDiameters[Math.floor(sortedDiameters.length / 2)],
       },
     }
-  }, [data, anomalousIndices, highlightAnomalies, refractiveIndex, wavelength])
+  // PERFORMANCE FIX: Removed refractiveIndex/ wavelength from deps — they're only used in demo branch
+  }, [data, anomalousIndices, highlightAnomalies])
 
   // Process secondary data for overlay - generate demo if no real data
   const { secondaryNormalData, secondaryAnomalyData, secondaryStats } = useMemo(() => {
@@ -448,7 +449,7 @@ export function DiameterVsSSCChart({
 
       {/* Chart */}
       <div style={{ height: `${height}px` }}>
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
           <ComposedChart margin={{ top: 10, right: 30, bottom: 25, left: 10 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.5} />
             

@@ -51,6 +51,12 @@ import {
   type FCSExportData
 } from "@/lib/export-utils"
 
+// Deterministic pseudo-random for SSR compatibility — defined outside component to avoid recreation
+const seededRandom = (seed: number): number => {
+  const x = Math.sin(seed * 9999) * 10000
+  return x - Math.floor(x)
+}
+
 export function AnalysisResults() {
   const { 
     pinChart, 
@@ -266,8 +272,8 @@ export function AnalysisResults() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sampleId, results, fcsAnalysisSettings?.laserWavelength, fcsAnalysisSettings?.particleRI, fcsAnalysisSettings?.mediumRI])
 
-  // Load real size bins from backend - PERFORMANCE FIX: Removed callback from deps
-  // Also refreshes when Mie settings or size ranges change
+  // Load real size bins from backend - PERFORMANCE FIX: Removed callback AND sizeRanges from deps
+  // sizeRanges is an array reference that changes on every Zustand notify → caused infinite API loop
   useEffect(() => {
     let cancelled = false
     if (sampleId && results) {
@@ -284,7 +290,7 @@ export function AnalysisResults() {
     }
     return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sampleId, results, fcsAnalysisSettings?.laserWavelength, fcsAnalysisSettings?.particleRI, fcsAnalysisSettings?.mediumRI, fcsAnalysis.sizeRanges])
+  }, [sampleId, results, fcsAnalysisSettings?.laserWavelength, fcsAnalysisSettings?.particleRI, fcsAnalysisSettings?.mediumRI])
 
   if (!results) {
     return (
@@ -301,11 +307,61 @@ export function AnalysisResults() {
   const totalEvents = results.total_events || results.event_count || 0
   const medianSize = results.particle_size_median_nm
 
-  // Deterministic pseudo-random for SSR compatibility
-  const seededRandom = (seed: number): number => {
-    const x = Math.sin(seed * 9999) * 10000
-    return x - Math.floor(x)
-  }
+  // PERFORMANCE FIX: Memoize derived data arrays to prevent cascading re-renders.
+  // Previously, .filter().map() chains in JSX created new array references every render,
+  // forcing all chart children to fully re-render.
+  const scatterDiameters = useMemo(() => 
+    scatterData.filter(p => p.diameter !== undefined && p.diameter > 0).map(p => p.diameter as number),
+    [scatterData]
+  )
+
+  const scatterDiametersAll = useMemo(() =>
+    scatterData.filter(p => p.diameter !== undefined).map(p => p.diameter as number),
+    [scatterData]
+  )
+
+  const theoryMeasuredData = useMemo(() =>
+    scatterData.length > 0
+      ? scatterData.filter(p => p.diameter && p.diameter > 0 && p.y > 0).map(p => ({ diameter: p.diameter as number, intensity: p.y }))
+      : undefined,
+    [scatterData]
+  )
+
+  const secondaryTheoryData = useMemo(() =>
+    secondaryScatterData && secondaryScatterData.length > 0
+      ? secondaryScatterData.filter(p => p.diameter && p.diameter > 0 && p.y > 0).map(p => ({ diameter: p.diameter as number, intensity: p.y }))
+      : undefined,
+    [secondaryScatterData]
+  )
+
+  const secondarySizeData = useMemo(() =>
+    secondaryScatterData?.filter(p => p.diameter).map(p => p.diameter as number),
+    [secondaryScatterData]
+  )
+
+  const diameterVsSSCData = useMemo(() =>
+    scatterData
+      .filter(p => p.diameter !== undefined && p.y !== undefined)
+      .map(p => ({
+        diameter: p.diameter as number,
+        ssc: p.y,
+        index: p.index,
+        isAnomaly: anomalyData?.anomalous_indices?.includes(p.index ?? -1) || false,
+      })),
+    [scatterData, anomalyData]
+  )
+
+  const secondaryDiameterVsSSCData = useMemo(() =>
+    secondaryScatterData
+      ?.filter(p => p.diameter !== undefined && p.y !== undefined)
+      .map(p => ({
+        diameter: p.diameter as number,
+        ssc: p.y,
+        index: p.index,
+        isAnomaly: secondaryAnomalyData?.anomalous_indices?.includes(p.index ?? -1) || false,
+      })),
+    [secondaryScatterData, secondaryAnomalyData]
+  )
 
   // Generate mock anomaly events for table (TODO: Replace with real data)
   const anomalyEvents: AnomalyEvent[] = useMemo(() => {
@@ -696,19 +752,13 @@ export function AnalysisResults() {
         <SizeCategoryBreakdown
           totalEvents={totalEvents}
           medianSize={medianSize}
-          diameters={scatterData
-            .filter((p) => p.diameter !== undefined && p.diameter > 0)
-            .map((p) => p.diameter as number)
-          }
+          diameters={scatterDiameters}
         />
       )}
 
       {/* Custom Size Range Analysis */}
       <CustomSizeRanges 
-        sizeData={scatterData
-          .filter((p) => p.diameter !== undefined)
-          .map((p) => p.diameter as number)
-        }
+        sizeData={scatterDiametersAll}
       />
 
       {/* Anomaly Detection Summary - show if anomaly data exists */}
@@ -785,7 +835,7 @@ export function AnalysisResults() {
                 secondaryResults={secondaryResults}
                 secondaryScatterData={secondaryScatterData}
                 secondaryAnomalyData={secondaryAnomalyData}
-                secondarySizeData={secondaryScatterData?.filter(p => p.diameter).map(p => p.diameter as number)}
+                secondarySizeData={secondarySizeData}
               />
             </TabsContent>
 
@@ -817,8 +867,8 @@ export function AnalysisResults() {
                 </div>
               </div>
               <SizeDistributionChart 
-                sizeData={scatterData.filter(p => p.diameter).map(p => p.diameter as number)}
-                secondarySizeData={secondaryScatterData?.filter(p => p.diameter).map(p => p.diameter as number)}
+                sizeData={scatterDiameters}
+                secondarySizeData={secondarySizeData}
                 d10={results.size_statistics?.d10}
                 d50={results.size_statistics?.d50}
                 d90={results.size_statistics?.d90}
@@ -845,20 +895,8 @@ export function AnalysisResults() {
                 </Button>
               </div>
               <TheoryVsMeasuredChart 
-                primaryMeasuredData={
-                  scatterData.length > 0 
-                    ? scatterData
-                        .filter(p => p.diameter && p.diameter > 0 && p.y > 0)
-                        .map(p => ({ diameter: p.diameter as number, intensity: p.y }))
-                    : undefined
-                }
-                secondaryMeasuredData={
-                  secondaryScatterData && secondaryScatterData.length > 0
-                    ? secondaryScatterData
-                        .filter(p => p.diameter && p.diameter > 0 && p.y > 0)
-                        .map(p => ({ diameter: p.diameter as number, intensity: p.y }))
-                    : undefined
-                }
+                primaryMeasuredData={theoryMeasuredData}
+                secondaryMeasuredData={secondaryTheoryData}
               />
             </TabsContent>
 
@@ -1046,29 +1084,13 @@ export function AnalysisResults() {
                 </div>
               </div>
               <DiameterVsSSCChart
-                data={scatterData
-                  .filter((p) => p.diameter !== undefined && p.y !== undefined)
-                  .map((p) => ({
-                    diameter: p.diameter as number,
-                    ssc: p.y,
-                    index: p.index,
-                    isAnomaly: anomalyData?.anomalous_indices?.includes(p.index ?? -1) || false,
-                  }))
-                }
+                data={diameterVsSSCData}
                 anomalousIndices={anomalyData?.anomalous_indices || []}
                 highlightAnomalies={highlightAnomalies}
                 showMieTheory={true}
                 showLegend={true}
                 height={450}
-                secondaryData={secondaryScatterData
-                  ?.filter((p) => p.diameter !== undefined && p.y !== undefined)
-                  .map((p) => ({
-                    diameter: p.diameter as number,
-                    ssc: p.y,
-                    index: p.index,
-                    isAnomaly: secondaryAnomalyData?.anomalous_indices?.includes(p.index ?? -1) || false,
-                  }))
-                }
+                secondaryData={secondaryDiameterVsSSCData}
                 secondaryAnomalousIndices={secondaryAnomalyData?.anomalous_indices || []}
               />
             </TabsContent>

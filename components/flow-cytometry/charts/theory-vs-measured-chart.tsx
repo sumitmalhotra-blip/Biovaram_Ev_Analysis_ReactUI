@@ -199,7 +199,7 @@ export function TheoryVsMeasuredChart({
       </CardHeader>
       <CardContent>
         <div style={{ height: `${height}px` }}>
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
             <ComposedChart data={data}>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
               <XAxis

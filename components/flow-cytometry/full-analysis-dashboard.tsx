@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -124,24 +124,48 @@ export function FullAnalysisDashboard({
   }
 
   // Convert scatter data to diameter format for the Diameter vs SSC chart
-  const diameterData: DiameterDataPoint[] = scatterData
+  const diameterData = useMemo<DiameterDataPoint[]>(() => scatterData
     .filter((p) => p.diameter !== undefined && p.y !== undefined)
     .map((p) => ({
       diameter: p.diameter as number,
       ssc: p.y,
       index: p.index,
       isAnomaly: anomalyData?.anomalous_indices?.includes(p.index ?? -1) || false,
-    }))
+    })), [scatterData, anomalyData])
 
   // Convert secondary scatter data to diameter format for overlay
-  const secondaryDiameterData: DiameterDataPoint[] = secondaryScatterData
+  const secondaryDiameterData = useMemo<DiameterDataPoint[]>(() => secondaryScatterData
     .filter((p) => p.diameter !== undefined && p.y !== undefined)
     .map((p) => ({
       diameter: p.diameter as number,
       ssc: p.y,
       index: p.index,
       isAnomaly: secondaryAnomalyData?.anomalous_indices?.includes(p.index ?? -1) || false,
-    }))
+    })), [secondaryScatterData, secondaryAnomalyData])
+
+  // Memoize sizeData for distribution chart
+  const distributionSizeData = useMemo(() => 
+    scatterData?.filter(p => p.diameter != null && p.diameter > 0).map(p => p.diameter as number),
+    [scatterData]
+  )
+
+  // Memoize theory chart data
+  const theoryPrimaryData = useMemo(() => 
+    scatterData.length > 0
+      ? scatterData
+          .filter(p => p.diameter && p.diameter > 0 && p.y > 0)
+          .map(p => ({ diameter: p.diameter as number, intensity: p.y }))
+      : undefined,
+    [scatterData]
+  )
+  const theorySecondaryData = useMemo(() => 
+    hasOverlay && secondaryScatterData.length > 0
+      ? secondaryScatterData
+          .filter(p => p.diameter && p.diameter > 0 && p.y > 0)
+          .map(p => ({ diameter: p.diameter as number, intensity: p.y }))
+      : undefined,
+    [hasOverlay, secondaryScatterData]
+  )
 
   const renderChart = (chartId: ChartType, compact: boolean = false) => {
     const height = compact ? 200 : expandedChart === chartId ? 450 : 280
@@ -152,7 +176,7 @@ export function FullAnalysisDashboard({
           <SizeDistributionChart 
             height={height} 
             compact={compact}
-            sizeData={scatterData?.filter(p => p.diameter != null && p.diameter > 0).map(p => p.diameter as number)}
+            sizeData={distributionSizeData}
             d10={results.size_statistics?.d10}
             d50={results.size_statistics?.d50}
             d90={results.size_statistics?.d90}
@@ -206,20 +230,8 @@ export function FullAnalysisDashboard({
         )
       case "theory":
         return <TheoryVsMeasuredChart 
-          primaryMeasuredData={
-            scatterData.length > 0
-              ? scatterData
-                  .filter(p => p.diameter && p.diameter > 0 && p.y > 0)
-                  .map(p => ({ diameter: p.diameter as number, intensity: p.y }))
-              : undefined
-          }
-          secondaryMeasuredData={
-            hasOverlay && secondaryScatterData.length > 0
-              ? secondaryScatterData
-                  .filter(p => p.diameter && p.diameter > 0 && p.y > 0)
-                  .map(p => ({ diameter: p.diameter as number, intensity: p.y }))
-              : undefined
-          }
+          primaryMeasuredData={theoryPrimaryData}
+          secondaryMeasuredData={theorySecondaryData}
         />
       case "event-size":
         return sampleId ? (

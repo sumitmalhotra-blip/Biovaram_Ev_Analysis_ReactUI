@@ -381,6 +381,18 @@ export function SizeDistributionChart({
     </div>
   ) : null
 
+  // PERFORMANCE FIX: Memoize the fit overlay merge — was previously inline in JSX,
+  // running O(bins × fitPoints) on every render and creating new array reference each time
+  const mergedChartData = useMemo(() => {
+    if (fitOverlayData && showFitOverlay) {
+      return data.map((item) => {
+        const fitPoint = fitOverlayData.find(f => f.fitX !== null && Math.abs((f.fitX as number) - (item.size as number)) < 15)
+        return { ...item, ...(fitPoint || {}) }
+      })
+    }
+    return data
+  }, [data, fitOverlayData, showFitOverlay])
+
   return (
     <InteractiveChartWrapper
       title={hasOverlay ? "Size Distribution (Overlay)" : "Size Distribution"}
@@ -392,7 +404,7 @@ export function SizeDistributionChart({
     >
       {/* Use ComposedChart for overlay mode, BarChart for single file */}
       {hasOverlay ? (
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
           <ComposedChart data={overlayData} barCategoryGap={0}>
             <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
             <XAxis
@@ -509,15 +521,8 @@ export function SizeDistributionChart({
           </ComposedChart>
         </ResponsiveContainer>
       ) : (
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={fitOverlayData && showFitOverlay 
-            ? data.map((item, idx) => {
-                // Merge fit overlay data by matching the size/fitX values
-                const fitPoint = fitOverlayData?.find(f => f.fitX !== null && Math.abs((f.fitX as number) - (item.size as number)) < 15)
-                return { ...item, ...(fitPoint || {}) }
-              })
-            : data
-          } barCategoryGap={0}>
+        <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
+          <ComposedChart data={mergedChartData} barCategoryGap={0}>
             <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
             <XAxis
               dataKey="size"

@@ -175,6 +175,103 @@ async def list_samples(
 
 
 # ============================================================================
+# Channel Configuration Endpoints
+# (Must be defined BEFORE /{sample_id} to avoid FastAPI matching "channel-config" as a sample_id)
+# ============================================================================
+
+@router.get("/channel-config", response_model=dict)
+async def get_channel_configuration():
+    """
+    Get current channel configuration for FCS analysis.
+    
+    Returns the active instrument settings and all available instrument configurations.
+    """
+    try:
+        from src.utils.channel_config import get_channel_config  # type: ignore[import-not-found]
+        
+        config = get_channel_config()
+        
+        return {
+            "success": True,
+            "active_instrument": config.active_instrument,
+            "instruments": list(config.list_instruments()),
+            "fsc_channels": config.get_fsc_channel_names(),
+            "ssc_channels": config.get_ssc_channel_names(),
+            "preferred": {
+                "for_size_analysis": config.get_preferred_channels("for_size_analysis"),
+                "for_scatter_plot": config.get_preferred_channels("for_scatter_plot")
+            }
+        }
+    except Exception as e:
+        logger.exception(f"❌ Failed to get channel config: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get channel configuration: {str(e)}"
+        )
+
+
+@router.put("/channel-config", response_model=dict)
+async def update_channel_configuration(
+    instrument: Optional[str] = Query(None, description="Instrument name to activate"),
+    fsc_channel: Optional[str] = Query(None, description="FSC channel name to add/set as preferred"),
+    ssc_channel: Optional[str] = Query(None, description="SSC channel name to add/set as preferred"),
+    save: bool = Query(True, description="Save configuration to file")
+):
+    """
+    Update channel configuration for FCS analysis.
+    
+    **Parameters:**
+    - instrument: Activate a specific instrument configuration
+    - fsc_channel: Set the preferred FSC channel
+    - ssc_channel: Set the preferred SSC channel
+    - save: Whether to persist changes to file (default: True)
+    
+    **Example:**
+    ```
+    PUT /samples/channel-config?fsc_channel=Channel_5&ssc_channel=Channel_6&save=true
+    ```
+    """
+    try:
+        from src.utils.channel_config import get_channel_config  # type: ignore[import-not-found]
+        
+        config = get_channel_config()
+        
+        # Activate specific instrument if provided
+        if instrument:
+            if not config.set_active_instrument(instrument):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Instrument '{instrument}' not found. Available: {config.list_instruments()}"
+                )
+        
+        # Add custom channel mapping if both FSC and SSC provided
+        if fsc_channel and ssc_channel:
+            config.add_custom_channel_mapping(fsc_channel, ssc_channel)
+            logger.info(f"✓ Updated channel mapping: FSC={fsc_channel}, SSC={ssc_channel}")
+        
+        # Save configuration if requested
+        if save:
+            config.save_config()
+        
+        return {
+            "success": True,
+            "message": "Channel configuration updated",
+            "active_instrument": config.active_instrument,
+            "preferred_fsc": config.get_preferred_channels()[0],
+            "preferred_ssc": config.get_preferred_channels()[1],
+            "saved": save
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"❌ Failed to update channel config: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update channel configuration: {str(e)}"
+        )
+
+
+# ============================================================================
 # Get Sample Details Endpoint
 # ============================================================================
 
@@ -1987,8 +2084,9 @@ async def get_distribution_analysis(
     - Per MISEV2018 guidelines: report median with D10/D90 for EV sizing
     """
     from src.physics.statistics_utils import comprehensive_distribution_analysis
-    from src.physics.mie_theory import MieCalculator
-    from src.parser.fcs_parser import parse_fcs_to_dataframe
+    from src.physics.mie_scatter import MieScatterCalculator
+    from src.parsers.fcs_parser import FCSParser
+    from pathlib import Path
     
     try:
         # Get sample from database
@@ -2016,7 +2114,7 @@ async def get_distribution_analysis(
                 detail=f"FCS file not found: {sample.file_path_fcs}"
             )
         
-        parsed_data = parse_fcs_to_dataframe(sample.file_path_fcs)
+        parsed_data = FCSParser(Path(sample.file_path_fcs)).parse()
         if parsed_data.empty:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -2062,23 +2160,25 @@ async def get_distribution_analysis(
             )
         
         # Initialize Mie calculator and convert to sizes
-        mie = MieCalculator(
+        mie = MieScatterCalculator(
             wavelength_nm=wavelength_nm,
             n_particle=n_particle,
             n_medium=n_medium
         )
         
-        # Normalize FSC values for Mie conversion
-        fsc_normalized = fsc_values / np.max(fsc_values)
-        
-        # Convert to particle sizes (vectorized operation)
-        sizes_nm = np.array([
-            mie.inverse_solve_size(fsc, max_size=1000)
-            for fsc in fsc_normalized[:min(len(fsc_normalized), 10000)]
-        ])
+        # Use fast LUT-based batch conversion (not per-element optimization)
+        # diameters_from_scatter_normalized builds a lookup table once,
+        # then uses np.interp for all values — orders of magnitude faster
+        sizes_all, success_mask = mie.diameters_from_scatter_normalized(
+            fsc_intensities=fsc_values[:min(len(fsc_values), 50000)],
+            min_diameter=20.0,
+            max_diameter=500.0,
+            lut_resolution=500
+        )
         
         # Filter valid sizes
-        sizes_nm = sizes_nm[np.isfinite(sizes_nm) & (sizes_nm > 0) & (sizes_nm < 1000)]
+        valid = success_mask & np.isfinite(sizes_all) & (sizes_all > 0) & (sizes_all < 1000)
+        sizes_nm = sizes_all[valid]
         
         if len(sizes_nm) < 10:
             raise HTTPException(
@@ -2877,102 +2977,6 @@ async def update_experimental_conditions(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update experimental conditions: {str(e)}"
-        )
-
-
-# ============================================================================
-# Channel Configuration Endpoints
-# ============================================================================
-
-@router.get("/channel-config", response_model=dict)
-async def get_channel_configuration():
-    """
-    Get current channel configuration for FCS analysis.
-    
-    Returns the active instrument settings and all available instrument configurations.
-    """
-    try:
-        from src.utils.channel_config import get_channel_config  # type: ignore[import-not-found]
-        
-        config = get_channel_config()
-        
-        return {
-            "success": True,
-            "active_instrument": config.active_instrument,
-            "instruments": list(config.list_instruments()),
-            "fsc_channels": config.get_fsc_channel_names(),
-            "ssc_channels": config.get_ssc_channel_names(),
-            "preferred": {
-                "for_size_analysis": config.get_preferred_channels("for_size_analysis"),
-                "for_scatter_plot": config.get_preferred_channels("for_scatter_plot")
-            }
-        }
-    except Exception as e:
-        logger.exception(f"❌ Failed to get channel config: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get channel configuration: {str(e)}"
-        )
-
-
-@router.put("/channel-config", response_model=dict)
-async def update_channel_configuration(
-    instrument: Optional[str] = Query(None, description="Instrument name to activate"),
-    fsc_channel: Optional[str] = Query(None, description="FSC channel name to add/set as preferred"),
-    ssc_channel: Optional[str] = Query(None, description="SSC channel name to add/set as preferred"),
-    save: bool = Query(True, description="Save configuration to file")
-):
-    """
-    Update channel configuration for FCS analysis.
-    
-    **Parameters:**
-    - instrument: Activate a specific instrument configuration
-    - fsc_channel: Set the preferred FSC channel
-    - ssc_channel: Set the preferred SSC channel
-    - save: Whether to persist changes to file (default: True)
-    
-    **Example:**
-    ```
-    PUT /samples/channel-config?fsc_channel=Channel_5&ssc_channel=Channel_6&save=true
-    ```
-    """
-    try:
-        from src.utils.channel_config import get_channel_config  # type: ignore[import-not-found]
-        
-        config = get_channel_config()
-        
-        # Activate specific instrument if provided
-        if instrument:
-            if not config.set_active_instrument(instrument):
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Instrument '{instrument}' not found. Available: {config.list_instruments()}"
-                )
-        
-        # Add custom channel mapping if both FSC and SSC provided
-        if fsc_channel and ssc_channel:
-            config.add_custom_channel_mapping(fsc_channel, ssc_channel)
-            logger.info(f"✓ Updated channel mapping: FSC={fsc_channel}, SSC={ssc_channel}")
-        
-        # Save configuration if requested
-        if save:
-            config.save_config()
-        
-        return {
-            "success": True,
-            "message": "Channel configuration updated",
-            "active_instrument": config.active_instrument,
-            "preferred_fsc": config.get_preferred_channels()[0],
-            "preferred_ssc": config.get_preferred_channels()[1],
-            "saved": save
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(f"❌ Failed to update channel config: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update channel configuration: {str(e)}"
         )
 
 

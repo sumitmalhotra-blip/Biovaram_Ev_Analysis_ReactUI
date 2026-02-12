@@ -326,7 +326,7 @@ export function AnomalyHistogramChart({
       <div className="absolute top-0 right-0 z-10 flex items-center gap-2">
         {headerContent}
       </div>
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
         <BarChart 
           data={histogramData} 
           barCategoryGap={0}

@@ -110,7 +110,7 @@ export function ParticleSizeVisualization({
     
     // Scale to full dataset (scatter data is sampled)
     // Use validSizes.length for accurate scaling (not all scatter points have diameters)
-    const scaleFactor = totalEvents / Math.max(scatterData.length, 1)
+    const scaleFactor = totalEvents / Math.max(validSizes.length, 1)
     Object.keys(bins).forEach(key => {
       bins[key] = Math.round(bins[key] * scaleFactor)
     })

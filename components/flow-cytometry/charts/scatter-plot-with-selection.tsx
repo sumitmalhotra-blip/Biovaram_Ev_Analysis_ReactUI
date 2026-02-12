@@ -826,7 +826,7 @@ export function ScatterPlotChart({
             </div>
           )}
           
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
             <ScatterChart
               ref={chartRef}
               margin={{ top: 10, right: 20, bottom: 40, left: 50 }}

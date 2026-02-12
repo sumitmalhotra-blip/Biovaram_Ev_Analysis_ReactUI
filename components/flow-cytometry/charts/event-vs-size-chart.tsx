@@ -51,12 +51,12 @@ export function EventVsSizeChart({ sampleId, onPin, title = "Event vs Size" }: E
   const [zoomDomain, setZoomDomain] = useState<{ min: number; max: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  // Get size ranges from settings for coloring
-  const sizeRanges = fcsAnalysis.sizeRanges || [
+  // Get size ranges from settings for coloring — stabilize reference with useMemo
+  const sizeRanges = useMemo(() => fcsAnalysis.sizeRanges || [
     { name: "Small EVs", min: 0, max: 50, color: "#22c55e" },
     { name: "Exosomes", min: 50, max: 200, color: "#3b82f6" },
     { name: "Microvesicles", min: 200, max: 1000, color: "#f59e0b" },
-  ]
+  ], [fcsAnalysis.sizeRanges])
 
   // Fetch data when sampleId or settings change
   useEffect(() => {
@@ -121,7 +121,8 @@ export function EventVsSizeChart({ sampleId, onPin, title = "Event vs Size" }: E
     return () => {
       cancelled = true
     }
-  }, [sampleId, fcsAnalysisSettings?.laserWavelength, fcsAnalysisSettings?.particleRI, fcsAnalysisSettings?.mediumRI, getFCSValues])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sampleId, fcsAnalysisSettings?.laserWavelength, fcsAnalysisSettings?.particleRI, fcsAnalysisSettings?.mediumRI])
 
   // Color function based on size ranges
   const getPointColor = (size: number): string => {
@@ -288,7 +289,7 @@ export function EventVsSizeChart({ sampleId, onPin, title = "Event vs Size" }: E
 
       <CardContent>
         <div className="h-[350px] w-full" style={{ minHeight: '350px', minWidth: '300px' }}>
-          <ResponsiveContainer width="100%" height={350}>
+          <ResponsiveContainer width="100%" height={350} minWidth={1} minHeight={1}>
             <ScatterChart margin={{ top: 10, right: 30, left: 10, bottom: 30 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#333" opacity={0.3} />
               <XAxis
