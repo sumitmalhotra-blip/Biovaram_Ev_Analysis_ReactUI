@@ -207,7 +207,7 @@ async def fit_calibration_from_fcs(
     
     try:
         # Find bead datasheet
-        bead_standards_dir = Path(__file__).parent.parent / "config" / "bead_standards"
+        bead_standards_dir = Path(__file__).parent.parent.parent.parent / "config" / "bead_standards"
         datasheet_path = bead_standards_dir / bead_kit
         
         if not datasheet_path.exists():
@@ -313,7 +313,7 @@ async def fit_calibration_manual(
         # Load datasheet if specified
         datasheet = None
         if request.bead_kit:
-            bead_standards_dir = Path(__file__).parent.parent / "config" / "bead_standards"
+            bead_standards_dir = Path(__file__).parent.parent.parent.parent / "config" / "bead_standards"
             datasheet_path = bead_standards_dir / request.bead_kit
             if datasheet_path.exists():
                 datasheet = BeadDatasheet.load(str(datasheet_path))
