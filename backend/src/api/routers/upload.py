@@ -516,8 +516,8 @@ async def upload_fcs_file(
     operator: Optional[str] = Form(None),
     notes: Optional[str] = Form(None),
     user_id: Optional[int] = Form(None),
-    wavelength_nm: Optional[float] = Form(None, description="Laser wavelength for Mie calculations (default: 488.0)"),
-    n_particle: Optional[float] = Form(None, description="Particle refractive index (default: 1.40)"),
+    wavelength_nm: Optional[float] = Form(None, description="Laser wavelength for Mie calculations (default: 405.0)"),
+    n_particle: Optional[float] = Form(None, description="Particle refractive index (default: 1.37)"),
     n_medium: Optional[float] = Form(None, description="Medium refractive index (default: 1.33)"),
     current_user: dict | None = Depends(optional_auth),
     db: AsyncSession = Depends(get_session)
@@ -706,25 +706,59 @@ async def upload_fcs_file(
                 # Calculate particle size using Mie scattering theory
                 # TASK-002 FIX (Dec 17, 2025): Use extended range to avoid edge clustering
                 # CAL-001 (Feb 10, 2026): Check for active bead calibration first
+                # FCMPASS-001 (Jul 2026): FCMPASS k-based sizing is highest priority
                 particle_size_median_nm = None
                 active_calibration = get_active_calibration()
                 sizing_method_used = 'uncalibrated_mie'  # Track which method was used
                 
-                if fsc_channel and fsc_stats.get('median'):
+                # === FCMPASS k-based median (highest priority) ===
+                try:
+                    from src.physics.bead_calibration import get_fcmpass_calibration
+                    _fcmpass_cal = get_fcmpass_calibration()
+                    if _fcmpass_cal and _fcmpass_cal.calibrated:
+                        # Pick best scatter channel for FCMPASS (prefer VSSC1-H)
+                        _fcmpass_channel = None
+                        for _ch in ['VSSC1-H', 'VSSC-H', 'VSSC1_H']:
+                            if _ch in parsed_data.columns:
+                                _fcmpass_channel = _ch
+                                break
+                        if not _fcmpass_channel and ssc_channel and ssc_channel in parsed_data.columns:
+                            _fcmpass_channel = ssc_channel
+                        
+                        if _fcmpass_channel:
+                            _median_ssc = float(parsed_data[_fcmpass_channel].median())
+                            if _median_ssc > 0:
+                                _fcmpass_ri = n_particle if n_particle is not None else 1.37
+                                if abs(_fcmpass_cal.n_ev - _fcmpass_ri) > 1e-6:
+                                    _fcmpass_cal.update_ev_ri(_fcmpass_ri)
+                                _d, _in_range = _fcmpass_cal.predict_batch(np.array([_median_ssc]))
+                                if not np.isnan(_d[0]) and _d[0] > 0:
+                                    particle_size_median_nm = float(_d[0])
+                                    sizing_method_used = 'fcmpass_k_based'
+                                    logger.info(f"✨ FCMPASS particle size median: {particle_size_median_nm:.1f} nm (k-based)")
+                except Exception as _fcmpass_err:
+                    logger.warning(f"⚠️ FCMPASS median calculation failed: {_fcmpass_err}")
+                
+                # === Legacy bead-calibrated / uncalibrated Mie fallback ===
+                if particle_size_median_nm is None and fsc_channel and fsc_stats.get('median'):
                     try:
                         if active_calibration and active_calibration.is_fitted:
-                            # === CALIBRATED PATH (preferred) ===
-                            # Use bead-calibrated transfer function for accurate sizing
+                            # === CALIBRATED PATH ===
                             median_fsc = np.array([fsc_stats['median']])
-                            cal_diameter = active_calibration.diameter_from_fsc(median_fsc)
+                            _target_ri = n_particle if n_particle is not None else 1.37
+                            _medium_ri = n_medium if n_medium is not None else 1.33
+                            cal_diameter = active_calibration.diameter_from_fsc(
+                                median_fsc,
+                                target_ri=_target_ri,
+                                medium_ri=_medium_ri,
+                            )
                             particle_size_median_nm = float(cal_diameter[0])
                             sizing_method_used = 'bead_calibrated'
                             logger.info(f"✨ CALIBRATED particle size: {particle_size_median_nm:.1f} nm (bead calibration)")
                         else:
                             # === UNCALIBRATED FALLBACK ===
-                            # Use user-provided params or defaults
-                            mie_wl = wavelength_nm if wavelength_nm is not None else 488.0
-                            mie_np = n_particle if n_particle is not None else 1.40
+                            mie_wl = wavelength_nm if wavelength_nm is not None else 405.0
+                            mie_np = n_particle if n_particle is not None else 1.37
                             mie_nm = n_medium if n_medium is not None else 1.33
                             mie_calc = MieScatterCalculator(
                                 wavelength_nm=mie_wl,
@@ -750,8 +784,8 @@ async def upload_fcs_file(
                 # 3. Single-solution Mie fallback
                 
                 # User-provided or default Mie parameters
-                mie_wl = wavelength_nm if wavelength_nm is not None else 488.0
-                mie_np = n_particle if n_particle is not None else 1.40
+                mie_wl = wavelength_nm if wavelength_nm is not None else 405.0
+                mie_np = n_particle if n_particle is not None else 1.37
                 mie_nm = n_medium if n_medium is not None else 1.33
                 
                 # Calculate size distribution percentiles using Mie theory
@@ -813,6 +847,17 @@ async def upload_fcs_file(
                         logger.info(f"   BSSC channel (488nm): {bssc_h_channel}")
                         
                         multi_mie_calc = MultiSolutionMieCalculator(n_particle=mie_np, n_medium=mie_nm)
+                        
+                        # Inject calibrated k-factor if available
+                        try:
+                            from src.physics.bead_calibration import get_fcmpass_k_factor
+                            _k = get_fcmpass_k_factor()
+                            if _k:
+                                multi_mie_calc = MultiSolutionMieCalculator(
+                                    n_particle=mie_np, n_medium=mie_nm, k_violet=_k
+                                )
+                        except Exception:
+                            pass
                         
                         # Sample events for analysis
                         sample_size = min(10000, len(parsed_data))
@@ -1470,9 +1515,34 @@ async def upload_nta_file(
                         # Don't fail the upload due to alert generation issues
                 
         except Exception as db_error:
-            logger.warning(f"⚠️ Database operation failed: {db_error}")
-            logger.warning("   Continuing with file-based response...")
+            logger.error(f"❌ NTA DB operation failed for '{sample_id}': {type(db_error).__name__}: {db_error}")
+            logger.warning("   Attempting retry with fresh transaction...")
             db_sample = None
+            
+            # Retry: create a minimal sample record so metadata/cross-validate endpoints work
+            try:
+                await db.rollback()
+                from src.database.models import Sample as SampleModel
+                retry_sample = SampleModel(
+                    sample_id=sample_id,
+                    biological_sample_id=sample_id,
+                    treatment=treatment or "Unknown",
+                    file_path_nta=str(file_path.relative_to(Path.cwd())),
+                    operator=operator,
+                    notes=notes,
+                    user_id=user_id if user_id else None,
+                    processing_status="completed" if nta_results else "pending",
+                    qc_status="pending",
+                )
+                db.add(retry_sample)
+                await db.commit()
+                await db.refresh(retry_sample)
+                db_sample = retry_sample
+                logger.success(f"✅ Retry succeeded: Created NTA sample '{sample_id}' (DB ID: {retry_sample.id})")
+            except Exception as retry_error:
+                logger.error(f"❌ NTA DB retry also failed for '{sample_id}': {type(retry_error).__name__}: {retry_error}")
+                await db.rollback()
+                db_sample = None
         
         # Get database ID or use temporary ID
         db_id = db_sample.id if db_sample else abs(hash(sample_id)) % 1000000

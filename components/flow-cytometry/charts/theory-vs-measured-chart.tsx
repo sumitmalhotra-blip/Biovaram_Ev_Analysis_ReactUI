@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, memo } from "react"
 import {
   ComposedChart,
   Line,
@@ -13,6 +13,7 @@ import {
   Legend,
 } from "recharts"
 import { useAnalysisStore } from "@/lib/store"
+import { useShallow } from "zustand/shallow"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Eye, EyeOff, Layers } from "lucide-react"
@@ -103,12 +104,16 @@ const generateData = (
   return data
 }
 
-export function TheoryVsMeasuredChart({ 
+export const TheoryVsMeasuredChart = memo(function TheoryVsMeasuredChart({ 
   primaryMeasuredData,
   secondaryMeasuredData,
   height = 320 
 }: TheoryVsMeasuredChartProps) {
-  const { overlayConfig, fcsAnalysis, secondaryFcsAnalysis } = useAnalysisStore()
+  const { overlayConfig, fcsAnalysis, secondaryFcsAnalysis } = useAnalysisStore(useShallow((s) => ({
+    overlayConfig: s.overlayConfig,
+    fcsAnalysis: s.fcsAnalysis,
+    secondaryFcsAnalysis: s.secondaryFcsAnalysis,
+  })))
   
   // Overlay visibility toggles
   const [showPrimary, setShowPrimary] = useState(true)
@@ -307,4 +312,4 @@ export function TheoryVsMeasuredChart({
       </CardContent>
     </Card>
   )
-}
+})

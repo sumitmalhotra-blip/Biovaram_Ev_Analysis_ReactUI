@@ -1,0 +1,85 @@
+{
+  "kit_part_number": "7803",
+  "product_name": "MegaMix-Plus FSC",
+  "lot_number": "generic",
+  "manufacturer": "BioCytex / Stago",
+  "manufacture_date": null,
+  "expiration_date": null,
+  "quality_cert_date": null,
+  "storage_condition": "2-8°C, protected from light",
+  "material": "polystyrene_latex",
+  "refractive_index": 1.591,
+  "ri_measurement_wavelength_nm": 590,
+  "ri_measurement_temperature_c": 20,
+  "size_measurement_method": "DLS/TEM",
+  "nist_traceable": false,
+  "appearance": "Milky suspension",
+  "subcomponents": {
+    "MegaMix_Plus_FSC": {
+      "sub_lot": "generic",
+      "description": "MegaMix-Plus FSC - optimized for forward scatter (100-900nm)",
+      "overall_refractive_index": 1.591,
+      "overall_appearance": "Milky suspension",
+      "beads": [
+        {
+          "label": "100nm",
+          "diameter_nm": 100,
+          "diameter_um": 0.100,
+          "spec_min_um": 0.090,
+          "spec_max_um": 0.110,
+          "cv_pct": 5.0,
+          "target_concentration_ww": null,
+          "concentration_particles_per_ml": null
+        },
+        {
+          "label": "160nm",
+          "diameter_nm": 160,
+          "diameter_um": 0.160,
+          "spec_min_um": 0.145,
+          "spec_max_um": 0.175,
+          "cv_pct": 5.0,
+          "target_concentration_ww": null,
+          "concentration_particles_per_ml": null
+        },
+        {
+          "label": "240nm",
+          "diameter_nm": 240,
+          "diameter_um": 0.240,
+          "spec_min_um": 0.225,
+          "spec_max_um": 0.255,
+          "cv_pct": 5.0,
+          "target_concentration_ww": null,
+          "concentration_particles_per_ml": null
+        },
+        {
+          "label": "500nm",
+          "diameter_nm": 500,
+          "diameter_um": 0.500,
+          "spec_min_um": 0.475,
+          "spec_max_um": 0.525,
+          "cv_pct": 3.0,
+          "target_concentration_ww": null,
+          "concentration_particles_per_ml": null
+        },
+        {
+          "label": "900nm",
+          "diameter_nm": 900,
+          "diameter_um": 0.900,
+          "spec_min_um": 0.860,
+          "spec_max_um": 0.940,
+          "cv_pct": 3.0,
+          "target_concentration_ww": null,
+          "concentration_particles_per_ml": null
+        }
+      ]
+    }
+  },
+  "unique_bead_diameters_nm": [100, 160, 240, 500, 900],
+  "notes": [
+    "MegaMix-Plus FSC is optimized for forward scatter calibration of sub-micron particles",
+    "5 polystyrene bead populations spanning 100-900nm",
+    "Widely used for EV flow cytometry calibration per MIFlowCyt-EV guidelines",
+    "Refractive index evaluated at 590nm and 20°C (PS standard)",
+    "Lot-specific diameters should be updated from the certificate of analysis"
+  ]
+}

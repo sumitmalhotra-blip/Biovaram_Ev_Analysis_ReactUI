@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, memo } from "react"
 import {
   BarChart,
   Bar,
@@ -202,7 +202,7 @@ function CustomTooltip({ active, payload, label }: any) {
   )
 }
 
-export function SizeDistributionChart({ 
+export const SizeDistributionChart = memo(function SizeDistributionChart({ 
   data: propData,
   showControls = true,
   showBrush = false,
@@ -222,7 +222,12 @@ export function SizeDistributionChart({
 }: SizeDistributionChartProps) {
   // TASK-019: Get histogram bins from store settings
   // Also get dynamic size ranges from store and overlay config
-  const { fcsAnalysisSettings, fcsAnalysis, secondaryFcsAnalysis, overlayConfig } = useAnalysisStore()
+  const { fcsAnalysisSettings, fcsAnalysis, secondaryFcsAnalysis, overlayConfig } = useAnalysisStore(useShallow((s) => ({
+    fcsAnalysisSettings: s.fcsAnalysisSettings,
+    fcsAnalysis: s.fcsAnalysis,
+    secondaryFcsAnalysis: s.secondaryFcsAnalysis,
+    overlayConfig: s.overlayConfig,
+  })))
   const binCount = propBinCount ?? fcsAnalysisSettings?.histogramBins ?? 20
   const sizeRanges = fcsAnalysis.sizeRanges
   
@@ -649,4 +654,4 @@ export function SizeDistributionChart({
       )}
     </InteractiveChartWrapper>
   )
-}
+})

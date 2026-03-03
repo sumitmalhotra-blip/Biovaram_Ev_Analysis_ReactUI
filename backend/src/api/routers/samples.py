@@ -29,6 +29,58 @@ router = APIRouter()
 
 
 # ============================================================================
+# NTA File Finder Helper
+# ============================================================================
+
+def _find_nta_file_by_sample_id(sample_id: str) -> Optional[str]:
+    """
+    Find an NTA file in the uploads directory by sample_id.
+    
+    When a sample is not in the database (e.g., DB insert failed during upload),
+    we can still find the file on disk by matching the sample_id in the filename.
+    
+    Files are stored as: {timestamp}_{original_filename}.txt
+    e.g., 20260224_145033_20251217_0005_PC3_100kDa_F5_size_488.txt
+    
+    Returns:
+        File path string if found, None otherwise
+    """
+    from src.api.config import get_settings
+    settings = get_settings()
+    
+    upload_dir = settings.upload_dir
+    if not upload_dir.exists():
+        return None
+    
+    sample_id_lower = sample_id.lower()
+    
+    # Search for .txt and .csv files matching the sample_id
+    matches = []
+    for ext in ('*.txt', '*.csv'):
+        for f in upload_dir.glob(ext):
+            # File is stored as {timestamp}_{original_name}.ext
+            # The sample_id is derived from the original name (stem)
+            stem = f.stem.lower()
+            # Strip the leading timestamp (YYYYMMDD_HHMMSS_)
+            parts = stem.split('_', 2)
+            if len(parts) >= 3:
+                # Remove timestamp prefix, check if remaining matches sample_id
+                remainder = parts[2]
+                if remainder == sample_id_lower:
+                    matches.append(f)
+            # Also check if sample_id appears anywhere in the filename
+            if sample_id_lower in stem and f not in matches:
+                matches.append(f)
+    
+    if matches:
+        # Return the most recently modified file
+        matches.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+        return str(matches[0])
+    
+    return None
+
+
+# ============================================================================
 # Multi-Solution Mie Helper Functions
 # ============================================================================
 
@@ -700,11 +752,19 @@ async def get_scatter_data(
     max_points: int = Query(5000, ge=100, le=100000, description="Maximum points to return"),
     fsc_channel: Optional[str] = Query(None, description="FSC channel name override (e.g., 'Channel_3')"),
     ssc_channel: Optional[str] = Query(None, description="SSC channel name override (e.g., 'Channel_4')"),
-    wavelength_nm: float = Query(488.0, ge=200, le=800, description="Laser wavelength for Mie calculations"),
-    n_particle: float = Query(1.40, ge=1.0, le=2.0, description="Particle refractive index"),
+    wavelength_nm: float = Query(405.0, ge=200, le=800, description="Laser wavelength for Mie calculations"),
+    n_particle: float = Query(1.37, ge=1.0, le=2.0, description="Particle refractive index"),
     n_medium: float = Query(1.33, ge=1.0, le=2.0, description="Medium refractive index"),
     db: AsyncSession = Depends(get_session)
 ):
+    """Get FSC/SSC scatter plot data for a sample (cached for 2 minutes)."""
+    # Check cache first — scatter data is expensive (FCS parse + Mie calculations)
+    from src.api.cache import scatter_cache, make_cache_key
+    cache_key = f"scatter:{sample_id}:{make_cache_key(max_points, fsc_channel, ssc_channel, wavelength_nm, n_particle, n_medium)}"
+    cached = scatter_cache.get(cache_key)
+    if cached is not None:
+        logger.debug(f"📊 Cache HIT for scatter data: {sample_id}")
+        return cached
     """
     Get FSC/SSC scatter plot data for a sample.
     
@@ -817,8 +877,9 @@ async def get_scatter_data(
         ssc_values = sampled_data[ssc_ch].values
         
         # Check for active bead calibration (CAL-001, Feb 10, 2026)
-        from src.physics.bead_calibration import get_active_calibration
+        from src.physics.bead_calibration import get_active_calibration, get_fcmpass_calibration
         active_calibration = get_active_calibration()
+        fcmpass_calibration = get_fcmpass_calibration()
         
         # Check for multi-solution Mie capability (VSSC + BSSC channels)
         multi_solution_info = detect_multi_solution_channels(channels)
@@ -829,17 +890,49 @@ async def get_scatter_data(
         )
         
         # Calculate diameters using appropriate method
-        # Priority: 1. Bead calibration  2. Multi-solution Mie  3. Single-solution Mie
+        # Priority: 1. FCMPASS k-based  2. Legacy bead cal  3. Multi-solution Mie  4. Single-solution Mie
         try:
-            if active_calibration and active_calibration.is_fitted:
-                # === BEAD-CALIBRATED (HIGHEST PRIORITY) ===
-                logger.info(f"🎯 Using BEAD-CALIBRATED sizing for scatter data")
+            if fcmpass_calibration and fcmpass_calibration.calibrated:
+                # === FCMPASS K-BASED (HIGHEST PRIORITY, VALIDATED) ===
+                # If user requested a different EV RI, update the LUT
+                if abs(fcmpass_calibration.n_ev - n_particle) > 1e-6:
+                    fcmpass_calibration.update_ev_ri(n_particle)
+                logger.info(
+                    f"🎯 Using FCMPASS k-based sizing: k={fcmpass_calibration.k_instrument:.1f}, "
+                    f"CV={fcmpass_calibration.k_cv_pct:.1f}%, RI_ev={fcmpass_calibration.n_ev}"
+                )
+                cal_scatter = np.asarray(ssc_values, dtype=np.float64)
+                pos_mask = cal_scatter > 0
+                if np.any(pos_mask):
+                    diameters = np.full(len(ssc_values), np.nan)
+                    cal_diameters, in_range = fcmpass_calibration.predict_batch(
+                        cal_scatter[pos_mask], show_progress=True
+                    )
+                    diameters[pos_mask] = cal_diameters
+                    success_mask = pos_mask & ~np.isnan(diameters) & (diameters > 0)
+                    valid_diameter_count = int(np.sum(success_mask))
+                    in_range_count = int(np.sum(in_range))
+                    logger.info(
+                        f"📐 FCMPASS: {valid_diameter_count}/{len(ssc_values)} valid, "
+                        f"{in_range_count} in calibrated range"
+                    )
+                else:
+                    diameters = np.zeros(len(ssc_values))
+                    success_mask = np.zeros(len(ssc_values), dtype=bool)
+                    valid_diameter_count = 0
+            elif active_calibration and active_calibration.is_fitted:
+                # === LEGACY BEAD-CALIBRATED ===
+                logger.info(f"🎯 Using LEGACY bead-calibrated sizing for scatter data")
                 cal_scatter = np.asarray(ssc_values, dtype=np.float64)
                 cal_positive = cal_scatter[cal_scatter > 0]
                 if len(cal_positive) > 0:
                     diameters = np.full(len(ssc_values), np.nan)
                     pos_mask = cal_scatter > 0
-                    cal_diameters = active_calibration.diameter_from_fsc(cal_scatter[pos_mask])
+                    cal_diameters = active_calibration.diameter_from_fsc(
+                        cal_scatter[pos_mask],
+                        target_ri=n_particle,  # Phase 5: Apply RI correction
+                        medium_ri=n_medium,
+                    )
                     diameters[pos_mask] = cal_diameters
                     success_mask = pos_mask & ~np.isnan(diameters) & (diameters > 0)
                     valid_diameter_count = int(np.sum(success_mask))
@@ -857,7 +950,28 @@ async def get_scatter_data(
                 
                 logger.info(f"🔬 Using MULTI-SOLUTION Mie: VSSC={vssc_ch}, BSSC={bssc_ch}")
                 
-                multi_mie_calc = MultiSolutionMieCalculator(n_particle=n_particle, n_medium=n_medium)
+                # Try to borrow k-factor from FCMPASS calibration if available.
+                # The FCMPASS k converts AU→σ on the calibration channel.
+                # Even though FCMPASS takes priority in the cascade, we reach
+                # here only when FCMPASS is NOT active — but a previous
+                # calibration JSON may still exist on disk with a usable k.
+                k_violet = None
+                k_blue = None
+                try:
+                    from src.physics.bead_calibration import get_fcmpass_k_factor
+                    _k = get_fcmpass_k_factor()
+                    if _k:
+                        k_violet = _k  # calibrated on VSSC1-H (405nm)
+                        logger.info(f"📐 Borrowed k_violet={k_violet:.1f} from FCMPASS calibration")
+                except Exception:
+                    pass  # no FCMPASS data — use heuristic fallback
+                
+                multi_mie_calc = MultiSolutionMieCalculator(
+                    n_particle=n_particle,
+                    n_medium=n_medium,
+                    k_violet=k_violet,
+                    k_blue=k_blue,
+                )
                 
                 # Get SSC values for both wavelengths
                 ssc_violet = np.asarray(sampled_data[vssc_ch].values, dtype=np.float64)
@@ -899,7 +1013,9 @@ async def get_scatter_data(
         
         scatter_data = []
         sizing_method_used = "none"
-        if active_calibration and active_calibration.is_fitted:
+        if fcmpass_calibration and fcmpass_calibration.calibrated:
+            sizing_method_used = "fcmpass_k_based"
+        elif active_calibration and active_calibration.is_fitted:
             sizing_method_used = "bead_calibrated"
         elif can_use_multi_solution:
             sizing_method_used = "multi_solution_mie"
@@ -928,7 +1044,7 @@ async def get_scatter_data(
         
         logger.success(f"✅ Returned {len(scatter_data)} scatter points ({valid_diameter_count} with diameter) for {sample_id}")
         
-        return {
+        response_data = {
             "sample_id": sample_id,
             "total_events": total_events,
             "returned_points": len(scatter_data),
@@ -940,6 +1056,24 @@ async def get_scatter_data(
             },
             "sizing_method": sizing_method_used,
         }
+        
+        # Gain mismatch check (Phase 4 - B3)
+        if fcmpass_calibration and fcmpass_calibration.calibrated:
+            try:
+                sample_gains = parser.extract_channel_gains()
+                if sample_gains:
+                    from src.physics.bead_calibration import check_gain_mismatch
+                    gain_result = check_gain_mismatch(sample_gains)
+                    if gain_result.get("checked") and gain_result.get("has_mismatch"):
+                        response_data["warnings"] = response_data.get("warnings", [])
+                        response_data["warnings"].extend(gain_result.get("warnings", []))
+                        response_data["gain_mismatch"] = gain_result
+            except Exception as e:
+                logger.debug(f"Gain mismatch check skipped: {e}")
+        
+        # Cache the response for 2 minutes
+        scatter_cache.set(cache_key, response_data, 120)
+        return response_data
         
     except HTTPException:
         raise
@@ -1064,15 +1198,17 @@ async def get_clustered_scatter_data(
             multi_solution_info = detect_multi_solution_channels(channels)
             if multi_solution_info['can_use_multi_solution']:
                 from src.physics.mie_scatter import MultiSolutionMieCalculator
+                from src.physics.bead_calibration import get_fcmpass_k_factor
                 vssc_ch = multi_solution_info['vssc_channel']
                 bssc_ch = multi_solution_info['bssc_channel']
-                calc = MultiSolutionMieCalculator(n_particle=1.40, n_medium=1.33)
+                _k = get_fcmpass_k_factor()
+                calc = MultiSolutionMieCalculator(n_particle=1.37, n_medium=1.33, k_violet=_k)
                 ssc_violet = parsed_data[vssc_ch].values.astype(np.float64)
                 ssc_blue = parsed_data[bssc_ch].values.astype(np.float64)
                 diameters, _ = calc.calculate_sizes_multi_solution(ssc_blue, ssc_violet)
             else:
                 from src.physics.mie_scatter import MieScatterCalculator
-                calc = MieScatterCalculator(wavelength_nm=488.0, n_particle=1.40, n_medium=1.33)
+                calc = MieScatterCalculator(wavelength_nm=405.0, n_particle=1.37, n_medium=1.33)
                 diameters, _ = calc.diameters_from_scatter_normalized(fsc_values, min_diameter=20.0, max_diameter=500.0)
         except Exception as e:
             logger.warning(f"Could not calculate diameters: {e}")
@@ -1285,8 +1421,8 @@ class GatedAnalysisRequest(BaseModel):
     y_channel: str = Field(..., description="Y-axis channel name")
     include_diameter_stats: bool = Field(default=True, description="Include diameter statistics")
     # Mie parameters for size calculations
-    wavelength_nm: float = Field(default=488.0, ge=200, le=800, description="Laser wavelength")
-    n_particle: float = Field(default=1.40, ge=1.0, le=2.0, description="Particle refractive index")
+    wavelength_nm: float = Field(default=405.0, ge=200, le=800, description="Laser wavelength")
+    n_particle: float = Field(default=1.37, ge=1.0, le=2.0, description="Particle refractive index")
     n_medium: float = Field(default=1.33, ge=1.0, le=2.0, description="Medium refractive index")
 
 
@@ -1537,9 +1673,12 @@ async def analyze_gated_population(
                     
                     logger.info(f"🔬 Gated analysis using MULTI-SOLUTION Mie: VSSC={vssc_ch}, BSSC={bssc_ch}")
                     
+                    from src.physics.bead_calibration import get_fcmpass_k_factor
+                    _k = get_fcmpass_k_factor()
                     multi_mie_calc = MultiSolutionMieCalculator(
                         n_particle=request.n_particle, 
-                        n_medium=request.n_medium
+                        n_medium=request.n_medium,
+                        k_violet=_k,
                     )
                     
                     # Get SSC values for gated events
@@ -1825,8 +1964,8 @@ async def get_recommended_axes(
 async def get_size_bins(
     sample_id: str,
     fsc_channel: Optional[str] = Query(None, description="FSC channel name override (e.g., 'Channel_3')"),
-    wavelength_nm: float = Query(488.0, ge=200, le=800, description="Laser wavelength for Mie calculations"),
-    n_particle: float = Query(1.40, ge=1.0, le=2.0, description="Particle refractive index"),
+    wavelength_nm: float = Query(405.0, ge=200, le=800, description="Laser wavelength for Mie calculations"),
+    n_particle: float = Query(1.37, ge=1.0, le=2.0, description="Particle refractive index"),
     n_medium: float = Query(1.33, ge=1.0, le=2.0, description="Medium refractive index"),
     db: AsyncSession = Depends(get_session)
 ):
@@ -1859,6 +1998,14 @@ async def get_size_bins(
     }
     ```
     """
+    # Check cache first
+    from src.api.cache import size_bins_cache, make_cache_key
+    cache_key = f"bins:{sample_id}:{make_cache_key(fsc_channel, wavelength_nm, n_particle, n_medium)}"
+    cached = size_bins_cache.get(cache_key)
+    if cached is not None:
+        logger.debug(f"📊 Cache HIT for size bins: {sample_id}")
+        return cached
+    
     try:
         # Get sample
         result = await db.execute(select(Sample).where(Sample.sample_id == sample_id))
@@ -1936,7 +2083,9 @@ async def get_size_bins(
             
             logger.info(f"🔬 Size bins using MULTI-SOLUTION Mie: VSSC={vssc_ch}, BSSC={bssc_ch}")
             
-            multi_mie_calc = MultiSolutionMieCalculator(n_particle=n_particle, n_medium=n_medium)
+            from src.physics.bead_calibration import get_fcmpass_k_factor
+            _k = get_fcmpass_k_factor()
+            multi_mie_calc = MultiSolutionMieCalculator(n_particle=n_particle, n_medium=n_medium, k_violet=_k)
             
             # Get SSC values for both wavelengths
             ssc_violet = np.asarray(parsed_data[vssc_ch].values[sample_indices], dtype=np.float64)
@@ -1963,51 +2112,70 @@ async def get_size_bins(
             )
             sizes_array = sizes_array[success_mask & (sizes_array > 0)]
         
-        # Bin sizes into categories
-        small_count = np.sum(sizes_array < 50)
-        medium_count = np.sum((sizes_array >= 50) & (sizes_array <= 200))
-        large_count = np.sum(sizes_array > 200)
+        # Bin sizes into 5 categories (matching frontend)
+        exomere_count = np.sum(sizes_array < 50)
+        small_count = np.sum((sizes_array >= 51) & (sizes_array <= 100))
+        medium_count = np.sum((sizes_array >= 101) & (sizes_array <= 150))
+        large_count = np.sum((sizes_array >= 151) & (sizes_array <= 200))
+        very_large_count = np.sum(sizes_array > 200)
         
-        total_binned = small_count + medium_count + large_count
+        total_binned = exomere_count + small_count + medium_count + large_count + very_large_count
         
         # Extrapolate to full dataset
         scale_factor = total_events / sample_size if total_binned > 0 else 1.0
         
+        exomere_total = int(exomere_count * scale_factor)
         small_total = int(small_count * scale_factor)
         medium_total = int(medium_count * scale_factor)
         large_total = int(large_count * scale_factor)
+        very_large_total = int(very_large_count * scale_factor)
         
         # Calculate percentages
-        total_categorized = small_total + medium_total + large_total
+        total_categorized = exomere_total + small_total + medium_total + large_total + very_large_total
+        exomere_pct = (exomere_total / total_categorized * 100) if total_categorized > 0 else 0
         small_pct = (small_total / total_categorized * 100) if total_categorized > 0 else 0
         medium_pct = (medium_total / total_categorized * 100) if total_categorized > 0 else 0
         large_pct = (large_total / total_categorized * 100) if total_categorized > 0 else 0
+        very_large_pct = (very_large_total / total_categorized * 100) if total_categorized > 0 else 0
         
         logger.success(
             f"✅ Size bins for {sample_id}: "
-            f"Small={small_pct:.1f}%, Medium={medium_pct:.1f}%, Large={large_pct:.1f}%"
+            f"Exomeres={exomere_pct:.1f}%, Small={small_pct:.1f}%, Medium={medium_pct:.1f}%, "
+            f"Large={large_pct:.1f}%, VeryLarge={very_large_pct:.1f}%"
         )
         
-        return {
+        response_data = {
             "sample_id": sample_id,
             "total_events": total_events,
             "bins": {
+                "exomeres": exomere_total,
                 "small": small_total,
                 "medium": medium_total,
-                "large": large_total
+                "large": large_total,
+                "very_large": very_large_total
             },
             "percentages": {
+                "exomeres": round(exomere_pct, 2),
                 "small": round(small_pct, 2),
                 "medium": round(medium_pct, 2),
-                "large": round(large_pct, 2)
+                "large": round(large_pct, 2),
+                "very_large": round(very_large_pct, 2)
             },
             "thresholds": {
-                "small_max": 50,
-                "medium_min": 50,
-                "medium_max": 200,
-                "large_min": 200
+                "exomere_max": 50,
+                "small_min": 51,
+                "small_max": 100,
+                "medium_min": 101,
+                "medium_max": 150,
+                "large_min": 151,
+                "large_max": 200,
+                "very_large_min": 200
             }
         }
+        
+        # Cache for 2 minutes
+        size_bins_cache.set(cache_key, response_data, 120)
+        return response_data
         
     except HTTPException:
         raise
@@ -2027,8 +2195,8 @@ async def get_size_bins(
 async def get_distribution_analysis(
     sample_id: str,
     fsc_channel: Optional[str] = Query(None, description="FSC channel name override (e.g., 'Channel_3')"),
-    wavelength_nm: float = Query(488.0, ge=200, le=800, description="Laser wavelength for Mie calculations"),
-    n_particle: float = Query(1.40, ge=1.0, le=2.0, description="Particle refractive index"),
+    wavelength_nm: float = Query(405.0, ge=200, le=800, description="Laser wavelength for Mie calculations"),
+    n_particle: float = Query(1.37, ge=1.0, le=2.0, description="Particle refractive index"),
     n_medium: float = Query(1.33, ge=1.0, le=2.0, description="Medium refractive index"),
     include_overlays: bool = Query(True, description="Include distribution overlay curves for plotting"),
     db: AsyncSession = Depends(get_session)
@@ -2092,6 +2260,14 @@ async def get_distribution_analysis(
     from src.physics.mie_scatter import MieScatterCalculator
     from src.parsers.fcs_parser import FCSParser
     from pathlib import Path
+    from src.api.cache import distribution_cache, make_cache_key
+    
+    # Check cache first — distribution analysis is expensive
+    cache_key = f"dist:{sample_id}:{make_cache_key(fsc_channel, wavelength_nm, n_particle, n_medium, include_overlays)}"
+    cached = distribution_cache.get(cache_key)
+    if cached is not None:
+        logger.debug(f"📊 Cache HIT for distribution analysis: {sample_id}")
+        return cached
     
     try:
         # Get sample from database
@@ -2126,69 +2302,164 @@ async def get_distribution_analysis(
                 detail="No data in FCS file"
             )
         
-        # Determine FSC channel
+        import numpy as np
         available_channels = parsed_data.columns.tolist()
+        sizing_method_used = 'heuristic_mie'  # Track which method produced sizes
+        sizes_nm = None
         
-        if fsc_channel and fsc_channel in available_channels:
-            selected_fsc = fsc_channel
-        else:
-            # Auto-detect FSC channel
-            fsc_candidates = ['FSC-H', 'FSC-A', 'FSC_H', 'FSC_A', 'BFSC-H', 'BFSC-A']
-            selected_fsc = None
-            for candidate in fsc_candidates:
-                if candidate in available_channels:
-                    selected_fsc = candidate
-                    break
+        # ===================================================================
+        # SIZING CASCADE: FCMPASS → Multi-Solution Mie → Heuristic fallback
+        # ===================================================================
+        
+        # --- Priority 1: FCMPASS k-based sizing (most accurate) ---
+        try:
+            from src.physics.bead_calibration import get_fcmpass_calibration
+            fcmpass_cal = get_fcmpass_calibration()
+            if fcmpass_cal and fcmpass_cal.calibrated:
+                # Update EV RI if user specified different from calibration
+                if abs(fcmpass_cal.n_ev - n_particle) > 1e-6:
+                    fcmpass_cal.update_ev_ri(n_particle)
+                
+                # Auto-detect best scatter channel (prefer VSSC1-H for violet-calibrated)
+                cal_channel = None
+                for ch_name in ['VSSC1-H', 'VSSC-H', 'VSSC1_H', 'SSC-H', 'SSC_H']:
+                    if ch_name in available_channels:
+                        cal_channel = ch_name
+                        break
+                if not cal_channel:
+                    for ch in available_channels:
+                        if 'SSC' in ch.upper():
+                            cal_channel = ch
+                            break
+                
+                if cal_channel:
+                    scatter_vals = np.asarray(parsed_data[cal_channel].values, dtype=np.float64)
+                    pos_mask = np.isfinite(scatter_vals) & (scatter_vals > 0)
+                    scatter_pos = scatter_vals[pos_mask]
+                    
+                    # Sample for efficiency
+                    sample_size = min(50000, len(scatter_pos))
+                    if len(scatter_pos) > sample_size:
+                        np.random.seed(42)
+                        scatter_pos = np.random.choice(scatter_pos, size=sample_size, replace=False)
+                    
+                    if len(scatter_pos) > 100:
+                        cal_diameters, in_range = fcmpass_cal.predict_batch(scatter_pos)
+                        valid_cal = cal_diameters[~np.isnan(cal_diameters) & (cal_diameters > 0)]
+                        if len(valid_cal) > 10:
+                            sizes_nm = valid_cal
+                            sizing_method_used = 'fcmpass_k_based'
+                            logger.info(
+                                f"📊 Distribution analysis using FCMPASS k-based sizing: "
+                                f"{len(sizes_nm)} valid particles, D50={np.median(sizes_nm):.1f}nm"
+                            )
+        except Exception as e:
+            logger.warning(f"⚠️ FCMPASS sizing failed for distribution analysis: {e}")
+        
+        # --- Priority 2: Multi-solution Mie with k-factor (if FCMPASS unavailable) ---
+        if sizes_nm is None:
+            try:
+                from src.physics.mie_scatter import MultiSolutionMieCalculator
+                from src.physics.bead_calibration import get_fcmpass_k_factor
+                
+                # Check for multi-wavelength scatter channels
+                vssc_ch = None
+                bssc_ch = None
+                for ch in available_channels:
+                    ch_upper = ch.upper()
+                    if 'VSSC' in ch_upper and vssc_ch is None:
+                        vssc_ch = ch
+                    elif 'BSSC' in ch_upper and bssc_ch is None:
+                        bssc_ch = ch
+                
+                if vssc_ch and bssc_ch:
+                    k_violet = get_fcmpass_k_factor()
+                    multi_mie = MultiSolutionMieCalculator(
+                        n_particle=n_particle, n_medium=n_medium, k_violet=k_violet
+                    )
+                    
+                    sample_size = min(50000, len(parsed_data))
+                    np.random.seed(42)
+                    if len(parsed_data) > sample_size:
+                        idx = np.random.choice(len(parsed_data), size=sample_size, replace=False)
+                    else:
+                        idx = np.arange(len(parsed_data))
+                    
+                    ssc_v = np.asarray(parsed_data[vssc_ch].values[idx], dtype=np.float64)
+                    ssc_b = np.asarray(parsed_data[bssc_ch].values[idx], dtype=np.float64)
+                    valid_mask = (ssc_v > 0) & (ssc_b > 0)
+                    ssc_v = ssc_v[valid_mask]
+                    ssc_b = ssc_b[valid_mask]
+                    
+                    if len(ssc_v) > 100:
+                        computed, num_sols = multi_mie.calculate_sizes_multi_solution(ssc_b, ssc_v)
+                        valid = ~np.isnan(computed) & (computed >= 20) & (computed <= 500)
+                        if np.sum(valid) > 10:
+                            sizes_nm = computed[valid]
+                            sizing_method_used = 'multi_solution_mie'
+                            logger.info(
+                                f"📊 Distribution analysis using multi-solution Mie: "
+                                f"{len(sizes_nm)} valid particles, D50={np.median(sizes_nm):.1f}nm"
+                            )
+            except Exception as e:
+                logger.warning(f"⚠️ Multi-solution Mie failed for distribution analysis: {e}")
+        
+        # --- Priority 3: Heuristic single-solution Mie (fallback) ---
+        if sizes_nm is None:
+            # Determine FSC channel
+            if fsc_channel and fsc_channel in available_channels:
+                selected_fsc = fsc_channel
+            else:
+                fsc_candidates = ['FSC-H', 'FSC-A', 'FSC_H', 'FSC_A', 'BFSC-H', 'BFSC-A']
+                selected_fsc = None
+                for candidate in fsc_candidates:
+                    if candidate in available_channels:
+                        selected_fsc = candidate
+                        break
+                if not selected_fsc:
+                    for ch in available_channels:
+                        if 'FSC' in ch.upper():
+                            selected_fsc = ch
+                            break
             
             if not selected_fsc:
-                # Try partial match
-                for ch in available_channels:
-                    if 'FSC' in ch.upper():
-                        selected_fsc = ch
-                        break
-        
-        if not selected_fsc:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"No FSC channel found. Available: {available_channels[:10]}"
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"No FSC/SSC channel found for sizing. Available: {available_channels[:10]}"
+                )
+            
+            fsc_values = parsed_data[selected_fsc].values
+            fsc_values = fsc_values[np.isfinite(fsc_values) & (fsc_values > 0)]
+            
+            if len(fsc_values) < 10:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Insufficient valid FSC data (n={len(fsc_values)}, need ≥10)"
+                )
+            
+            mie = MieScatterCalculator(
+                wavelength_nm=wavelength_nm,
+                n_particle=n_particle,
+                n_medium=n_medium
+            )
+            sizes_all, success_mask = mie.diameters_from_scatter_normalized(
+                fsc_intensities=fsc_values[:min(len(fsc_values), 50000)],
+                min_diameter=20.0,
+                max_diameter=500.0,
+                lut_resolution=500
+            )
+            valid = success_mask & np.isfinite(sizes_all) & (sizes_all > 0) & (sizes_all < 1000)
+            sizes_nm = sizes_all[valid]
+            sizing_method_used = 'heuristic_mie'
+            logger.info(
+                f"📊 Distribution analysis using heuristic Mie (fallback): "
+                f"{len(sizes_nm)} valid particles, D50={np.median(sizes_nm):.1f}nm"
             )
         
-        # Get FSC values and convert to particle sizes
-        import numpy as np
-        fsc_values = parsed_data[selected_fsc].values
-        fsc_values = fsc_values[np.isfinite(fsc_values) & (fsc_values > 0)]
-        
-        if len(fsc_values) < 10:
+        if sizes_nm is None or len(sizes_nm) < 10:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Insufficient valid FSC data (n={len(fsc_values)}, need ≥10)"
-            )
-        
-        # Initialize Mie calculator and convert to sizes
-        mie = MieScatterCalculator(
-            wavelength_nm=wavelength_nm,
-            n_particle=n_particle,
-            n_medium=n_medium
-        )
-        
-        # Use fast LUT-based batch conversion (not per-element optimization)
-        # diameters_from_scatter_normalized builds a lookup table once,
-        # then uses np.interp for all values — orders of magnitude faster
-        sizes_all, success_mask = mie.diameters_from_scatter_normalized(
-            fsc_intensities=fsc_values[:min(len(fsc_values), 50000)],
-            min_diameter=20.0,
-            max_diameter=500.0,
-            lut_resolution=500
-        )
-        
-        # Filter valid sizes
-        valid = success_mask & np.isfinite(sizes_all) & (sizes_all > 0) & (sizes_all < 1000)
-        sizes_nm = sizes_all[valid]
-        
-        if len(sizes_nm) < 10:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Insufficient valid size data after Mie conversion (n={len(sizes_nm)})"
+                detail=f"Insufficient valid size data after sizing (n={len(sizes_nm) if sizes_nm is not None else 0})"
             )
         
         logger.info(f"📊 Running distribution analysis for {sample_id} with {len(sizes_nm)} particles")
@@ -2201,11 +2472,12 @@ async def get_distribution_analysis(
         
         # Add metadata to response
         analysis['sample_id'] = sample_id
-        analysis['fsc_channel'] = selected_fsc
+        analysis['sizing_method'] = sizing_method_used
         analysis['mie_parameters'] = {
             'wavelength_nm': wavelength_nm,
             'n_particle': n_particle,
-            'n_medium': n_medium
+            'n_medium': n_medium,
+            'method': sizing_method_used,
         }
         
         logger.info(
@@ -2214,6 +2486,8 @@ async def get_distribution_analysis(
             f"recommended={analysis['conclusion']['recommended_distribution']}"
         )
         
+        # Cache for 2 minutes
+        distribution_cache.set(cache_key, analysis, 120)
         return analysis
         
     except HTTPException:
@@ -2382,8 +2656,8 @@ from pydantic import BaseModel, Field
 
 class ReanalyzeRequest(BaseModel):
     """Request body for re-analyzing a sample with custom settings."""
-    wavelength_nm: float = Field(default=488.0, ge=200, le=800, description="Laser wavelength in nm")
-    n_particle: float = Field(default=1.40, ge=1.0, le=2.0, description="Particle refractive index")
+    wavelength_nm: float = Field(default=405.0, ge=200, le=800, description="Laser wavelength in nm")
+    n_particle: float = Field(default=1.37, ge=1.0, le=2.0, description="Particle refractive index")
     n_medium: float = Field(default=1.33, ge=1.0, le=2.0, description="Medium refractive index")
     anomaly_detection: bool = Field(default=False, description="Enable anomaly detection")
     anomaly_method: str = Field(default="zscore", description="Anomaly method: zscore, iqr, both")
@@ -2497,15 +2771,67 @@ async def reanalyze_sample(
         
         # === BEAD-CALIBRATED PATH (highest priority, same as upload) ===
         active_calibration = None
+        fcmpass_calibration = None
         try:
-            from src.physics.bead_calibration import get_active_calibration
+            from src.physics.bead_calibration import get_active_calibration, get_fcmpass_calibration
             active_calibration = get_active_calibration()
+            fcmpass_calibration = get_fcmpass_calibration()
         except Exception:
             pass
         
-        if active_calibration and active_calibration.is_fitted:
+        if fcmpass_calibration and fcmpass_calibration.calibrated:
             try:
-                logger.info(f"🎯 Re-analyze using BEAD-CALIBRATED sizing")
+                # If user requested a different EV RI, update the LUT
+                if abs(fcmpass_calibration.n_ev - request.n_particle) > 1e-6:
+                    fcmpass_calibration.update_ev_ri(request.n_particle)
+                logger.info(
+                    f"🎯 Re-analyze using FCMPASS k-based sizing: "
+                    f"k={fcmpass_calibration.k_instrument:.1f}, RI_ev={fcmpass_calibration.n_ev}"
+                )
+                sizing_method = "fcmpass_k_based"
+                
+                cal_channel = ssc_channel
+                if multi_solution_info.get('vssc_channel') and multi_solution_info['vssc_channel'] in parsed_data.columns:
+                    cal_channel = multi_solution_info['vssc_channel']
+                
+                sample_size = min(10000, len(parsed_data))
+                np.random.seed(42)
+                sample_indices = np.random.choice(len(parsed_data), size=sample_size, replace=False)
+                scatter_sample = np.asarray(parsed_data[cal_channel].values[sample_indices], dtype=np.float64)
+                
+                pos_mask = scatter_sample > 0
+                if np.sum(pos_mask) > 0:
+                    cal_diameters, in_range = fcmpass_calibration.predict_batch(scatter_sample[pos_mask])
+                    valid_cal = cal_diameters[~np.isnan(cal_diameters) & (cal_diameters > 0)]
+                    
+                    if len(valid_cal) > 0:
+                        particle_size_median_nm = float(np.median(valid_cal))
+                        size_distribution = {
+                            'd10': float(np.percentile(valid_cal, 10)),
+                            'd50': float(np.percentile(valid_cal, 50)),
+                            'd90': float(np.percentile(valid_cal, 90)),
+                            'mean': float(np.mean(valid_cal)),
+                            'std': float(np.std(valid_cal))
+                        }
+                        
+                        scale_factor = len(parsed_data) / sample_size
+                        for range_def in request.size_ranges:
+                            name = range_def.get('name', f"{range_def['min']}-{range_def['max']}nm")
+                            min_size = range_def.get('min', 0)
+                            max_size = range_def.get('max', 1000)
+                            count = np.sum((valid_cal >= min_size) & (valid_cal < max_size))
+                            custom_bins[name] = {
+                                'count': int(count * scale_factor),
+                                'percentage': float(count / len(valid_cal) * 100) if len(valid_cal) > 0 else 0
+                            }
+                        logger.info(f"📐 FCMPASS: {len(valid_cal)} valid diameters, median={particle_size_median_nm:.1f}nm")
+            except Exception as fcmpass_err:
+                logger.warning(f"⚠️ FCMPASS calibration failed in reanalyze, falling back: {fcmpass_err}")
+                fcmpass_calibration = None  # Fall through to legacy bead cal
+        
+        if particle_size_median_nm is None and active_calibration and active_calibration.is_fitted:
+            try:
+                logger.info(f"🎯 Re-analyze using LEGACY bead-calibrated sizing")
                 sizing_method = "bead_calibrated"
                 
                 cal_channel = ssc_channel
@@ -2520,7 +2846,11 @@ async def reanalyze_sample(
                 
                 pos_mask = scatter_sample > 0
                 if np.sum(pos_mask) > 0:
-                    cal_diameters = active_calibration.diameter_from_fsc(scatter_sample[pos_mask])
+                    cal_diameters = active_calibration.diameter_from_fsc(
+                        scatter_sample[pos_mask],
+                        target_ri=request.n_particle,  # Phase 5: RI correction
+                        medium_ri=request.n_medium,
+                    )
                     valid_cal = cal_diameters[~np.isnan(cal_diameters) & (cal_diameters > 0)]
                     
                     if len(valid_cal) > 0:
@@ -2557,9 +2887,12 @@ async def reanalyze_sample(
             
             logger.info(f"🔬 Re-analyze using MULTI-SOLUTION Mie: VSSC={vssc_ch}, BSSC={bssc_ch}")
             
+            from src.physics.bead_calibration import get_fcmpass_k_factor
+            _k = get_fcmpass_k_factor()
             multi_mie_calc = MultiSolutionMieCalculator(
                 n_particle=request.n_particle, 
-                n_medium=request.n_medium
+                n_medium=request.n_medium,
+                k_violet=_k,
             )
             
             # Sample for performance
@@ -3163,8 +3496,8 @@ async def get_fcs_metadata(
 @router.get("/{sample_id}/fcs/values", response_model=dict)
 async def get_fcs_values(
     sample_id: str,
-    wavelength_nm: float = Query(488.0, description="Laser wavelength in nm"),
-    n_particle: float = Query(1.40, description="Particle refractive index"),
+    wavelength_nm: float = Query(405.0, description="Laser wavelength in nm"),
+    n_particle: float = Query(1.37, description="Particle refractive index"),
     n_medium: float = Query(1.33, description="Medium refractive index"),
     max_events: int = Query(50000, ge=1, le=500000, description="Maximum events to return"),
     include_raw_channels: bool = Query(False, description="Include raw FSC/SSC channel values"),
@@ -3176,8 +3509,8 @@ async def get_fcs_values(
     Returns particle diameter (nm) for each event calculated from FSC using Mie scattering.
     
     **Parameters:**
-    - wavelength_nm: Laser wavelength (default: 488nm)
-    - n_particle: Particle refractive index (default: 1.40 for EVs)
+    - wavelength_nm: Laser wavelength (default: 405nm)
+    - n_particle: Particle refractive index (default: 1.37 for EVs)
     - n_medium: Medium refractive index (default: 1.33 for PBS)
     - max_events: Maximum number of events to return (default: 50000)
     - include_raw_channels: If true, include raw FSC/SSC values
@@ -3256,7 +3589,9 @@ async def get_fcs_values(
             
             logger.info(f"🔬 FCS values using MULTI-SOLUTION Mie: VSSC={vssc_ch}, BSSC={bssc_ch}")
             
-            multi_mie_calc = MultiSolutionMieCalculator(n_particle=n_particle, n_medium=n_medium)
+            from src.physics.bead_calibration import get_fcmpass_k_factor
+            _k = get_fcmpass_k_factor()
+            multi_mie_calc = MultiSolutionMieCalculator(n_particle=n_particle, n_medium=n_medium, k_violet=_k)
             
             # Get SSC values for both wavelengths
             ssc_violet = np.asarray(sampled_data[vssc_ch].values, dtype=np.float64)
@@ -3373,21 +3708,28 @@ async def get_nta_metadata(
         result = await db.execute(select(Sample).where(Sample.sample_id == sample_id))
         sample = result.scalar_one_or_none()
         
-        if not sample:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Sample {sample_id} not found"
-            )
+        nta_file_path = None
         
-        if not sample.file_path_nta:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No NTA file associated with sample {sample_id}"
-            )
+        if sample and sample.file_path_nta:
+            nta_file_path = sample.file_path_nta
+        else:
+            # Fallback: search uploads directory for the NTA file
+            # This handles cases where the DB insert failed during upload
+            # but the file was saved to disk
+            found_path = _find_nta_file_by_sample_id(sample_id)
+            if found_path:
+                nta_file_path = found_path
+                logger.info(f"📂 Found NTA file on disk (not in DB): {found_path}")
+            else:
+                detail = f"Sample {sample_id} not found" if not sample else f"No NTA file associated with sample {sample_id}"
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=detail
+                )
         
         # Parse NTA file
         from src.parsers.nta_parser import NTAParser
-        parser = NTAParser(sample.file_path_nta)
+        parser = NTAParser(nta_file_path)
         parser.parse()
         
         # Get raw metadata
@@ -3395,12 +3737,14 @@ async def get_nta_metadata(
         
         # Add file-level info
         import os
-        file_stat = os.stat(sample.file_path_nta)
+        from pathlib import Path as PathLib
+        file_stat = os.stat(nta_file_path)
+        nta_path_obj = PathLib(nta_file_path)
         
         return {
             "sample_id": sample_id,
             "file_info": {
-                "file_name": sample.file_path_nta.name if hasattr(sample.file_path_nta, 'name') else str(sample.file_path_nta).split('/')[-1],
+                "file_name": nta_path_obj.name,
                 "file_size_bytes": file_stat.st_size,
                 "measurement_type": parser.measurement_type,
             },
@@ -3467,17 +3811,22 @@ async def get_nta_values(
         result = await db.execute(select(Sample).where(Sample.sample_id == sample_id))
         sample = result.scalar_one_or_none()
         
-        if not sample:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Sample {sample_id} not found"
-            )
+        nta_file_path = None
         
-        if not sample.file_path_nta:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No NTA file associated with sample {sample_id}"
-            )
+        if sample and sample.file_path_nta:
+            nta_file_path = sample.file_path_nta
+        else:
+            # Fallback: search uploads directory for the NTA file
+            found_path = _find_nta_file_by_sample_id(sample_id)
+            if found_path:
+                nta_file_path = found_path
+                logger.info(f"📂 Found NTA values file on disk (not in DB): {found_path}")
+            else:
+                detail = f"Sample {sample_id} not found" if not sample else f"No NTA file associated with sample {sample_id}"
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=detail
+                )
         
         logger.info(f"📊 Getting NTA values for {sample_id}")
         
@@ -3485,7 +3834,7 @@ async def get_nta_values(
         from src.parsers.nta_parser import NTAParser
         import numpy as np
         
-        parser = NTAParser(sample.file_path_nta)
+        parser = NTAParser(nta_file_path)
         parsed_data = parser.parse()
         
         # Extract size and concentration columns
@@ -3588,8 +3937,8 @@ async def get_nta_values(
 async def cross_validate_fcs_nta(
     fcs_sample_id: str,
     nta_sample_id: str,
-    wavelength_nm: float = Query(488.0, description="Laser wavelength in nm"),
-    n_particle: float = Query(1.40, description="Particle refractive index (EVs ≈ 1.40)"),
+    wavelength_nm: float = Query(405.0, description="Laser wavelength in nm"),
+    n_particle: float = Query(1.37, description="Particle refractive index (EVs ≈ 1.37)"),
     n_medium: float = Query(1.33, description="Medium refractive index (PBS ≈ 1.33)"),
     num_bins: int = Query(50, ge=10, le=200, description="Number of histogram bins"),
     size_min: float = Query(20.0, ge=0, description="Minimum size in nm for histogram"),
@@ -3654,7 +4003,9 @@ async def cross_validate_fcs_nta(
             ssc_violet = np.asarray(fcs_data[vssc_ch].values[sample_indices], dtype=np.float64)
             ssc_blue = np.asarray(fcs_data[bssc_ch].values[sample_indices], dtype=np.float64)
             
-            multi_calc = MultiSolutionMieCalculator(n_particle=n_particle, n_medium=n_medium)
+            from src.physics.bead_calibration import get_fcmpass_k_factor
+            _k = get_fcmpass_k_factor()
+            multi_calc = MultiSolutionMieCalculator(n_particle=n_particle, n_medium=n_medium, k_violet=_k)
             fcs_sizes, _ = multi_calc.calculate_sizes_multi_solution(ssc_blue, ssc_violet)
             mie_method = "multi-solution"
         else:
@@ -3683,14 +4034,21 @@ async def cross_validate_fcs_nta(
         nta_result = await db.execute(select(Sample).where(Sample.sample_id == nta_sample_id))
         nta_sample = nta_result.scalar_one_or_none()
         
-        if not nta_sample:
-            raise HTTPException(status_code=404, detail=f"NTA sample '{nta_sample_id}' not found")
-        if not nta_sample.file_path_nta:
-            raise HTTPException(status_code=404, detail=f"No NTA file for sample '{nta_sample_id}'")
+        nta_file_path = None
+        if nta_sample and nta_sample.file_path_nta:
+            nta_file_path = nta_sample.file_path_nta
+        else:
+            # Fallback: search uploads directory for the NTA file
+            found_path = _find_nta_file_by_sample_id(nta_sample_id)
+            if found_path:
+                nta_file_path = found_path
+                logger.info(f"📂 Cross-val: Found NTA file on disk (not in DB): {found_path}")
+            else:
+                raise HTTPException(status_code=404, detail=f"NTA sample '{nta_sample_id}' not found")
         
         from src.parsers.nta_parser import NTAParser
         
-        nta_parser = NTAParser(nta_sample.file_path_nta)
+        nta_parser = NTAParser(nta_file_path)
         nta_data = nta_parser.parse()
         
         # Find size and concentration columns

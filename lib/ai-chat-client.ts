@@ -2,9 +2,12 @@
 
 import type { UIMessage } from "ai"
 
+// DESKTOP MODE: Chat endpoint moved to FastAPI backend
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+
 export async function sendChatMessage(messages: UIMessage[]) {
   try {
-    const response = await fetch("/api/research/chat", {
+    const response = await fetch(`${API_BASE}/api/v1/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

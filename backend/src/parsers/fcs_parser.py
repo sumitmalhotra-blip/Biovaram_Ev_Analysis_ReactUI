@@ -7,12 +7,18 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional, Union
 import pandas as pd
 import numpy as np
+import numpy as _np
+
+# Prefer flowio over fcsparser because fcsparser uses ndarray.newbyteorder()
+# which was removed in NumPy 2.0.  flowio works with all NumPy versions.
 try:
-    import fcsparser
-    USE_FCSPARSER = True
-except ImportError:
     import flowio
     USE_FCSPARSER = False
+except ImportError:
+    # Fallback to fcsparser only if flowio is not available
+    # This will fail on NumPy >= 2.0 when reading big-endian data
+    import fcsparser
+    USE_FCSPARSER = True
 from loguru import logger
 import gc
 
@@ -342,11 +348,27 @@ class FCSParser(BaseParser):
             stain = self._get_metadata_value(f'$P{i+1}S', 'Unstained')
             range_val = self._get_metadata_value(f'$P{i+1}R', 'Unknown')
             
-            channels[name] = {
+            # Try to get detector voltage/gain ($PnV parameter, FCS 3.0+)
+            voltage = self._get_metadata_value(f'$P{i+1}V')
+            gain = self._get_metadata_value(f'$P{i+1}G')
+            
+            ch_info: Dict[str, Any] = {
                 'stain': stain if stain else 'Unstained',
                 'range': range_val if range_val else 'Unknown',
                 'index': i + 1
             }
+            if voltage is not None:
+                try:
+                    ch_info['voltage'] = float(voltage)
+                except (ValueError, TypeError):
+                    pass
+            if gain is not None:
+                try:
+                    ch_info['gain'] = float(gain)
+                except (ValueError, TypeError):
+                    pass
+            
+            channels[name] = ch_info
         
         extracted['channels'] = channels
         extracted['channel_count'] = len(channels)
@@ -361,6 +383,37 @@ class FCSParser(BaseParser):
                 pass
         
         return extracted
+    
+    def extract_channel_gains(self) -> Dict[str, Optional[float]]:
+        """
+        Extract detector voltage/gain for each channel from FCS metadata.
+        
+        FCS standard uses $PnV for voltage and $PnG for gain.
+        Returns channel_name → voltage/gain value (or None if not available).
+        """
+        if not self.metadata:
+            return {}
+        
+        gains: Dict[str, Optional[float]] = {}
+        for i, name in enumerate(self.channel_names):
+            voltage = self._get_metadata_value(f'$P{i+1}V')
+            gain = self._get_metadata_value(f'$P{i+1}G')
+            
+            val = None
+            if voltage is not None:
+                try:
+                    val = float(voltage)
+                except (ValueError, TypeError):
+                    pass
+            if val is None and gain is not None:
+                try:
+                    val = float(gain)
+                except (ValueError, TypeError):
+                    pass
+            
+            gains[name] = val
+        
+        return gains
     
     def _has_compensation_matrix(self) -> bool:
         """Check if compensation matrix is available in metadata."""

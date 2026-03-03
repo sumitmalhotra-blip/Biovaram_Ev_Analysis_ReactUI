@@ -4,6 +4,7 @@ import { useState, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { useAnalysisStore } from "@/lib/store"
+import { useShallow } from "zustand/shallow"
 import { Clock, FileUp, BarChart3, AlertTriangle, FlaskConical, Microscope, CheckCircle, Eye, Trash2 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import type { Sample } from "@/lib/api-client"
@@ -24,7 +25,12 @@ interface RecentActivityProps {
 }
 
 export function RecentActivity({ onViewSample, onDeleteSample }: RecentActivityProps) {
-  const { apiSamples, processingJobs, fcsAnalysis, ntaAnalysis } = useAnalysisStore()
+  const { apiSamples, processingJobs, fcsAnalysis, ntaAnalysis } = useAnalysisStore(useShallow((s) => ({
+    apiSamples: s.apiSamples,
+    processingJobs: s.processingJobs,
+    fcsAnalysis: s.fcsAnalysis,
+    ntaAnalysis: s.ntaAnalysis,
+  })))
 
   const activities = useMemo(() => {
     const items: Activity[] = []

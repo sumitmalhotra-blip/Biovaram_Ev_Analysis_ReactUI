@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, useEffect } from "react"
+import { useMemo, useState, useEffect, memo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -17,6 +17,7 @@ import {
   Legend,
 } from "recharts"
 import { useAnalysisStore } from "@/lib/store"
+import { useShallow } from "zustand/shallow"
 import { useApi } from "@/hooks/use-api"
 
 interface EventSizeDataPoint {
@@ -33,8 +34,11 @@ interface EventVsSizeChartProps {
   title?: string
 }
 
-export function EventVsSizeChart({ sampleId, onPin, title = "Event vs Size" }: EventVsSizeChartProps) {
-  const { fcsAnalysisSettings, fcsAnalysis } = useAnalysisStore()
+export const EventVsSizeChart = memo(function EventVsSizeChart({ sampleId, onPin, title = "Event vs Size" }: EventVsSizeChartProps) {
+  const { fcsAnalysisSettings, fcsAnalysis } = useAnalysisStore(useShallow((s) => ({
+    fcsAnalysisSettings: s.fcsAnalysisSettings,
+    fcsAnalysis: s.fcsAnalysis,
+  })))
   const { getFCSValues } = useApi()
 
   const [loading, setLoading] = useState(false)
@@ -61,11 +65,8 @@ export function EventVsSizeChart({ sampleId, onPin, title = "Event vs Size" }: E
   // Fetch data when sampleId or settings change
   useEffect(() => {
     if (!sampleId) {
-      console.log("[EventVsSizeChart] No sampleId provided, skipping data fetch")
       return
     }
-
-    console.log("[EventVsSizeChart] Fetching data for sampleId:", sampleId)
     let cancelled = false
     setLoading(true)
     setError(null)
@@ -80,8 +81,6 @@ export function EventVsSizeChart({ sampleId, onPin, title = "Event vs Size" }: E
       .then((result) => {
         if (cancelled) return
 
-        console.log("[EventVsSizeChart] Received data:", result)
-
         if (result && result.events) {
           // Transform data for chart
           const chartData: EventSizeDataPoint[] = result.events.map((event) => ({
@@ -92,7 +91,6 @@ export function EventVsSizeChart({ sampleId, onPin, title = "Event vs Size" }: E
             ssc: event.ssc,
           }))
 
-          console.log("[EventVsSizeChart] Processed", chartData.length, "events, valid sizes:", chartData.filter(d => d.size > 0).length)
           setData(chartData)
 
           // Set statistics
@@ -353,4 +351,4 @@ export function EventVsSizeChart({ sampleId, onPin, title = "Event vs Size" }: E
       </CardContent>
     </Card>
   )
-}
+})

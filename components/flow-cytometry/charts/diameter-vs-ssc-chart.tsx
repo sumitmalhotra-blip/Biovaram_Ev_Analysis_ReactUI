@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, memo } from "react"
 import {
   ComposedChart,
   Scatter,
@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button"
 import { Info, Eye, EyeOff, Layers } from "lucide-react"
 import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { CHART_COLORS, useAnalysisStore } from "@/lib/store"
+import { useShallow } from "zustand/shallow"
 
 export interface DiameterDataPoint {
   diameter: number
@@ -105,7 +106,7 @@ const EV_SIZE_REFERENCES = [
   { diameter: 200, label: "Large EVs", color: CHART_COLORS.anomaly },
 ]
 
-export function DiameterVsSSCChart({
+export const DiameterVsSSCChart = memo(function DiameterVsSSCChart({
   data,
   anomalousIndices = [],
   highlightAnomalies = true,
@@ -117,7 +118,11 @@ export function DiameterVsSSCChart({
   secondaryData,
   secondaryAnomalousIndices = [],
 }: DiameterVsSSCChartProps) {
-  const { overlayConfig, fcsAnalysis, secondaryFcsAnalysis } = useAnalysisStore()
+  const { overlayConfig, fcsAnalysis, secondaryFcsAnalysis } = useAnalysisStore(useShallow((s) => ({
+    overlayConfig: s.overlayConfig,
+    fcsAnalysis: s.fcsAnalysis,
+    secondaryFcsAnalysis: s.secondaryFcsAnalysis,
+  })))
   
   // Overlay visibility toggles
   const [showPrimary, setShowPrimary] = useState(true)
@@ -604,4 +609,4 @@ export function DiameterVsSSCChart({
       </div>
     </div>
   )
-}
+})

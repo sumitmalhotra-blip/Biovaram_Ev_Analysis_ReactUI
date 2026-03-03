@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useCallback, useRef, useEffect } from "react"
+import { useState, useMemo, useCallback, useRef, useEffect, memo } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -17,6 +17,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { CHART_COLORS, useAnalysisStore, type Gate, type RectangleGate } from "@/lib/store"
+import { useShallow } from "zustand/shallow"
 import {
   Dialog,
   DialogContent,
@@ -53,7 +54,7 @@ const PADDING = { top: 40, right: 40, bottom: 50, left: 60 }
 
 type InteractionMode = 'select' | 'pan' | 'none'
 
-export function InteractiveScatterChart({
+export const InteractiveScatterChart = memo(function InteractiveScatterChart({
   title,
   xLabel,
   yLabel,
@@ -69,7 +70,12 @@ export function InteractiveScatterChart({
     addGate,
     setSelectedIndices: setStoreSelectedIndices,
     clearAllGates
-  } = useAnalysisStore()
+  } = useAnalysisStore(useShallow((s) => ({
+    gatingState: s.gatingState,
+    addGate: s.addGate,
+    setSelectedIndices: s.setSelectedIndices,
+    clearAllGates: s.clearAllGates,
+  })))
   
   const svgRef = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -140,15 +146,23 @@ export function InteractiveScatterChart({
   const [dimensions, setDimensions] = useState({ width: 600, height: 400 })
   
   useEffect(() => {
+    let rafId: number | null = null
     const updateDimensions = () => {
-      if (containerRef.current) {
-        const rect = containerRef.current.getBoundingClientRect()
-        setDimensions({ width: rect.width, height })
-      }
+      if (rafId) return // throttle to one update per animation frame
+      rafId = requestAnimationFrame(() => {
+        if (containerRef.current) {
+          const rect = containerRef.current.getBoundingClientRect()
+          setDimensions({ width: rect.width, height })
+        }
+        rafId = null
+      })
     }
     updateDimensions()
     window.addEventListener('resize', updateDimensions)
-    return () => window.removeEventListener('resize', updateDimensions)
+    return () => {
+      window.removeEventListener('resize', updateDimensions)
+      if (rafId) cancelAnimationFrame(rafId)
+    }
   }, [height])
 
   // Chart area dimensions
@@ -282,7 +296,6 @@ export function InteractiveScatterChart({
           onSelectionChange(selectedArray, { x1, y1, x2, y2 })
         }
         
-        console.log(`[InteractiveScatter] Selected ${selected.size} points in region x=[${x1.toFixed(0)}, ${x2.toFixed(0)}], y=[${y1.toFixed(0)}, ${y2.toFixed(0)}]`)
       }
     }
     
@@ -848,4 +861,4 @@ export function InteractiveScatterChart({
       </Dialog>
     </Card>
   )
-}
+})

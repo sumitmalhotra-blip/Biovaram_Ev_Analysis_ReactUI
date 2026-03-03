@@ -1,0 +1,103 @@
+{
+  "method": "fcmpass_k_based",
+  "k_instrument": 5741.580140712289,
+  "k_std": 7509.613599424004,
+  "k_cv_pct": 130.79349961824926,
+  "wavelength_nm": 405.0,
+  "n_bead": 1.6336721690788016,
+  "n_ev": 1.37,
+  "n_medium": 1.33,
+  "bead_measurements": {
+    "40": 388.31272528339514,
+    "80": 2156867.6055649957,
+    "108": 5376349.58933879,
+    "142": 597291.5410716984,
+    "304": 2173225.2935015587
+  },
+  "bead_diameters": [
+    40,
+    80,
+    108,
+    142,
+    304
+  ],
+  "bead_fsc_measured": [
+    388.31272528339514,
+    2156867.6055649957,
+    5376349.58933879,
+    597291.5410716984,
+    2173225.2935015587
+  ],
+  "created_at": "2026-02-24T11:45:10.666446",
+  "bead_kit": "nanovis_d03231.json",
+  "self_validation": {
+    "validated": true,
+    "all_passed": false,
+    "n_beads": 5,
+    "n_passed": 1,
+    "n_failed": 4,
+    "max_error_pct": 67.27,
+    "per_bead": [
+      {
+        "expected_nm": 40,
+        "recovered_nm": 22.7,
+        "error_nm": -17.3,
+        "error_pct": 43.28,
+        "au_measured": 388.31272528339514,
+        "au_predicted": 11381.0,
+        "au_error_pct": 2830.88,
+        "cv_pct": 5.0,
+        "tolerance_nm": 4.0,
+        "passed": false
+      },
+      {
+        "expected_nm": 80,
+        "recovered_nm": 99.3,
+        "error_nm": 19.3,
+        "error_pct": 24.14,
+        "au_measured": 2156867.6055649957,
+        "au_predicted": 650475.4,
+        "au_error_pct": 69.84,
+        "cv_pct": 5.0,
+        "tolerance_nm": 8.0,
+        "passed": false
+      },
+      {
+        "expected_nm": 108,
+        "recovered_nm": 118.3,
+        "error_nm": 10.3,
+        "error_pct": 9.56,
+        "au_measured": 5376349.58933879,
+        "au_predicted": 3363226.8,
+        "au_error_pct": 37.44,
+        "cv_pct": 5.0,
+        "tolerance_nm": 10.8,
+        "passed": true
+      },
+      {
+        "expected_nm": 142,
+        "recovered_nm": 78.8,
+        "error_nm": -63.2,
+        "error_pct": 44.53,
+        "au_measured": 597291.5410716984,
+        "au_predicted": 13011943.9,
+        "au_error_pct": 2078.49,
+        "cv_pct": 5.0,
+        "tolerance_nm": 14.2,
+        "passed": false
+      },
+      {
+        "expected_nm": 304,
+        "recovered_nm": 99.5,
+        "error_nm": -204.5,
+        "error_pct": 67.27,
+        "au_measured": 2173225.2935015587,
+        "au_predicted": 389750400.9,
+        "au_error_pct": 17834.19,
+        "cv_pct": 5.0,
+        "tolerance_nm": 30.4,
+        "passed": false
+      }
+    ]
+  }
+}

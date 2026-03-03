@@ -153,10 +153,13 @@ def list_available_bead_standards(config_dir: Optional[str] = None) -> List[Dict
                 'product_name': data.get('product_name', ''),
                 'lot_number': data.get('lot_number', ''),
                 'manufacturer': data.get('manufacturer', ''),
+                'material': data.get('material', ''),
                 'refractive_index': data.get('refractive_index', 0),
                 'expiration_date': data.get('expiration_date', ''),
                 'n_bead_sizes': len(data.get('unique_bead_diameters_nm', [])),
                 'bead_sizes_nm': data.get('unique_bead_diameters_nm', []),
+                'is_custom': data.get('is_custom', False),
+                'nist_traceable': data.get('nist_traceable', False),
             })
         except Exception as e:
             logger.warning(f"Failed to read bead standard {json_file}: {e}")
@@ -666,12 +669,34 @@ class BeadCalibrationCurve:
             'n_standards': len(self.bead_standards)
         }
     
-    def diameter_from_fsc(self, fsc_values: np.ndarray) -> np.ndarray:
+    def diameter_from_fsc(
+        self,
+        fsc_values: np.ndarray,
+        target_ri: Optional[float] = None,
+        medium_ri: float = 1.33,
+    ) -> np.ndarray:
         """
         Convert FSC values to diameters using calibration.
         
+        .. deprecated::
+            This calibration is built from polystyrene beads (RI ≈ 1.59) or
+            whatever material was used in the standard.  Applying it to
+            particles with a different RI (e.g. EVs, RI ≈ 1.37–1.45) will
+            produce biased diameters.  For accurate sizing use FCMPASS
+            k-based calibration.
+        
+        Phase 5 fix (Feb 2026): If ``target_ri`` is supplied and differs from
+        the bead RI, a Mie-theory scaling correction is applied.  In the
+        Rayleigh regime σ_sca ∝ |m²−1|² d⁶, so to keep σ_sca constant when
+        RI changes: d_target = d_bead × (|m_bead²−1| / |m_target²−1|)^(1/3).
+        
         Args:
             fsc_values: Array of FSC intensity values
+            target_ri: Refractive index of the *sample* particles.  If provided
+                       and different from the bead RI, a correction factor is
+                       applied.  None = no correction (legacy behaviour).
+            medium_ri: Refractive index of the surrounding medium (default 1.33
+                       for PBS / water).
             
         Returns:
             Array of calculated diameters in nanometers
@@ -683,7 +708,45 @@ class BeadCalibrationCurve:
             raise RuntimeError("Inverse function not initialized. Call fit() first.")
         
         fsc_values = np.asarray(fsc_values)
-        return self.inverse_function(fsc_values)
+        diameters = self.inverse_function(fsc_values)
+        
+        # ── Phase 5: RI mismatch correction ──
+        if target_ri is not None:
+            # Determine the bead RI from the standards (use first standard's RI)
+            bead_ri = 1.591  # polystyrene default
+            for std in self.bead_standards.values():
+                bead_ri = std.refractive_index
+                break
+            
+            if abs(target_ri - bead_ri) > 0.01:
+                # Rayleigh correction: d_EV = d_PS × (|m_PS²-1| / |m_EV²-1|)^(1/3)
+                m_bead = bead_ri / medium_ri
+                m_target = target_ri / medium_ri
+                
+                contrast_bead = abs(m_bead ** 2 - 1.0)
+                contrast_target = abs(m_target ** 2 - 1.0)
+                
+                if contrast_target > 0:
+                    correction_factor = (contrast_bead / contrast_target) ** (1.0 / 3.0)
+                    logger.info(
+                        f"📐 RI correction: bead={bead_ri:.3f} → target={target_ri:.3f}, "
+                        f"factor={correction_factor:.3f} (Rayleigh approximation)"
+                    )
+                    diameters = diameters * correction_factor
+                else:
+                    logger.warning(
+                        f"⚠️ Cannot apply RI correction: target RI {target_ri} "
+                        f"gives zero contrast with medium RI {medium_ri}"
+                    )
+            else:
+                logger.debug(f"RI correction skipped: target_ri={target_ri} ≈ bead_ri={bead_ri}")
+        else:
+            logger.warning(
+                "⚠️ Legacy bead calibration applied without RI correction. "
+                "Bead RI ≠ EV RI → biased diameters. Use FCMPASS for accurate sizing."
+            )
+        
+        return diameters
     
     def calculate_sizes(
         self,
@@ -1142,3 +1205,584 @@ def get_calibration_status() -> Dict[str, Any]:
             'calibrated': False,
             'message': f'Failed to read calibration: {str(e)}',
         }
+
+
+# ============================================================================
+# FCMPASS Calibration Persistence (k-based method)
+# ============================================================================
+
+FCMPASS_CALIBRATION_FILE = "fcmpass_calibration.json"
+
+
+def save_fcmpass_calibration(calibrator, detector_gains: Optional[Dict[str, float]] = None, bead_kit_name: str = "") -> str:
+    """
+    Save an FCMPASSCalibrator as the active FCMPASS calibration.
+    
+    Args:
+        calibrator: Fitted FCMPASSCalibrator instance
+        detector_gains: Optional dict of channel_name → voltage/gain from bead FCS
+        bead_kit_name: Optional name of the bead standard used
+    
+    Returns:
+        Path to the saved calibration file
+    """
+    CALIBRATION_DIR.mkdir(parents=True, exist_ok=True)
+    save_path = CALIBRATION_DIR / FCMPASS_CALIBRATION_FILE
+    
+    # Archive existing if present
+    if save_path.exists():
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        archive_path = CALIBRATION_DIR / f"fcmpass_archived_{timestamp}.json"
+        save_path.rename(archive_path)
+        logger.info(f"📦 Archived previous FCMPASS calibration to {archive_path.name}")
+    
+    data = {
+        "method": "fcmpass_k_based",
+        "k_instrument": calibrator.k_instrument,
+        "k_std": calibrator.k_std,
+        "k_cv_pct": calibrator.k_cv_pct,
+        "wavelength_nm": calibrator.wavelength_nm,
+        "n_bead": calibrator.n_bead,
+        "n_ev": calibrator.n_ev,
+        "n_medium": calibrator.n_medium,
+        "bead_measurements": {
+            str(d): float(au)
+            for d, au in zip(calibrator.bead_diameters, calibrator.bead_fsc_measured)
+        },
+        "bead_diameters": calibrator.bead_diameters.tolist(),
+        "bead_fsc_measured": calibrator.bead_fsc_measured.tolist(),
+        "created_at": datetime.datetime.now().isoformat(),
+        "bead_kit": bead_kit_name,
+    }
+    
+    # Add detector gains for gain mismatch detection (Phase 4 - B3)
+    if detector_gains:
+        data["detector_gains"] = {k: v for k, v in detector_gains.items() if v is not None}
+    
+    # Add self-validation results if available (Phase 4 - C1)
+    if hasattr(calibrator, '_self_validation_results') and calibrator._self_validation_results:
+        data["self_validation"] = calibrator._self_validation_results
+    
+    with open(save_path, "w") as f:
+        json.dump(data, f, indent=2)
+    
+    logger.info(f"✅ FCMPASS calibration saved: k={calibrator.k_instrument:.1f}, CV={calibrator.k_cv_pct:.1f}%")
+    return str(save_path)
+
+
+def get_fcmpass_calibration():
+    """
+    Load the active FCMPASS calibration and return a fitted FCMPASSCalibrator.
+    
+    Returns:
+        FCMPASSCalibrator instance if calibration exists, None otherwise
+    """
+    cal_path = CALIBRATION_DIR / FCMPASS_CALIBRATION_FILE
+    if not cal_path.exists():
+        return None
+    
+    try:
+        with open(cal_path, "r") as f:
+            data = json.load(f)
+        
+        from src.physics.mie_scatter import FCMPASSCalibrator
+        
+        calibrator = FCMPASSCalibrator(
+            wavelength_nm=data["wavelength_nm"],
+            n_bead=data["n_bead"],
+            n_ev=data["n_ev"],
+            n_medium=data["n_medium"],
+        )
+        
+        # Reconstruct bead measurements and re-fit
+        bead_measurements = {
+            float(d): float(au) for d, au in zip(
+                data["bead_diameters"], data["bead_fsc_measured"]
+            )
+        }
+        calibrator.fit_from_beads(bead_measurements)
+        
+        logger.info(
+            f"✓ FCMPASS calibration loaded: k={calibrator.k_instrument:.1f}, "
+            f"CV={calibrator.k_cv_pct:.1f}%, n_ev={calibrator.n_ev}"
+        )
+        return calibrator
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to load FCMPASS calibration: {e}")
+        return None
+
+
+def get_fcmpass_k_factor() -> Optional[float]:
+    """
+    Quick read of the FCMPASS k instrument constant from the calibration JSON.
+    
+    Returns k if available, None otherwise.  This is much lighter than
+    ``get_fcmpass_calibration()`` because it does NOT re-fit the calibrator —
+    it just reads the pre-computed k value from disk.
+    """
+    cal_path = CALIBRATION_DIR / FCMPASS_CALIBRATION_FILE
+    if not cal_path.exists():
+        return None
+    try:
+        with open(cal_path, "r") as f:
+            data = json.load(f)
+        k = data.get("k_instrument")
+        if k and float(k) > 0:
+            return float(k)
+        return None
+    except Exception:
+        return None
+
+
+def get_fcmpass_calibration_status() -> Dict[str, Any]:
+    """Get status of the FCMPASS calibration for UI display."""
+    cal_path = CALIBRATION_DIR / FCMPASS_CALIBRATION_FILE
+    
+    if not cal_path.exists():
+        return {
+            "status": "not_calibrated",
+            "calibrated": False,
+            "method": None,
+        }
+    
+    try:
+        with open(cal_path, "r") as f:
+            data = json.load(f)
+        
+        diameters = data.get("bead_diameters", [])
+        d_min = min(diameters) if diameters else 0
+        d_max = max(diameters) if diameters else 0
+        
+        return {
+            "status": "calibrated",
+            "calibrated": True,
+            "method": "fcmpass_k_based",
+            "k_instrument": data.get("k_instrument"),
+            "k_std": data.get("k_std"),
+            "k_cv_pct": data.get("k_cv_pct"),
+            "wavelength_nm": data.get("wavelength_nm"),
+            "n_bead": data.get("n_bead"),
+            "n_ev": data.get("n_ev"),
+            "n_medium": data.get("n_medium"),
+            "n_bead_sizes": len(diameters),
+            "n_beads": len(diameters),
+            "calibration_range_nm": [d_min, d_max],
+            "created_at": data.get("created_at"),
+            "message": (
+                f"FCMPASS k-based: k={data.get('k_instrument', 0):.1f} "
+                f"(CV={data.get('k_cv_pct', 0):.1f}%), "
+                f"{len(diameters)} beads ({d_min:.0f}-{d_max:.0f}nm)"
+            ),
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "calibrated": False,
+            "message": f"Failed to read FCMPASS calibration: {str(e)}",
+        }
+
+
+# ============================================================================
+# FCMPASS Calibration Library (Multi-Calibration Management)
+# ============================================================================
+
+def _parse_fcmpass_json(filepath: Path) -> Optional[Dict[str, Any]]:
+    """Parse an FCMPASS calibration JSON file and return its metadata."""
+    try:
+        with open(filepath, "r") as f:
+            data = json.load(f)
+        
+        if data.get("method") != "fcmpass_k_based":
+            return None
+        
+        diameters = data.get("bead_diameters", [])
+        d_min = min(diameters) if diameters else 0
+        d_max = max(diameters) if diameters else 0
+        
+        return {
+            "id": filepath.stem,
+            "filename": filepath.name,
+            "k_instrument": data.get("k_instrument"),
+            "k_std": data.get("k_std"),
+            "k_cv_pct": data.get("k_cv_pct"),
+            "wavelength_nm": data.get("wavelength_nm"),
+            "n_bead": data.get("n_bead"),
+            "n_ev": data.get("n_ev"),
+            "n_medium": data.get("n_medium"),
+            "n_beads": len(diameters),
+            "bead_diameters": diameters,
+            "bead_range_nm": [d_min, d_max],
+            "created_at": data.get("created_at"),
+            "instrument_name": data.get("instrument_name", ""),
+            "bead_kit": data.get("bead_kit", ""),
+            "notes": data.get("notes", ""),
+        }
+    except Exception as e:
+        logger.warning(f"Failed to parse FCMPASS calibration {filepath.name}: {e}")
+        return None
+
+
+def list_fcmpass_calibrations() -> List[Dict[str, Any]]:
+    """
+    List all FCMPASS calibrations (active + archived).
+    
+    Returns a list of calibration metadata dicts, sorted by created_at descending.
+    Each dict includes an 'is_active' flag.
+    """
+    CALIBRATION_DIR.mkdir(parents=True, exist_ok=True)
+    calibrations = []
+    
+    # Active calibration
+    active_path = CALIBRATION_DIR / FCMPASS_CALIBRATION_FILE
+    if active_path.exists():
+        meta = _parse_fcmpass_json(active_path)
+        if meta:
+            meta["is_active"] = True
+            meta["status"] = "active"
+            calibrations.append(meta)
+    
+    # Archived calibrations (fcmpass_archived_*.json)
+    for filepath in sorted(CALIBRATION_DIR.glob("fcmpass_archived_*.json"), reverse=True):
+        meta = _parse_fcmpass_json(filepath)
+        if meta:
+            meta["is_active"] = False
+            meta["status"] = "archived"
+            calibrations.append(meta)
+    
+    # Sort by created_at descending (most recent first)
+    calibrations.sort(
+        key=lambda c: c.get("created_at", ""),
+        reverse=True,
+    )
+    
+    return calibrations
+
+
+def get_fcmpass_calibration_by_id(cal_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Get detailed data for a specific FCMPASS calibration by its ID.
+    
+    Args:
+        cal_id: The calibration ID (filename stem, e.g. 'fcmpass_calibration' or 'fcmpass_archived_20260217_111046')
+    
+    Returns:
+        Full calibration data dict, or None if not found
+    """
+    CALIBRATION_DIR.mkdir(parents=True, exist_ok=True)
+    
+    # Try exact filename match
+    for ext in [".json"]:
+        filepath = CALIBRATION_DIR / f"{cal_id}{ext}"
+        if filepath.exists():
+            try:
+                with open(filepath, "r") as f:
+                    data = json.load(f)
+                data["id"] = cal_id
+                data["filename"] = filepath.name
+                data["is_active"] = (filepath.name == FCMPASS_CALIBRATION_FILE)
+                return data
+            except Exception as e:
+                logger.error(f"Failed to read calibration {cal_id}: {e}")
+                return None
+    
+    return None
+
+
+def activate_fcmpass_calibration(cal_id: str) -> Dict[str, Any]:
+    """
+    Activate an archived FCMPASS calibration by swapping it with the current active one.
+    
+    Steps:
+    1. Archive the currently active calibration (if any)
+    2. Copy the selected archived calibration to the active slot
+    3. Return the activated calibration metadata
+    
+    Args:
+        cal_id: ID of the archived calibration to activate
+    
+    Returns:
+        Dict with success status and activated calibration info
+    """
+    CALIBRATION_DIR.mkdir(parents=True, exist_ok=True)
+    
+    source_path = CALIBRATION_DIR / f"{cal_id}.json"
+    if not source_path.exists():
+        raise FileNotFoundError(f"Calibration '{cal_id}' not found")
+    
+    active_path = CALIBRATION_DIR / FCMPASS_CALIBRATION_FILE
+    
+    if source_path.name == FCMPASS_CALIBRATION_FILE:
+        return {
+            "success": True,
+            "message": "Calibration is already active",
+            "id": cal_id,
+        }
+    
+    # Read the source calibration data
+    with open(source_path, "r") as f:
+        source_data = json.load(f)
+    
+    # Archive current active (if exists)
+    if active_path.exists():
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        archive_path = CALIBRATION_DIR / f"fcmpass_archived_{timestamp}.json"
+        active_path.rename(archive_path)
+        logger.info(f"📦 Archived current active calibration to {archive_path.name}")
+    
+    # Write the selected calibration as active
+    with open(active_path, "w") as f:
+        json.dump(source_data, f, indent=2)
+    
+    # Remove the old archived copy (it's now the active one)
+    if source_path.exists():
+        source_path.unlink()
+    
+    logger.info(f"✅ Activated FCMPASS calibration: {cal_id} (k={source_data.get('k_instrument', 0):.1f})")
+    
+    return {
+        "success": True,
+        "message": f"Calibration '{cal_id}' activated",
+        "id": "fcmpass_calibration",
+        "k_instrument": source_data.get("k_instrument"),
+        "k_cv_pct": source_data.get("k_cv_pct"),
+    }
+
+
+def delete_fcmpass_calibration_by_id(cal_id: str) -> Dict[str, Any]:
+    """
+    Permanently delete an archived FCMPASS calibration.
+    
+    The active calibration cannot be deleted — use the remove endpoint for that.
+    
+    Args:
+        cal_id: ID of the archived calibration to delete
+    
+    Returns:
+        Dict with success status
+    """
+    filepath = CALIBRATION_DIR / f"{cal_id}.json"
+    
+    if not filepath.exists():
+        raise FileNotFoundError(f"Calibration '{cal_id}' not found")
+    
+    if filepath.name == FCMPASS_CALIBRATION_FILE:
+        raise ValueError("Cannot delete the active calibration. Use 'Remove' instead.")
+    
+    filepath.unlink()
+    logger.info(f"🗑️ Deleted FCMPASS calibration: {cal_id}")
+    
+    return {
+        "success": True,
+        "message": f"Calibration '{cal_id}' permanently deleted",
+        "id": cal_id,
+    }
+
+
+# ============================================================================
+# Gain Mismatch Detection (Phase 4 - B3)
+# ============================================================================
+
+def check_gain_mismatch(
+    sample_gains: Dict[str, Optional[float]],
+    threshold_pct: float = 5.0,
+) -> Dict[str, Any]:
+    """
+    Compare detector gains/voltages between the active calibration and a sample FCS.
+    
+    If the active FCMPASS calibration was saved with detector gains, compare
+    against the sample's gains. A mismatch > threshold_pct means the calibration
+    may not be valid for this sample.
+    
+    Args:
+        sample_gains: Dict of channel_name → voltage from the sample FCS
+        threshold_pct: Mismatch threshold in percent (default: 5%)
+    
+    Returns:
+        Dict with 'has_mismatch', 'warnings', and per-channel details
+    """
+    cal_path = CALIBRATION_DIR / FCMPASS_CALIBRATION_FILE
+    if not cal_path.exists():
+        return {
+            "has_mismatch": False,
+            "checked": False,
+            "reason": "No active calibration",
+        }
+    
+    try:
+        with open(cal_path, "r") as f:
+            cal_data = json.load(f)
+    except Exception:
+        return {"has_mismatch": False, "checked": False, "reason": "Cannot read calibration"}
+    
+    cal_gains = cal_data.get("detector_gains", {})
+    if not cal_gains:
+        return {
+            "has_mismatch": False,
+            "checked": False,
+            "reason": "Calibration has no stored detector gains (run new calibration to enable this check)",
+        }
+    
+    mismatches = []
+    channel_details = []
+    
+    for channel, cal_voltage in cal_gains.items():
+        if cal_voltage is None or cal_voltage == 0:
+            continue
+        
+        # Try to find matching channel in sample gains  
+        sample_voltage = sample_gains.get(channel)
+        if sample_voltage is None or sample_voltage == 0:
+            continue
+        
+        pct_diff = 100 * abs(cal_voltage - sample_voltage) / cal_voltage
+        is_mismatch = pct_diff > threshold_pct
+        
+        detail = {
+            "channel": channel,
+            "calibration_voltage": cal_voltage,
+            "sample_voltage": sample_voltage,
+            "difference_pct": round(pct_diff, 1),
+            "mismatch": is_mismatch,
+        }
+        channel_details.append(detail)
+        
+        if is_mismatch:
+            mismatches.append(detail)
+            logger.warning(
+                f"⚠️ Gain mismatch on {channel}: "
+                f"cal={cal_voltage:.0f} vs sample={sample_voltage:.0f} "
+                f"({pct_diff:.1f}% difference)"
+            )
+    
+    has_mismatch = len(mismatches) > 0
+    warnings = []
+    if has_mismatch:
+        ch_names = ", ".join(m["channel"] for m in mismatches)
+        warnings.append(
+            f"Detector voltage mismatch detected on {ch_names}. "
+            f"Calibration may not be accurate for this sample. "
+            f"Consider recalibrating with matching instrument settings."
+        )
+    
+    return {
+        "has_mismatch": has_mismatch,
+        "checked": True,
+        "threshold_pct": threshold_pct,
+        "n_channels_checked": len(channel_details),
+        "n_mismatches": len(mismatches),
+        "warnings": warnings,
+        "channel_details": channel_details,
+    }
+
+
+# ============================================================================
+# Bead Kit Expiration Alerts (Phase 4 - C2)
+# ============================================================================
+
+def check_bead_kit_expiry(kit_filename: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Check if a bead standard kit has expired or is near expiry.
+    
+    If kit_filename is provided, check that specific kit.
+    Otherwise, return expiry info for all kits.
+    
+    Args:
+        kit_filename: Optional specific kit filename to check
+    
+    Returns:
+        Dict with expiry status, days_remaining, and warnings
+    """
+    import datetime as dt
+    
+    config_dir = Path(__file__).parent.parent.parent / "config" / "bead_standards"
+    if not config_dir.exists():
+        return {"checked": False, "reason": "No bead standards directory"}
+    
+    today = dt.date.today()
+    results = []
+    
+    files_to_check = []
+    if kit_filename:
+        kit_path = config_dir / kit_filename
+        if kit_path.exists():
+            files_to_check = [kit_path]
+        else:
+            return {"checked": False, "reason": f"Kit '{kit_filename}' not found"}
+    else:
+        files_to_check = list(config_dir.glob("*.json"))
+    
+    for json_file in sorted(files_to_check):
+        try:
+            with open(json_file, "r") as f:
+                data = json.load(f)
+            
+            exp_str = data.get("expiration_date")
+            product_name = data.get("product_name", json_file.stem)
+            
+            if not exp_str or exp_str in ("", "null", None):
+                results.append({
+                    "filename": json_file.name,
+                    "product_name": product_name,
+                    "expiration_date": None,
+                    "status": "no_expiry_set",
+                    "days_remaining": None,
+                    "warning": None,
+                })
+                continue
+            
+            try:
+                exp_date = dt.date.fromisoformat(str(exp_str))
+            except (ValueError, TypeError):
+                results.append({
+                    "filename": json_file.name,
+                    "product_name": product_name,
+                    "expiration_date": str(exp_str),
+                    "status": "invalid_date",
+                    "days_remaining": None,
+                    "warning": f"Invalid expiration date format: '{exp_str}'",
+                })
+                continue
+            
+            days_remaining = (exp_date - today).days
+            
+            if days_remaining < 0:
+                kit_status = "expired"
+                warning = (
+                    f"⚠️ {product_name} EXPIRED {abs(days_remaining)} days ago "
+                    f"(expired {exp_date.isoformat()}). "
+                    f"Calibration with expired beads may be unreliable."
+                )
+            elif days_remaining <= 30:
+                kit_status = "expiring_soon"
+                warning = (
+                    f"⏳ {product_name} expires in {days_remaining} days "
+                    f"({exp_date.isoformat()}). Plan to replace soon."
+                )
+            else:
+                kit_status = "valid"
+                warning = None
+            
+            results.append({
+                "filename": json_file.name,
+                "product_name": product_name,
+                "expiration_date": exp_date.isoformat(),
+                "status": kit_status,
+                "days_remaining": days_remaining,
+                "warning": warning,
+            })
+            
+        except Exception as e:
+            logger.warning(f"Failed to check expiry for {json_file.name}: {e}")
+    
+    # Aggregate warnings
+    all_warnings = [r["warning"] for r in results if r.get("warning")]
+    any_expired = any(r["status"] == "expired" for r in results)
+    any_expiring = any(r["status"] == "expiring_soon" for r in results)
+    
+    return {
+        "checked": True,
+        "kits": results,
+        "any_expired": any_expired,
+        "any_expiring_soon": any_expiring,
+        "warnings": all_warnings,
+    }

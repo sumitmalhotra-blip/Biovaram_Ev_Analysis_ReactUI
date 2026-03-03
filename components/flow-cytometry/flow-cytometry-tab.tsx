@@ -11,6 +11,7 @@ import { FCSBestPracticesGuide } from "./best-practices-guide"
 import { BeadCalibrationPanel } from "./bead-calibration-panel"
 import { ExperimentalConditionsDialog, type ExperimentalConditions, type FileMetadata } from "@/components/experimental-conditions-dialog"
 import { useAnalysisStore } from "@/lib/store"
+import { useShallow } from "zustand/shallow"
 import { useApi } from "@/hooks/use-api"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -20,7 +21,15 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useToast } from "@/hooks/use-toast"
 
 export function FlowCytometryTab() {
-  const { fcsAnalysis, secondaryFcsAnalysis, overlayConfig, apiConnected, setFCSExperimentalConditions, sidebarCollapsed, resetFCSAnalysis } = useAnalysisStore()
+  const { fcsAnalysis, secondaryFcsAnalysis, overlayConfig, apiConnected, setFCSExperimentalConditions, sidebarCollapsed, resetFCSAnalysis } = useAnalysisStore(useShallow((s) => ({
+    fcsAnalysis: s.fcsAnalysis,
+    secondaryFcsAnalysis: s.secondaryFcsAnalysis,
+    overlayConfig: s.overlayConfig,
+    apiConnected: s.apiConnected,
+    setFCSExperimentalConditions: s.setFCSExperimentalConditions,
+    sidebarCollapsed: s.sidebarCollapsed,
+    resetFCSAnalysis: s.resetFCSAnalysis,
+  })))
   const { checkHealth } = useApi()
   const { toast } = useToast()
   const [showConditionsDialog, setShowConditionsDialog] = useState(false)

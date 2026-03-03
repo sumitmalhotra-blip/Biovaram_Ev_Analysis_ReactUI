@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useCallback, useRef } from "react"
+import { useState, useMemo, useCallback, useRef, memo } from "react"
 import {
   ScatterChart,
   Scatter,
@@ -32,6 +32,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { CHART_COLORS, useAnalysisStore, type Gate, type RectangleGate } from "@/lib/store"
+import { useShallow } from "zustand/shallow"
 import {
   Dialog,
   DialogContent,
@@ -85,7 +86,7 @@ interface PixelSelectionBox {
 // Chart margins - MUST match ScatterChart margin prop exactly (defined outside component)
 const CHART_MARGINS = { top: 10, right: 20, bottom: 40, left: 50 }
 
-export function ScatterPlotChart({
+export const ScatterPlotChart = memo(function ScatterPlotChart({
   title,
   xLabel,
   yLabel,
@@ -108,7 +109,17 @@ export function ScatterPlotChart({
     removeGate,
     setSelectedIndices: setStoreSelectedIndices,
     clearAllGates
-  } = useAnalysisStore()
+  } = useAnalysisStore(useShallow((s) => ({
+    overlayConfig: s.overlayConfig,
+    fcsAnalysis: s.fcsAnalysis,
+    secondaryFcsAnalysis: s.secondaryFcsAnalysis,
+    gatingState: s.gatingState,
+    setGateActiveTool: s.setGateActiveTool,
+    addGate: s.addGate,
+    removeGate: s.removeGate,
+    setSelectedIndices: s.setSelectedIndices,
+    clearAllGates: s.clearAllGates,
+  })))
   const [selectedPoints, setSelectedPoints] = useState<Set<number>>(new Set())
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectionBox, setSelectionBox] = useState<SelectionBox | null>(null)
@@ -492,7 +503,6 @@ export function ScatterPlotChart({
               size="sm"
               variant={selectionMode ? "default" : "outline"}
               onClick={() => {
-                console.log('[ScatterPlot] Box Select clicked, toggling selectionMode from', selectionMode, 'to', !selectionMode)
                 setSelectionMode(!selectionMode)
               }}
               className={cn("h-8", selectionMode && "animate-pulse")}
@@ -678,25 +688,20 @@ export function ScatterPlotChart({
                 backgroundColor: 'rgba(59, 130, 246, 0.05)', // Slight blue tint to show it's active
               }}
               onMouseDown={(e) => {
-                console.log('[ScatterPlot] MouseDown on interaction layer')
                 e.preventDefault()
                 e.stopPropagation()
                 const rect = containerRef.current?.getBoundingClientRect()
                 if (!rect) {
-                  console.log('[ScatterPlot] No container rect!')
                   return
                 }
                 const pixelX = e.clientX - rect.left
                 const pixelY = e.clientY - rect.top
-                console.log('[ScatterPlot] Mouse position:', pixelX, pixelY)
                 
                 // Only start selection if inside chart area
                 if (!isInsideChartArea(pixelX, pixelY, rect)) {
-                  console.log('[ScatterPlot] Outside chart area')
                   return
                 }
                 
-                console.log('[ScatterPlot] Starting selection')
                 setIsSelecting(true)
                 setPixelSelection({ startX: pixelX, startY: pixelY, endX: pixelX, endY: pixelY })
               }}
@@ -758,8 +763,6 @@ export function ScatterPlotChart({
                   }
                 })
 
-                console.log(`[ScatterPlot] Selected ${newSelected.size} points in region: x=[${minX.toFixed(0)}, ${maxX.toFixed(0)}], y=[${minY.toFixed(0)}, ${maxY.toFixed(0)}]`)
-                
                 setSelectedPoints(newSelected)
                 
                 // Store selection box for potential gate saving
@@ -1003,3 +1006,4 @@ export function ScatterPlotChart({
     </Card>
   )
 }
+)

@@ -6,7 +6,8 @@ import { Progress } from "@/components/ui/progress"
 import { Sparkles } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAnalysisStore, type SizeRange } from "@/lib/store"
-import { useMemo } from "react"
+import { useShallow } from "zustand/shallow"
+import { useMemo, memo } from "react"
 import { type ScatterDataPoint } from "./charts/scatter-plot-with-selection"
 
 interface SizeCategoryData {
@@ -60,13 +61,15 @@ function getRangeDescription(min: number, max: number): string {
   return "Extracellular vesicles"
 }
 
-export function ParticleSizeVisualization({
+export const ParticleSizeVisualization = memo(function ParticleSizeVisualization({
   totalEvents,
   medianSize,
   scatterData,
   customBins,
 }: ParticleSizeVisualizationProps) {
-  const { fcsAnalysis } = useAnalysisStore()
+  const { fcsAnalysis } = useAnalysisStore(useShallow((s) => ({
+    fcsAnalysis: s.fcsAnalysis,
+  })))
   
   // Get custom size ranges from the store
   const sizeRanges = fcsAnalysis.sizeRanges
@@ -74,10 +77,6 @@ export function ParticleSizeVisualization({
   // Calculate bin counts from scatter data (which already has diameter values)
   const calculatedBins = useMemo(() => {
     if (!sizeRanges || sizeRanges.length === 0 || !scatterData || scatterData.length === 0) {
-      console.log('[ParticleSizeViz] Missing data:', { 
-        sizeRanges: sizeRanges?.length || 0, 
-        scatterData: scatterData?.length || 0 
-      })
       return {}
     }
     
@@ -86,15 +85,7 @@ export function ParticleSizeVisualization({
       .filter((p) => p.diameter !== undefined && p.diameter !== null && p.diameter > 0)
       .map((p) => p.diameter as number)
     
-    console.log('[ParticleSizeViz] Valid sizes from scatter data:', {
-      totalScatterPoints: scatterData.length,
-      validSizeCount: validSizes.length,
-      sampleDiameters: validSizes.slice(0, 10),
-      sizeRanges: sizeRanges.map(r => `${r.name}: ${r.min}-${r.max}`)
-    })
-    
     if (validSizes.length === 0) {
-      console.log('[ParticleSizeViz] No valid sizes found in scatter data')
       return {}
     }
     
@@ -115,8 +106,6 @@ export function ParticleSizeVisualization({
       bins[key] = Math.round(bins[key] * scaleFactor)
     })
     
-    console.log('[ParticleSizeViz] Calculated bins:', bins, 'scaleFactor:', scaleFactor)
-    
     return bins
   }, [sizeRanges, scatterData, totalEvents])
   
@@ -124,9 +113,11 @@ export function ParticleSizeVisualization({
   const categories: SizeCategoryData[] = useMemo(() => {
     // Default ranges if store doesn't have any
     const ranges = (sizeRanges && sizeRanges.length > 0) ? sizeRanges : [
-      { name: "Small EVs", min: 30, max: 100, color: "#22c55e" },
-      { name: "Medium EVs", min: 100, max: 200, color: "#3b82f6" },
-      { name: "Large EVs", min: 200, max: 500, color: "#a855f7" },
+      { name: "Exomeres (0-50nm)", min: 0, max: 50, color: "#22c55e" },
+      { name: "Small EVs (51-100nm)", min: 51, max: 100, color: "#3b82f6" },
+      { name: "Medium EVs (101-150nm)", min: 101, max: 150, color: "#a855f7" },
+      { name: "Large EVs (151-200nm)", min: 151, max: 200, color: "#f59e0b" },
+      { name: "Very Large EVs (200+nm)", min: 200, max: 1000, color: "#ef4444" },
     ]
     
     // Use calculated bins if available
@@ -313,4 +304,4 @@ export function ParticleSizeVisualization({
       </CardContent>
     </Card>
   )
-}
+})

@@ -1,9 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
-import { useSession, signOut } from "next-auth/react"
-import { useRouter } from "next/navigation"
-import { ChevronDown, HelpCircle, LogIn, LogOut, Settings, User, Sun, Moon, Menu, RefreshCw, Wifi, WifiOff } from "lucide-react"
+import { ChevronDown, HelpCircle, Settings, User, Sun, Moon, Menu, RefreshCw, Wifi, WifiOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -16,7 +14,7 @@ import {
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { useAnalysisStore } from "@/lib/store"
+import { useApiConnectionState, useUIState } from "@/lib/store"
 import { useApi } from "@/hooks/use-api"
 import { cn } from "@/lib/utils"
 import { Sidebar } from "./sidebar"
@@ -24,10 +22,12 @@ import { AlertPanel } from "./dashboard/alert-panel"
 import Image from "next/image"
 
 export function Header() {
-  const { apiConnected, apiChecking, isDarkMode, toggleDarkMode, lastHealthCheck } = useAnalysisStore()
+  const { apiConnected, apiChecking, lastHealthCheck } = useApiConnectionState()
+  const { isDarkMode, toggleDarkMode } = useUIState()
   const { checkHealth, startHealthCheck } = useApi()
-  const { data: session, status } = useSession()
-  const router = useRouter()
+
+  // DESKTOP MODE: Auto-authenticated, no NextAuth needed
+  const desktopUser = { name: "Lab User", email: "lab@biovaram.local", role: "researcher" }
 
   // Start health check on mount
   useEffect(() => {
@@ -42,11 +42,6 @@ export function Header() {
     if (diff < 60) return `${diff}s ago`
     if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
     return lastHealthCheck.toLocaleTimeString()
-  }
-
-  const handleSignOut = async () => {
-    await signOut({ redirect: false })
-    router.push("/login")
   }
 
   const getInitials = (name?: string | null) => {
@@ -148,70 +143,37 @@ export function Header() {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="flex items-center gap-1 md:gap-2 px-2 rounded-xl hover:bg-secondary/50">
-              {status === "authenticated" && session?.user ? (
-                <Avatar className="h-8 w-8 ring-2 ring-primary/20">
-                  <AvatarFallback className="bg-linear-to-br from-primary/30 to-accent/30 text-sm font-semibold">
-                    {getInitials(session.user.name)}
-                  </AvatarFallback>
-                </Avatar>
-              ) : (
-                <div className="w-8 h-8 rounded-lg bg-linear-to-br from-primary/30 to-accent/30 flex items-center justify-center ring-2 ring-primary/20">
-                  <User className="h-4 w-4 text-primary" />
-                </div>
-              )}
+              <Avatar className="h-8 w-8 ring-2 ring-primary/20">
+                <AvatarFallback className="bg-linear-to-br from-primary/30 to-accent/30 text-sm font-semibold">
+                  {getInitials(desktopUser.name)}
+                </AvatarFallback>
+              </Avatar>
               <ChevronDown className="h-4 w-4 text-muted-foreground hidden sm:block" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
-            {status === "authenticated" && session?.user ? (
-              <>
-                <DropdownMenuLabel className="font-normal">
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">{session.user.name}</p>
-                    <p className="text-xs leading-none text-muted-foreground">{session.user.email}</p>
-                    {session.user.role && (
-                      <p className="text-xs leading-none text-muted-foreground capitalize">
-                        {session.user.role.replace("_", " ")}
-                      </p>
-                    )}
-                  </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem>
-                  <User className="mr-2 h-4 w-4" />
-                  Profile
-                </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <Settings className="mr-2 h-4 w-4" />
-                  Settings
-                </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <HelpCircle className="mr-2 h-4 w-4" />
-                  Help
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-destructive" onClick={handleSignOut}>
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Sign Out
-                </DropdownMenuItem>
-              </>
-            ) : (
-              <>
-                <DropdownMenuItem onClick={() => router.push("/login")}>
-                  <LogIn className="mr-2 h-4 w-4" />
-                  Sign In
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => router.push("/signup")}>
-                  <User className="mr-2 h-4 w-4" />
-                  Create Account
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem>
-                  <HelpCircle className="mr-2 h-4 w-4" />
-                  Help
-                </DropdownMenuItem>
-              </>
-            )}
+            <DropdownMenuLabel className="font-normal">
+              <div className="flex flex-col space-y-1">
+                <p className="text-sm font-medium leading-none">{desktopUser.name}</p>
+                <p className="text-xs leading-none text-muted-foreground">{desktopUser.email}</p>
+                <p className="text-xs leading-none text-muted-foreground capitalize">
+                  {desktopUser.role}
+                </p>
+              </div>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem>
+              <User className="mr-2 h-4 w-4" />
+              Profile
+            </DropdownMenuItem>
+            <DropdownMenuItem>
+              <Settings className="mr-2 h-4 w-4" />
+              Settings
+            </DropdownMenuItem>
+            <DropdownMenuItem>
+              <HelpCircle className="mr-2 h-4 w-4" />
+              Help
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

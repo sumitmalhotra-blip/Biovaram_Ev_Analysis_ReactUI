@@ -3,12 +3,19 @@
 import { useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { useAnalysisStore } from "@/lib/store"
+import { useShallow } from "zustand/shallow"
 import { useApi } from "@/hooks/use-api"
 import { FileText, Calendar, Ruler, Wifi, FlaskConical, BarChart3 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export function QuickStats() {
-  const { samples, apiSamples, apiConnected, fcsAnalysis, ntaAnalysis } = useAnalysisStore()
+  const { samples, apiSamples, apiConnected, fcsAnalysis, ntaAnalysis } = useAnalysisStore(useShallow((s) => ({
+    samples: s.samples,
+    apiSamples: s.apiSamples,
+    apiConnected: s.apiConnected,
+    fcsAnalysis: s.fcsAnalysis,
+    ntaAnalysis: s.ntaAnalysis,
+  })))
   const { fetchSamples } = useApi()
 
   // Fetch samples on mount only if API is connected

@@ -302,10 +302,13 @@ export interface BeadStandard {
   product_name: string;
   lot_number: string;
   manufacturer: string;
+  material: string;
   refractive_index: number;
   expiration_date: string;
   n_bead_sizes: number;
   bead_sizes_nm: number[];
+  is_custom: boolean;
+  nist_traceable: boolean;
 }
 
 export interface CalibrationBeadPoint {
@@ -368,6 +371,314 @@ export interface CalibrationFitResult {
     fit: Record<string, unknown>;
     bead_points: CalibrationBeadPoint[];
   };
+}
+
+/**
+ * FCMPASS k-based calibration interfaces (validated method)
+ */
+export interface FCMPASSBeadPoint {
+  diameter_nm: number;
+  scatter_au: number;
+}
+
+export interface FCMPASSCalibrationRequest {
+  bead_points: FCMPASSBeadPoint[];
+  wavelength_nm?: number;  // default 405
+  n_bead?: number;         // default 1.591
+  n_ev?: number;           // default 1.37
+  n_medium?: number;       // default 1.33
+  use_wavelength_dispersion?: boolean; // default true
+  set_as_active?: boolean; // default true
+}
+
+// ─── Bead Datasheet Parse Types ──────────────────────────────────
+
+export interface ParsedBeadPopulation {
+  label: string;
+  diameter_nm: number;
+  diameter_um: number;
+  cv_pct: number;
+  subcomponent: string;
+  spec_min_um?: number;
+  spec_max_um?: number;
+  concentration_particles_per_ml?: number;
+}
+
+export interface BeadDatasheetParseResult {
+  success: boolean;
+  message: string;
+  kit_part_number: string;
+  product_name: string;
+  lot_number: string;
+  manufacturer: string;
+  manufacture_date: string;
+  expiration_date: string;
+  refractive_index: number;
+  nist_traceable: boolean;
+  subcomponents: Record<string, ParsedBeadPopulation[]>;
+  all_beads: ParsedBeadPopulation[];
+  n_beads_total: number;
+  n_subcomponents: number;
+  parse_warnings: string[];
+}
+
+export interface BeadFcsUploadResult {
+  success: boolean;
+  message: string;
+  files: Array<{
+    filename: string;
+    success: boolean;
+    sample_id?: string;
+    file_path?: string;
+    size_bytes?: number;
+    error?: string;
+  }>;
+  sample_ids: string[];
+}
+
+export interface AutoCalibrateResult {
+  success: boolean;
+  message: string;
+  k_instrument?: number;
+  k_cv_pct?: number;
+  n_beads?: number;
+  bead_points?: Array<{ diameter_nm: number; scatter_au: number }>;
+  per_file_results?: Array<{
+    sample_id: string;
+    success: boolean;
+    n_beads_matched?: number;
+    error?: string;
+  }>;
+  diagnostics?: Record<string, unknown>;
+}
+
+export interface FCMPASSPerBeadDiagnostic {
+  diameter_nm: number;
+  measured_au: number;
+  sigma_sca: number;
+  k: number;
+  predicted_au: number;
+  error_pct: number;
+}
+
+export interface FCMPASSDiagnostics {
+  k_instrument: number;
+  k_std: number;
+  k_cv_pct: number;
+  n_beads: number;
+  wavelength_nm: number;
+  n_bead: number;
+  n_bead_corrected: number;
+  n_ev: number;
+  n_medium: number;
+  use_wavelength_dispersion: boolean;
+  per_bead: FCMPASSPerBeadDiagnostic[];
+  lut_size_range_nm: [number, number];
+  lut_points: number;
+  self_validation?: SelfValidationResult;
+}
+
+export interface FCMPASSFitResult {
+  success: boolean;
+  message: string;
+  set_as_active: boolean;
+  saved_path: string | null;
+  diagnostics: FCMPASSDiagnostics;
+  self_validation?: SelfValidationResult;
+  bead_kit_expiry?: BeadKitExpiryResult;
+  warnings?: string[];
+}
+
+export interface FCMPASSStatus {
+  status: string;
+  calibrated: boolean;
+  method?: string;
+  k_instrument?: number;
+  k_cv_pct?: number;
+  n_beads?: number;
+  n_ev?: number;
+  n_bead?: number;
+  wavelength_nm?: number;
+  n_medium?: number;
+  use_wavelength_dispersion?: boolean;
+  created_at?: string;
+  message?: string;
+}
+
+/**
+ * FCMPASS Calibration Library interfaces (Phase 3)
+ */
+export interface FCMPASSCalibrationListItem {
+  id: string;
+  filename: string;
+  k_instrument: number;
+  k_std?: number;
+  k_cv_pct: number;
+  wavelength_nm: number;
+  n_bead?: number;
+  n_ev: number;
+  n_medium: number;
+  n_beads: number;
+  bead_diameters?: number[];
+  bead_range_nm: [number, number];
+  created_at: string;
+  instrument_name?: string;
+  bead_kit?: string;
+  notes?: string;
+  is_active: boolean;
+  status: 'active' | 'archived';
+}
+
+export interface FCMPASSCalibrationListResponse {
+  calibrations: FCMPASSCalibrationListItem[];
+  total: number;
+  active_count: number;
+  archived_count: number;
+}
+
+export interface FCMPASSCalibrationDetail {
+  id: string;
+  filename: string;
+  method: string;
+  k_instrument: number;
+  k_std: number;
+  k_cv_pct: number;
+  wavelength_nm: number;
+  n_bead: number;
+  n_ev: number;
+  n_medium: number;
+  bead_measurements: Array<{
+    diameter_nm: number;
+    cv_pct: number;
+    fsc_median: number;
+  }>;
+  bead_diameters: number[];
+  bead_fsc_measured: number[];
+  created_at: string;
+  is_active: boolean;
+  instrument_name?: string;
+  bead_kit?: string;
+  notes?: string;
+}
+
+export interface FCMPASSActivateResult {
+  success: boolean;
+  message: string;
+  id: string;
+  k_instrument?: number;
+  k_cv_pct?: number;
+}
+
+/**
+ * Phase 4: Safety & Validation interfaces
+ */
+
+// C1: Self-validation per-bead result
+export interface SelfValidationBeadResult {
+  expected_nm: number;
+  recovered_nm: number;
+  error_nm: number;
+  error_pct: number;
+  au_measured: number;
+  au_predicted: number;
+  au_error_pct: number;
+  cv_pct: number;
+  tolerance_nm: number;
+  passed: boolean;
+}
+
+export interface SelfValidationResult {
+  validated: boolean;
+  all_passed: boolean;
+  n_beads: number;
+  n_passed: number;
+  n_failed: number;
+  max_error_pct: number;
+  per_bead: SelfValidationBeadResult[];
+}
+
+// B3: Gain mismatch
+export interface GainChannelDetail {
+  channel: string;
+  calibration_voltage: number;
+  sample_voltage: number;
+  difference_pct: number;
+  mismatch: boolean;
+}
+
+export interface GainMismatchResult {
+  has_mismatch: boolean;
+  checked: boolean;
+  reason?: string;
+  threshold_pct?: number;
+  n_channels_checked?: number;
+  n_mismatches?: number;
+  warnings: string[];
+  channel_details?: GainChannelDetail[];
+}
+
+// C2: Bead kit expiry
+export interface BeadKitExpiryInfo {
+  filename: string;
+  product_name: string;
+  expiration_date: string | null;
+  status: 'valid' | 'expiring_soon' | 'expired' | 'no_expiry_set' | 'invalid_date';
+  days_remaining: number | null;
+  warning: string | null;
+}
+
+export interface BeadKitExpiryResult {
+  checked: boolean;
+  kits?: BeadKitExpiryInfo[];
+  any_expired?: boolean;
+  any_expiring_soon?: boolean;
+  warnings: string[];
+}
+
+// Extended FCMPASS fit result with Phase 4 safety data
+export interface FCMPASSFitResultExtended {
+  success: boolean;
+  message: string;
+  set_as_active: boolean;
+  saved_path?: string;
+  diagnostics: FCMPASSDiagnostics & {
+    self_validation?: SelfValidationResult;
+  };
+  self_validation?: SelfValidationResult;
+  bead_kit_expiry?: BeadKitExpiryResult;
+  warnings?: string[];
+}
+
+/**
+ * Custom bead kit interfaces
+ */
+export interface CustomBeadEntry {
+  label: string;
+  diameter_nm: number;
+  cv_pct: number;
+}
+
+export interface CustomBeadKitRequest {
+  product_name: string;
+  manufacturer?: string;
+  kit_part_number?: string;
+  lot_number?: string;
+  material?: string;  // default: 'polystyrene_latex'
+  refractive_index?: number; // default: 1.591
+  ri_measurement_wavelength_nm?: number; // default: 590
+  nist_traceable?: boolean;
+  beads: CustomBeadEntry[];
+  expiration_date?: string; // YYYY-MM-DD
+  notes?: string[];
+}
+
+export interface CustomBeadKitResponse {
+  success: boolean;
+  filename: string;
+  product_name: string;
+  n_bead_sizes: number;
+  bead_sizes_nm: number[];
+  message: string;
 }
 
 export interface ExperimentalConditions {
@@ -456,10 +767,101 @@ export class NetworkError extends Error {
   }
 }
 
+// =========================================================================
+// Request cache with TTL for deduplication and performance
+// =========================================================================
+interface CacheEntry<T = unknown> {
+  data: T;
+  timestamp: number;
+  ttl: number;
+}
+
+class RequestCache {
+  private cache = new Map<string, CacheEntry>();
+  private inflight = new Map<string, Promise<unknown>>();
+  private maxSize = 200;
+
+  /** Get cached data if still fresh */
+  get<T>(key: string): T | null {
+    const entry = this.cache.get(key);
+    if (!entry) return null;
+    if (Date.now() - entry.timestamp > entry.ttl) {
+      this.cache.delete(key);
+      return null;
+    }
+    return entry.data as T;
+  }
+
+  /** Store data in cache with TTL in ms */
+  set<T>(key: string, data: T, ttlMs: number): void {
+    // Evict oldest entries if at capacity
+    if (this.cache.size >= this.maxSize) {
+      const oldest = this.cache.keys().next().value;
+      if (oldest) this.cache.delete(oldest);
+    }
+    this.cache.set(key, { data, timestamp: Date.now(), ttl: ttlMs });
+  }
+
+  /** Deduplicate identical in-flight requests */
+  async dedup<T>(key: string, fetcher: () => Promise<T>, ttlMs: number): Promise<T> {
+    // Return cached data if available
+    const cached = this.get<T>(key);
+    if (cached !== null) return cached;
+
+    // Deduplicate in-flight requests
+    const existing = this.inflight.get(key);
+    if (existing) return existing as Promise<T>;
+
+    const promise = fetcher()
+      .then((data) => {
+        this.set(key, data, ttlMs);
+        return data;
+      })
+      .finally(() => {
+        this.inflight.delete(key);
+      });
+
+    this.inflight.set(key, promise);
+    return promise;
+  }
+
+  /** Invalidate cache entries matching a prefix */
+  invalidate(prefix: string): void {
+    for (const key of this.cache.keys()) {
+      if (key.startsWith(prefix)) {
+        this.cache.delete(key);
+      }
+    }
+  }
+
+  /** Clear all cache */
+  clear(): void {
+    this.cache.clear();
+    this.inflight.clear();
+  }
+}
+
+// Cache TTL constants (in milliseconds)
+const CACHE_TTL = {
+  SAMPLES_LIST:   10_000,   // 10s — list changes on upload/delete
+  SAMPLE_DETAIL:  30_000,   // 30s — individual sample metadata rarely changes
+  FCS_RESULTS:    60_000,   // 60s — analysis results are stable after upload
+  NTA_RESULTS:    60_000,
+  SCATTER_DATA:  120_000,   // 2min — scatter data for same params is stable
+  DISTRIBUTION:  120_000,   // 2min — distribution analysis is expensive
+  SIZE_BINS:     120_000,   // 2min — size bins
+  ANOMALY:       120_000,   // 2min — anomaly detection
+  CALIBRATION:    30_000,   // 30s — calibration status
+  CHANNEL_CONFIG: 60_000,   // 60s
+  ALERTS:         15_000,   // 15s — alerts can change
+  HEALTH:          5_000,   // 5s
+} as const;
+
 class ApiClient {
   private baseUrl: string;
   private isOffline: boolean = false;
   private authToken: string | null = null;
+  private cache = new RequestCache();
 
   constructor() {
     // Build base URL, ensuring no double /api/v1 prefix
@@ -471,6 +873,17 @@ class ApiClient {
     }
     this.baseUrl = `${base}${API_PREFIX}`;
     console.log("[API Client] Base URL:", this.baseUrl);
+  }
+
+  /** Invalidate all cached data for a sample (after upload/delete/reanalyze) */
+  invalidateSample(sampleId: string): void {
+    this.cache.invalidate(`sample:${sampleId}`);
+    this.cache.invalidate("samples:list");
+  }
+
+  /** Invalidate all cached data (after calibration change etc.) */
+  invalidateAll(): void {
+    this.cache.clear();
   }
 
   // Set JWT auth token (called after login)
@@ -587,6 +1000,8 @@ class ApiClient {
       });
 
       this.isOffline = false;
+      // Invalidate sample list cache after upload
+      this.cache.invalidate("samples:list");
       return this.handleResponse<UploadResponse>(response);
     } catch (error) {
       this.handleNetworkError(error);
@@ -714,69 +1129,81 @@ class ApiClient {
     processing_status?: string;
     user_id?: number;
   }): Promise<{ samples: Sample[]; total: number; skip: number; limit: number }> {
-    try {
-      const searchParams = new URLSearchParams();
-      if (params?.skip) searchParams.append("skip", params.skip.toString());
-      if (params?.limit) searchParams.append("limit", params.limit.toString());
-      if (params?.treatment) searchParams.append("treatment", params.treatment);
-      if (params?.qc_status) searchParams.append("qc_status", params.qc_status);
-      if (params?.processing_status)
-        searchParams.append("processing_status", params.processing_status);
-      if (params?.user_id) searchParams.append("user_id", params.user_id.toString());
+    const cacheKey = `samples:list:${JSON.stringify(params || {})}`;
+    return this.cache.dedup(cacheKey, async () => {
+      try {
+        const searchParams = new URLSearchParams();
+        if (params?.skip) searchParams.append("skip", params.skip.toString());
+        if (params?.limit) searchParams.append("limit", params.limit.toString());
+        if (params?.treatment) searchParams.append("treatment", params.treatment);
+        if (params?.qc_status) searchParams.append("qc_status", params.qc_status);
+        if (params?.processing_status)
+          searchParams.append("processing_status", params.processing_status);
+        if (params?.user_id) searchParams.append("user_id", params.user_id.toString());
 
-      const url = `${this.baseUrl}/samples${searchParams.toString() ? `?${searchParams}` : ""}`;
-      const response = await fetch(url, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      });
+        const url = `${this.baseUrl}/samples${searchParams.toString() ? `?${searchParams}` : ""}`;
+        const response = await fetch(url, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        });
 
-      this.isOffline = false;
-      return this.handleResponse(response);
-    } catch (error) {
-      this.handleNetworkError(error);
-    }
+        this.isOffline = false;
+        return this.handleResponse(response);
+      } catch (error) {
+        this.handleNetworkError(error);
+      }
+    }, CACHE_TTL.SAMPLES_LIST);
   }
 
   async getSample(sampleId: string): Promise<Sample> {
-    try {
-      const response = await fetch(`${this.baseUrl}/samples/${sampleId}`, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      });
+    const cacheKey = `sample:${sampleId}:detail`;
+    return this.cache.dedup(cacheKey, async () => {
+      try {
+        const response = await fetch(`${this.baseUrl}/samples/${sampleId}`, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        });
 
-      this.isOffline = false;
-      return this.handleResponse<Sample>(response);
-    } catch (error) {
-      this.handleNetworkError(error);
-    }
+        this.isOffline = false;
+        return this.handleResponse<Sample>(response);
+      } catch (error) {
+        this.handleNetworkError(error);
+      }
+    }, CACHE_TTL.SAMPLE_DETAIL);
   }
 
   async getFCSResults(sampleId: string): Promise<{ sample_id: string; results: FCSResult[] }> {
-    try {
-      const response = await fetch(`${this.baseUrl}/samples/${sampleId}/fcs`, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      });
+    const cacheKey = `sample:${sampleId}:fcs`;
+    return this.cache.dedup(cacheKey, async () => {
+      try {
+        const response = await fetch(`${this.baseUrl}/samples/${sampleId}/fcs`, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        });
 
-      this.isOffline = false;
-      return this.handleResponse(response);
-    } catch (error) {
-      this.handleNetworkError(error);
-    }
+        this.isOffline = false;
+        return this.handleResponse(response);
+      } catch (error) {
+        this.handleNetworkError(error);
+      }
+    }, CACHE_TTL.FCS_RESULTS);
   }
 
   async getNTAResults(sampleId: string): Promise<{ sample_id: string; results: NTAResult[] }> {
-    try {
-      const response = await fetch(`${this.baseUrl}/samples/${sampleId}/nta`, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      });
+    const cacheKey = `sample:${sampleId}:nta`;
+    return this.cache.dedup(cacheKey, async () => {
+      try {
+        const response = await fetch(`${this.baseUrl}/samples/${sampleId}/nta`, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        });
 
-      this.isOffline = false;
-      return this.handleResponse(response);
-    } catch (error) {
-      this.handleNetworkError(error);
-    }
+        this.isOffline = false;
+        return this.handleResponse(response);
+      } catch (error) {
+        this.handleNetworkError(error);
+      }
+    }, CACHE_TTL.NTA_RESULTS);
   }
 
   async deleteSample(sampleId: string): Promise<{
@@ -795,7 +1222,14 @@ class ApiClient {
         headers: { "Content-Type": "application/json" },
       });
 
-      return this.handleResponse(response);
+      const result = await this.handleResponse<{
+        success: boolean;
+        message: string;
+        deleted_records: { fcs_results: number; nta_results: number; qc_reports: number; processing_jobs: number };
+      }>(response);
+      // Invalidate cache for deleted sample and sample list
+      this.invalidateSample(sampleId);
+      return result;
     } catch (error) {
       console.error("[API] Delete sample failed:", error);
       throw error;
@@ -1228,20 +1662,23 @@ class ApiClient {
     data: Array<{ x: number; y: number; index: number }>;
     channels: { fsc: string; ssc: string };
   }> {
-    try {
-      const response = await fetch(
-        `${this.baseUrl}/samples/${sampleId}/scatter-data?max_points=${maxPoints}`,
-        {
-          method: "GET",
-          headers: { "Content-Type": "application/json" },
-        }
-      );
+    const cacheKey = `sample:${sampleId}:scatter:${maxPoints}`;
+    return this.cache.dedup(cacheKey, async () => {
+      try {
+        const response = await fetch(
+          `${this.baseUrl}/samples/${sampleId}/scatter-data?max_points=${maxPoints}`,
+          {
+            method: "GET",
+            headers: { "Content-Type": "application/json" },
+          }
+        );
 
-      return this.handleResponse(response);
-    } catch (error) {
-      console.error("[API] Get scatter data failed:", error);
-      this.handleNetworkError(error);
-    }
+        return this.handleResponse(response);
+      } catch (error) {
+        console.error("[API] Get scatter data failed:", error);
+        this.handleNetworkError(error);
+      }
+    }, CACHE_TTL.SCATTER_DATA);
   }
 
   /**
@@ -1273,29 +1710,32 @@ class ApiClient {
     channels: { fsc: string; ssc: string };
     individual_points: Array<{ x: number; y: number; index: number; diameter?: number }> | null;
   }> {
-    try {
-      const params = new URLSearchParams();
-      if (options?.zoom_level != null) params.set("zoom_level", String(options.zoom_level));
-      if (options?.fsc_channel) params.set("fsc_channel", options.fsc_channel);
-      if (options?.ssc_channel) params.set("ssc_channel", options.ssc_channel);
-      if (options?.viewport_x_min != null) params.set("viewport_x_min", String(options.viewport_x_min));
-      if (options?.viewport_x_max != null) params.set("viewport_x_max", String(options.viewport_x_max));
-      if (options?.viewport_y_min != null) params.set("viewport_y_min", String(options.viewport_y_min));
-      if (options?.viewport_y_max != null) params.set("viewport_y_max", String(options.viewport_y_max));
+    const cacheKey = `sample:${sampleId}:clustered:${JSON.stringify(options || {})}`;
+    return this.cache.dedup(cacheKey, async () => {
+      try {
+        const params = new URLSearchParams();
+        if (options?.zoom_level != null) params.set("zoom_level", String(options.zoom_level));
+        if (options?.fsc_channel) params.set("fsc_channel", options.fsc_channel);
+        if (options?.ssc_channel) params.set("ssc_channel", options.ssc_channel);
+        if (options?.viewport_x_min != null) params.set("viewport_x_min", String(options.viewport_x_min));
+        if (options?.viewport_x_max != null) params.set("viewport_x_max", String(options.viewport_x_max));
+        if (options?.viewport_y_min != null) params.set("viewport_y_min", String(options.viewport_y_min));
+        if (options?.viewport_y_max != null) params.set("viewport_y_max", String(options.viewport_y_max));
 
-      const response = await fetch(
-        `${this.baseUrl}/samples/${sampleId}/clustered-scatter?${params.toString()}`,
-        {
-          method: "GET",
-          headers: { "Content-Type": "application/json" },
-        }
-      );
+        const response = await fetch(
+          `${this.baseUrl}/samples/${sampleId}/clustered-scatter?${params.toString()}`,
+          {
+            method: "GET",
+            headers: { "Content-Type": "application/json" },
+          }
+        );
 
-      return this.handleResponse(response);
-    } catch (error) {
-      console.error("[API] Get clustered scatter failed:", error);
-      this.handleNetworkError(error);
-    }
+        return this.handleResponse(response);
+      } catch (error) {
+        console.error("[API] Get clustered scatter failed:", error);
+        this.handleNetworkError(error);
+      }
+    }, CACHE_TTL.SCATTER_DATA);
   }
 
   // =========================================================================
@@ -1315,26 +1755,29 @@ class ApiClient {
       include_overlays?: boolean;
     }
   ): Promise<DistributionAnalysisResponse> {
-    try {
-      const params = new URLSearchParams();
-      if (options?.wavelength_nm) params.append("wavelength_nm", options.wavelength_nm.toString());
-      if (options?.n_particle) params.append("n_particle", options.n_particle.toString());
-      if (options?.n_medium) params.append("n_medium", options.n_medium.toString());
-      if (options?.include_overlays !== undefined) params.append("include_overlays", options.include_overlays.toString());
+    const cacheKey = `sample:${sampleId}:distribution:${JSON.stringify(options || {})}`;
+    return this.cache.dedup(cacheKey, async () => {
+      try {
+        const params = new URLSearchParams();
+        if (options?.wavelength_nm) params.append("wavelength_nm", options.wavelength_nm.toString());
+        if (options?.n_particle) params.append("n_particle", options.n_particle.toString());
+        if (options?.n_medium) params.append("n_medium", options.n_medium.toString());
+        if (options?.include_overlays !== undefined) params.append("include_overlays", options.include_overlays.toString());
 
-      const queryString = params.toString();
-      const url = `${this.baseUrl}/samples/${sampleId}/distribution-analysis${queryString ? `?${queryString}` : ""}`;
+        const queryString = params.toString();
+        const url = `${this.baseUrl}/samples/${sampleId}/distribution-analysis${queryString ? `?${queryString}` : ""}`;
 
-      const response = await fetch(url, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      });
+        const response = await fetch(url, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        });
 
-      return this.handleResponse(response);
-    } catch (error) {
-      console.error("[API] Get distribution analysis failed:", error);
-      this.handleNetworkError(error);
-    }
+        return this.handleResponse(response);
+      } catch (error) {
+        console.error("[API] Get distribution analysis failed:", error);
+        this.handleNetworkError(error);
+      }
+    }, CACHE_TTL.DISTRIBUTION);
   }
 
   // =========================================================================
@@ -1415,38 +1858,43 @@ class ApiClient {
     returned_points: number;
     data: Array<{ x: number; y: number; index: number; diameter?: number }>;
     channels: { fsc: string; ssc: string; available: string[] };
+    warnings?: string[];
+    gain_mismatch?: GainMismatchResult;
   }> {
-    try {
-      const params = new URLSearchParams({
-        max_points: maxPoints.toString(),
-        fsc_channel: xChannel,
-        ssc_channel: yChannel,
-      });
-      
-      // Add Mie parameters if provided
-      if (mieParams?.wavelength_nm) {
-        params.append("wavelength_nm", mieParams.wavelength_nm.toString());
-      }
-      if (mieParams?.n_particle) {
-        params.append("n_particle", mieParams.n_particle.toString());
-      }
-      if (mieParams?.n_medium) {
-        params.append("n_medium", mieParams.n_medium.toString());
-      }
-
-      const response = await fetch(
-        `${this.baseUrl}/samples/${sampleId}/scatter-data?${params.toString()}`,
-        {
-          method: "GET",
-          headers: { "Content-Type": "application/json" },
+    const cacheKey = `sample:${sampleId}:scatter-axes:${xChannel}:${yChannel}:${maxPoints}:${JSON.stringify(mieParams || {})}`;
+    return this.cache.dedup(cacheKey, async () => {
+      try {
+        const params = new URLSearchParams({
+          max_points: maxPoints.toString(),
+          fsc_channel: xChannel,
+          ssc_channel: yChannel,
+        });
+        
+        // Add Mie parameters if provided
+        if (mieParams?.wavelength_nm) {
+          params.append("wavelength_nm", mieParams.wavelength_nm.toString());
         }
-      );
+        if (mieParams?.n_particle) {
+          params.append("n_particle", mieParams.n_particle.toString());
+        }
+        if (mieParams?.n_medium) {
+          params.append("n_medium", mieParams.n_medium.toString());
+        }
 
-      return this.handleResponse(response);
-    } catch (error) {
-      console.error("[API] Get scatter data with axes failed:", error);
-      this.handleNetworkError(error);
-    }
+        const response = await fetch(
+          `${this.baseUrl}/samples/${sampleId}/scatter-data?${params.toString()}`,
+          {
+            method: "GET",
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+
+        return this.handleResponse(response);
+      } catch (error) {
+        console.error("[API] Get scatter data with axes failed:", error);
+        this.handleNetworkError(error);
+      }
+    }, CACHE_TTL.SCATTER_DATA);
   }
 
   /**
@@ -1593,35 +2041,38 @@ class ApiClient {
       large_min: number;
     };
   }> {
-    try {
-      const params = new URLSearchParams();
-      
-      // Add Mie parameters if provided
-      if (mieParams?.wavelength_nm) {
-        params.append("wavelength_nm", mieParams.wavelength_nm.toString());
-      }
-      if (mieParams?.n_particle) {
-        params.append("n_particle", mieParams.n_particle.toString());
-      }
-      if (mieParams?.n_medium) {
-        params.append("n_medium", mieParams.n_medium.toString());
-      }
-      
-      const queryString = params.toString();
-      const url = queryString 
-        ? `${this.baseUrl}/samples/${sampleId}/size-bins?${queryString}`
-        : `${this.baseUrl}/samples/${sampleId}/size-bins`;
-      
-      const response = await fetch(url, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      });
+    const cacheKey = `sample:${sampleId}:sizebins:${JSON.stringify(mieParams || {})}`;
+    return this.cache.dedup(cacheKey, async () => {
+      try {
+        const params = new URLSearchParams();
+        
+        // Add Mie parameters if provided
+        if (mieParams?.wavelength_nm) {
+          params.append("wavelength_nm", mieParams.wavelength_nm.toString());
+        }
+        if (mieParams?.n_particle) {
+          params.append("n_particle", mieParams.n_particle.toString());
+        }
+        if (mieParams?.n_medium) {
+          params.append("n_medium", mieParams.n_medium.toString());
+        }
+        
+        const queryString = params.toString();
+        const url = queryString 
+          ? `${this.baseUrl}/samples/${sampleId}/size-bins?${queryString}`
+          : `${this.baseUrl}/samples/${sampleId}/size-bins`;
+        
+        const response = await fetch(url, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        });
 
-      return this.handleResponse(response);
-    } catch (error) {
-      console.error("[API] Get size bins failed:", error);
-      this.handleNetworkError(error);
-    }
+        return this.handleResponse(response);
+      } catch (error) {
+        console.error("[API] Get size bins failed:", error);
+        this.handleNetworkError(error);
+      }
+    }, CACHE_TTL.SIZE_BINS);
   }
 
   /**
@@ -1646,25 +2097,28 @@ class ApiClient {
       iqr_factor: number;
     };
   }> {
-    try {
-      const params = new URLSearchParams();
-      if (options?.method) params.append("method", options.method);
-      if (options?.zscore_threshold) params.append("zscore_threshold", options.zscore_threshold.toString());
-      if (options?.iqr_factor) params.append("iqr_factor", options.iqr_factor.toString());
+    const cacheKey = `sample:${sampleId}:anomaly:${JSON.stringify(options || {})}`;
+    return this.cache.dedup(cacheKey, async () => {
+      try {
+        const params = new URLSearchParams();
+        if (options?.method) params.append("method", options.method);
+        if (options?.zscore_threshold) params.append("zscore_threshold", options.zscore_threshold.toString());
+        if (options?.iqr_factor) params.append("iqr_factor", options.iqr_factor.toString());
 
-      const queryString = params.toString();
-      const url = `${this.baseUrl}/samples/${sampleId}/anomaly-detection${queryString ? `?${queryString}` : ""}`;
-      
-      const response = await fetch(url, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      });
+        const queryString = params.toString();
+        const url = `${this.baseUrl}/samples/${sampleId}/anomaly-detection${queryString ? `?${queryString}` : ""}`;
+        
+        const response = await fetch(url, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        });
 
-      return this.handleResponse(response);
-    } catch (error) {
-      console.error("[API] Anomaly detection failed:", error);
-      this.handleNetworkError(error);
-    }
+        return this.handleResponse(response);
+      } catch (error) {
+        console.error("[API] Anomaly detection failed:", error);
+        this.handleNetworkError(error);
+      }
+    }, CACHE_TTL.ANOMALY);
   }
 
   /**
@@ -1727,7 +2181,15 @@ class ApiClient {
         body: JSON.stringify(settings),
       });
 
-      return this.handleResponse(response);
+      const result = await this.handleResponse<{
+        sample_id: string;
+        analysis_settings: Record<string, unknown>;
+        results: Record<string, unknown>;
+        anomaly_data: Record<string, unknown> | null;
+      }>(response);
+      // Invalidate cached data for this sample after reanalysis
+      this.invalidateSample(sampleId);
+      return result as ReturnType<ApiClient["reanalyzeSample"]> extends Promise<infer R> ? R : never;
     } catch (error) {
       console.error("[API] Reanalyze sample failed:", error);
       this.handleNetworkError(error);
@@ -2575,6 +3037,294 @@ class ApiClient {
       return this.handleResponse(response);
     } catch (error) {
       console.error("[API] Remove calibration failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  // ─── FCMPASS k-based Calibration Methods ─────────────────────────
+
+  /**
+   * Fit FCMPASS k-based calibration from bead scatter measurements.
+   * This is the validated method (k=940.6, CV=2.4%, NTA error=-4.1%).
+   */
+  async fitFcmpassCalibration(
+    params: FCMPASSCalibrationRequest
+  ): Promise<FCMPASSFitResult> {
+    try {
+      const response = await fetch(`${this.baseUrl}/calibration/fit-fcmpass`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(params),
+      });
+      this.isOffline = false;
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] FCMPASS calibration fit failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  /**
+   * Get the status of the active FCMPASS k-based calibration.
+   */
+  async getFcmpassStatus(): Promise<FCMPASSStatus> {
+    try {
+      const response = await fetch(`${this.baseUrl}/calibration/fcmpass-status`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      this.isOffline = false;
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] FCMPASS status check failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  /**
+   * Remove (archive) the active FCMPASS calibration.
+   */
+  async removeFcmpassCalibration(): Promise<{ success: boolean; message: string }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/calibration/fcmpass`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+      });
+      this.isOffline = false;
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] FCMPASS calibration removal failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  /**
+   * Parse a bead Certificate of Analysis datasheet (PDF or CSV/TSV).
+   * Returns extracted kit info, bead populations, RI, etc.
+   */
+  async parseBeadDatasheet(file: File): Promise<BeadDatasheetParseResult> {
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await fetch(`${this.baseUrl}/calibration/parse-datasheet`, {
+        method: "POST",
+        body: formData,
+      });
+      this.isOffline = false;
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Bead datasheet parse failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  /**
+   * Upload one or more bead FCS files for calibration.
+   * Returns sample IDs for each uploaded file.
+   */
+  async uploadBeadFcsFiles(files: File[]): Promise<BeadFcsUploadResult> {
+    try {
+      const formData = new FormData();
+      for (const file of files) {
+        formData.append("files", file);
+      }
+      const response = await fetch(`${this.baseUrl}/calibration/upload-bead-fcs`, {
+        method: "POST",
+        body: formData,
+      });
+      this.isOffline = false;
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Bead FCS upload failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  /**
+   * Auto-calibrate from uploaded bead FCS files.
+   * Detects peaks, matches to datasheet, fits FCMPASS calibration.
+   */
+  async autoCalibrate(params: {
+    sample_ids: string[];
+    scatter_channel?: string;
+    bead_kit?: string;
+    wavelength_nm?: number;
+    n_bead?: number;
+    n_ev?: number;
+    n_medium?: number;
+    use_wavelength_dispersion?: boolean;
+  }): Promise<AutoCalibrateResult> {
+    try {
+      const formData = new FormData();
+      formData.append("sample_ids", params.sample_ids.join(","));
+      if (params.scatter_channel) formData.append("scatter_channel", params.scatter_channel);
+      if (params.bead_kit) formData.append("bead_kit", params.bead_kit);
+      if (params.wavelength_nm) formData.append("wavelength_nm", params.wavelength_nm.toString());
+      if (params.n_bead) formData.append("n_bead", params.n_bead.toString());
+      if (params.n_ev) formData.append("n_ev", params.n_ev.toString());
+      if (params.n_medium) formData.append("n_medium", params.n_medium.toString());
+      if (params.use_wavelength_dispersion !== undefined) formData.append("use_wavelength_dispersion", params.use_wavelength_dispersion.toString());
+      const response = await fetch(`${this.baseUrl}/calibration/auto-calibrate`, {
+        method: "POST",
+        body: formData,
+      });
+      this.isOffline = false;
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Auto-calibrate failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  // ─── FCMPASS Calibration Library Methods (Phase 3) ──────────────
+
+  /**
+   * List all FCMPASS calibrations (active + archived).
+   */
+  async listFcmpassCalibrations(): Promise<FCMPASSCalibrationListResponse> {
+    try {
+      const response = await fetch(`${this.baseUrl}/calibration/fcmpass/list`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      this.isOffline = false;
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] List FCMPASS calibrations failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  /**
+   * Get full details for a specific FCMPASS calibration by ID.
+   */
+  async getFcmpassCalibrationById(calId: string): Promise<FCMPASSCalibrationDetail> {
+    try {
+      const response = await fetch(`${this.baseUrl}/calibration/fcmpass/${encodeURIComponent(calId)}`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      this.isOffline = false;
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error(`[API] Get FCMPASS calibration '${calId}' failed:`, error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  /**
+   * Activate an archived FCMPASS calibration (swap it into the active slot).
+   */
+  async activateFcmpassCalibration(calId: string): Promise<FCMPASSActivateResult> {
+    try {
+      const response = await fetch(`${this.baseUrl}/calibration/fcmpass/${encodeURIComponent(calId)}/activate`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+      });
+      this.isOffline = false;
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error(`[API] Activate FCMPASS calibration '${calId}' failed:`, error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  /**
+   * Permanently delete an archived FCMPASS calibration.
+   */
+  async deleteFcmpassCalibration(calId: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/calibration/fcmpass/${encodeURIComponent(calId)}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+      });
+      this.isOffline = false;
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error(`[API] Delete FCMPASS calibration '${calId}' failed:`, error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  // ─── Phase 4: Safety & Validation Methods ───────────────────────
+
+  /**
+   * Check detector gain/voltage mismatch between calibration and sample.
+   */
+  async checkGainMismatch(
+    sampleGains: Record<string, number | null>,
+    thresholdPct: number = 5.0
+  ): Promise<GainMismatchResult> {
+    try {
+      const response = await fetch(`${this.baseUrl}/calibration/gain-check`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sample_gains: sampleGains,
+          threshold_pct: thresholdPct,
+        }),
+      });
+      this.isOffline = false;
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Gain mismatch check failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  /**
+   * Check expiration status of bead standard kits.
+   */
+  async checkBeadKitExpiry(filename?: string): Promise<BeadKitExpiryResult> {
+    try {
+      const url = filename
+        ? `${this.baseUrl}/calibration/bead-kit-expiry?filename=${encodeURIComponent(filename)}`
+        : `${this.baseUrl}/calibration/bead-kit-expiry`;
+      const response = await fetch(url, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      this.isOffline = false;
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Bead kit expiry check failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  /**
+   * Upload a custom bead standard kit.
+   * Creates a JSON datasheet that appears in the bead kit dropdown.
+   */
+  async uploadCustomBeadKit(request: CustomBeadKitRequest): Promise<CustomBeadKitResponse> {
+    try {
+      const response = await fetch(`${this.baseUrl}/calibration/bead-standards`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+      });
+      this.isOffline = false;
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Custom bead kit upload failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  /**
+   * Delete a custom bead standard kit.
+   * Built-in kits cannot be deleted — only user-uploaded custom kits.
+   */
+  async deleteBeadStandard(filename: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/calibration/bead-standards/${encodeURIComponent(filename)}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+      });
+      this.isOffline = false;
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Bead standard delete failed:", error);
       this.handleNetworkError(error);
     }
   }

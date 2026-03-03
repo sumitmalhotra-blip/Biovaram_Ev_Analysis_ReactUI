@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, useCallback } from "react"
+import { useMemo, useState, useCallback, memo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -20,6 +20,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAnalysisStore, type GatedStatistics, type Gate } from "@/lib/store"
+import { useShallow } from "zustand/shallow"
 import { useApi } from "@/hooks/use-api"
 import {
   Collapsible,
@@ -117,7 +118,7 @@ function StatRow({ label, value, unit = "" }: { label: string; value: number | u
   )
 }
 
-export function GatedStatisticsPanel({
+export const GatedStatisticsPanel = memo(function GatedStatisticsPanel({
   scatterData,
   xLabel,
   yLabel,
@@ -127,7 +128,14 @@ export function GatedStatisticsPanel({
   onExportSelection,
   onApplyGate,
 }: GatedStatisticsPanelProps) {
-  const { gatingState, clearAllGates, removeGate, setActiveGate, setSelectedIndices, apiConnected } = useAnalysisStore()
+  const { gatingState, clearAllGates, removeGate, setActiveGate, setSelectedIndices, apiConnected } = useAnalysisStore(useShallow((s) => ({
+    gatingState: s.gatingState,
+    clearAllGates: s.clearAllGates,
+    removeGate: s.removeGate,
+    setActiveGate: s.setActiveGate,
+    setSelectedIndices: s.setSelectedIndices,
+    apiConnected: s.apiConnected,
+  })))
   const { analyzeGatedPopulation } = useApi()
   const [isExpanded, setIsExpanded] = useState(true)
   const [serverAnalysis, setServerAnalysis] = useState<{
@@ -578,4 +586,4 @@ export function GatedStatisticsPanel({
       </Collapsible>
     </Card>
   )
-}
+})

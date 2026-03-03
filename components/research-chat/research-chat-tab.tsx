@@ -37,8 +37,13 @@ export function ResearchChatTab() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [localInput, setLocalInput] = useState('')
 
+  // DESKTOP: Chat endpoint on FastAPI backend
+  const chatApiUrl = process.env.NEXT_PUBLIC_API_URL
+    ? `${process.env.NEXT_PUBLIC_API_URL}/api/v1/chat`
+    : "http://localhost:8000/api/v1/chat"
+
   const { messages, sendMessage, status, setMessages } = useChat({
-    transport: new DefaultChatTransport({ api: "/api/research/chat" }),
+    transport: new DefaultChatTransport({ api: chatApiUrl }),
   })
 
   // Derive isLoading from status

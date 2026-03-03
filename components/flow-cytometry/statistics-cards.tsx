@@ -1,5 +1,6 @@
 "use client"
 
+import { memo } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { 
   FileText, 
@@ -18,7 +19,7 @@ interface StatisticsCardsProps {
   results: FCSResult | null
 }
 
-export function StatisticsCards({ results }: StatisticsCardsProps) {
+export const StatisticsCards = memo(function StatisticsCards({ results }: StatisticsCardsProps) {
   if (!results) {
     return null
   }
@@ -177,4 +178,4 @@ export function StatisticsCards({ results }: StatisticsCardsProps) {
       })}
     </div>
   )
-}
+})

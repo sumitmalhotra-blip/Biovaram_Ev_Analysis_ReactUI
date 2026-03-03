@@ -1,8 +1,6 @@
 import type React from "react"
 import type { Metadata, Viewport } from "next"
 import { Inter } from "next/font/google"
-import { Analytics } from "@vercel/analytics/next"
-import { SessionProvider } from "@/components/session-provider"
 import { StoreProvider } from "@/components/store-provider"
 import "./globals.css"
 
@@ -56,12 +54,9 @@ export default function RootLayout({
         <link rel="dns-prefetch" href="//localhost:8000" />
       </head>
       <body className={`${inter.className} antialiased`}>
-        <SessionProvider>
-          <StoreProvider>
-            {children}
-          </StoreProvider>
-        </SessionProvider>
-        <Analytics />
+        <StoreProvider>
+          {children}
+        </StoreProvider>
       </body>
     </html>
   )

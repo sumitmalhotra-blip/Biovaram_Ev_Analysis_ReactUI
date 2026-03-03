@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, memo, useRef, useEffect, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -22,6 +22,7 @@ import { TheoryVsMeasuredChart } from "./charts/theory-vs-measured-chart"
 import { DiameterVsSSCChart, type DiameterDataPoint } from "./charts/diameter-vs-ssc-chart"
 import { EventVsSizeChart } from "./charts/event-vs-size-chart"
 import { useAnalysisStore, type AnomalyDetectionResult } from "@/lib/store"
+import { useShallow } from "zustand/shallow"
 import { useToast } from "@/hooks/use-toast"
 import type { FCSResult } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
@@ -83,7 +84,29 @@ const CHART_CONFIGS: ChartConfig[] = [
   },
 ]
 
-export function FullAnalysisDashboard({
+// PERFORMANCE: Lazy-render chart only when visible in viewport
+function LazyChart({ children, fallbackHeight = 320 }: { children: React.ReactNode; fallbackHeight?: number }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [isVisible, setIsVisible] = useState(false)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setIsVisible(true); observer.disconnect() } },
+      { rootMargin: '100px' }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  if (!isVisible) {
+    return <div ref={ref} style={{ minHeight: fallbackHeight }} className="flex items-center justify-center text-muted-foreground text-xs">Loading chart...</div>
+  }
+  return <>{children}</>
+}
+
+export const FullAnalysisDashboard = memo(function FullAnalysisDashboard({
   results,
   scatterData = [],
   anomalyData,
@@ -95,7 +118,10 @@ export function FullAnalysisDashboard({
   secondaryAnomalyData,
   secondarySizeData = [],
 }: FullAnalysisDashboardProps) {
-  const { pinChart, overlayConfig } = useAnalysisStore()
+  const { pinChart, overlayConfig } = useAnalysisStore(useShallow((s) => ({
+    pinChart: s.pinChart,
+    overlayConfig: s.overlayConfig,
+  })))
   const { toast } = useToast()
   const [expandedChart, setExpandedChart] = useState<ChartType | null>(null)
   const [highlightAnomalies, setHighlightAnomalies] = useState(true)
@@ -404,9 +430,11 @@ export function FullAnalysisDashboard({
                 </div>
               </div>
 
-              {/* Chart */}
+              {/* Chart — lazy-rendered when scrolled into view */}
               <div className="cursor-pointer" onClick={() => handleExpand(config.id)}>
-                {renderChart(config.id, isCompactMode)}
+                <LazyChart fallbackHeight={isCompactMode ? 200 : 320}>
+                  {renderChart(config.id, isCompactMode)}
+                </LazyChart>
               </div>
 
               {/* Quick Stats Badge */}
@@ -457,4 +485,4 @@ export function FullAnalysisDashboard({
       </CardContent>
     </Card>
   )
-}
+})

@@ -41,6 +41,8 @@ from src.api.routers import upload, samples, jobs  # type: ignore[import-not-fou
 from src.api.routers import analysis  # type: ignore[import-not-found]
 from src.api.routers import auth  # type: ignore[import-not-found]
 from src.api.routers import alerts  # CRMIT-003: Alert System
+from src.api.routers import chat  # P-001: AI Research Chat
+from src.api.routers import backup  # DB Backup & Restore
 try:
     from src.api.routers import calibration as calibration_router  # CAL-001
     _has_calibration_router = True
@@ -58,6 +60,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # type: ignore[
     
     Handles:
     - Database connection initialization
+    - Default desktop user creation
     - Logger configuration
     - Cleanup on shutdown
     """
@@ -71,6 +74,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # type: ignore[
     try:
         await init_database()
         logger.info("   Database: Connection pool initialized")
+        
+        # Auto-register default desktop user on first run
+        await _ensure_default_user()
     except Exception as e:
         logger.warning(f"   Database: Failed to initialize - {e}")
         logger.warning("   API will continue without database (file-based mode)")
@@ -88,6 +94,50 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # type: ignore[
     except Exception as e:
         logger.warning(f"   Error closing database: {e}")
     logger.success("✅ Cleanup complete")
+
+
+async def _ensure_default_user():
+    """
+    Create a default 'Lab User' account for desktop mode if it doesn't exist.
+    This matches the hardcoded desktopUser in the frontend header.
+    """
+    from src.database.connection import get_session_factory
+    from src.database.models import User
+    from sqlalchemy import select
+    
+    try:
+        session_factory = get_session_factory()
+        async with session_factory() as session:
+            # Check if the default desktop user already exists
+            result = await session.execute(
+                select(User).where(User.email == "lab@biovaram.local")
+            )
+            existing = result.scalar_one_or_none()
+            
+            if existing is None:
+                # Create default desktop user
+                import bcrypt
+                default_password = bcrypt.hashpw(
+                    "desktop_user_2026".encode("utf-8"),
+                    bcrypt.gensalt()
+                ).decode("utf-8")
+                
+                desktop_user = User(
+                    email="lab@biovaram.local",
+                    password_hash=default_password,
+                    name="Lab User",
+                    role="researcher",
+                    organization="BioVaram Lab",
+                    is_active=True,
+                    email_verified=True,
+                )
+                session.add(desktop_user)
+                await session.commit()
+                logger.info("   Default desktop user created: lab@biovaram.local")
+            else:
+                logger.info("   Default desktop user exists: lab@biovaram.local")
+    except Exception as e:
+        logger.warning(f"   Could not create default user: {e}")
 
 
 # ============================================================================
@@ -126,7 +176,7 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 # Request logging middleware
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    """Log all incoming requests with timing."""
+    """Log all incoming requests with timing. Add Cache-Control headers."""
     start_time = time.time()
     
     # Log request
@@ -141,6 +191,18 @@ async def log_requests(request: Request, call_next):
         f"⬆️  {request.method} {request.url.path} "
         f"→ {response.status_code} ({duration:.1f}ms)"
     )
+    
+    # Add Cache-Control headers for GET responses
+    if request.method == "GET" and response.status_code == 200:
+        path = request.url.path
+        if "/scatter-data" in path or "/distribution-analysis" in path or "/size-bins" in path:
+            # Heavy computation endpoints — allow browser cache for 2 min
+            response.headers["Cache-Control"] = "private, max-age=120, stale-while-revalidate=60"
+        elif "/samples" in path and "{" not in path:
+            # Sample list — short cache
+            response.headers["Cache-Control"] = "private, max-age=10"
+        elif "/health" in path:
+            response.headers["Cache-Control"] = "no-cache"
     
     return response
 
@@ -219,10 +281,7 @@ async def health_check():
 @app.get(f"{settings.api_prefix}/status")
 async def system_status():
     """
-    Detailed system status including database and storage.
-    
-    Returns:
-        System status with diagnostics
+    Detailed system status including database, storage, and cache.
     """
     # Check database connection
     try:
@@ -235,6 +294,13 @@ async def system_status():
     upload_dir_exists = settings.upload_dir.exists()
     parquet_dir_exists = settings.parquet_dir.exists()
     
+    # Cache stats
+    try:
+        from src.api.cache import get_all_cache_stats
+        cache_stats = get_all_cache_stats()
+    except Exception:
+        cache_stats = []
+    
     return {
         "success": True,
         "service": settings.app_name,
@@ -242,7 +308,6 @@ async def system_status():
         "environment": settings.environment,
         "database": {
             "status": db_status,
-            # "url": settings.database_url.split("@")[-1],  # Hide credentials
         },
         "storage": {
             "upload_dir": str(settings.upload_dir),
@@ -250,6 +315,7 @@ async def system_status():
             "parquet_dir": str(settings.parquet_dir),
             "parquet_dir_exists": parquet_dir_exists,
         },
+        "cache": cache_stats,
         "configuration": {
             "max_upload_size_mb": settings.max_upload_size_mb,
             "max_workers": settings.max_workers,
@@ -297,6 +363,20 @@ app.include_router(
     alerts.router,
     prefix=f"{settings.api_prefix}/alerts",
     tags=["Alerts"]
+)
+
+# P-001: AI Research Chat
+app.include_router(
+    chat.router,
+    prefix=f"{settings.api_prefix}",
+    tags=["AI Chat"]
+)
+
+# DB Backup & Restore
+app.include_router(
+    backup.router,
+    prefix=f"{settings.api_prefix}",
+    tags=["Database"]
 )
 
 # CAL-001: Bead Calibration (Feb 10, 2026)

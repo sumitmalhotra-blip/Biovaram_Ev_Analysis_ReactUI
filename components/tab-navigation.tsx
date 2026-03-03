@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useAnalysisStore, type TabType } from "@/lib/store"
+import { useShallow } from "zustand/shallow"
 import { cn } from "@/lib/utils"
 import { LayoutDashboard, Microscope, Atom, GitCompare, MessageCircle } from "lucide-react"
 
@@ -15,7 +16,10 @@ const tabs: { id: TabType; label: string; shortLabel: string; icon: React.Elemen
 ]
 
 export function TabNavigation() {
-  const { activeTab, setActiveTab } = useAnalysisStore()
+  const { activeTab, setActiveTab } = useAnalysisStore(useShallow((s) => ({
+    activeTab: s.activeTab,
+    setActiveTab: s.setActiveTab,
+  })))
 
   return (
     <nav className="h-12 border-b border-border/50 bg-card flex items-center px-2 md:px-4 gap-1 overflow-x-auto shrink-0 scrollbar-none">

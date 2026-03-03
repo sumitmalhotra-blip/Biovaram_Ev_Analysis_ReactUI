@@ -47,7 +47,7 @@ interface AnalysisSettingsPanelProps {
 // Default FCS analysis settings
 const DEFAULT_SETTINGS: FCSAnalysisSettings = {
   laserWavelength: 405,
-  particleRI: 1.40,
+  particleRI: 1.37,
   mediumRI: 1.33,
   fscRange: [1, 65535],
   sscRange: [1, 65535],
@@ -82,6 +82,7 @@ const LASER_PRESETS = [
 // Refractive index presets
 const RI_PRESETS = {
   particles: [
+    { value: 1.37, label: "SEC-purified EVs (1.37)" },
     { value: 1.40, label: "EVs/Exosomes (1.40)" },
     { value: 1.45, label: "Lipid droplets (1.45)" },
     { value: 1.50, label: "Silica beads (1.50)" },
@@ -215,7 +216,7 @@ export function AnalysisSettingsPanel({ className, onSettingsChange }: AnalysisS
                       </TooltipTrigger>
                       <TooltipContent>
                         <p className="max-w-xs text-xs">
-                          Refractive index of the particles. EVs typically have RI ~1.40.
+                          Refractive index of the particles. SEC-purified EVs ~1.37, general EVs ~1.40.
                         </p>
                       </TooltipContent>
                     </Tooltip>

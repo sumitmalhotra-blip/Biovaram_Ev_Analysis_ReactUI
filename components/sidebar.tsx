@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react"
 import { useAnalysisStore, type SizeRange } from "@/lib/store"
+import { useShallow } from "zustand/shallow"
 import { useApi } from "@/hooks/use-api"
 import { cn } from "@/lib/utils"
 import { ChevronLeft, ChevronRight, Filter, Settings, FileText, Beaker, Thermometer, Loader2, RefreshCw, Database, SlidersHorizontal, Play, RotateCcw, Plus, Trash2, FlaskConical, Shield, Target, CheckCircle2, XCircle } from "lucide-react"
@@ -25,7 +26,15 @@ interface SidebarProps {
 }
 
 export function Sidebar({ isMobile = false }: SidebarProps) {
-  const { sidebarCollapsed, toggleSidebar, activeTab, samples, apiSamples, samplesLoading, apiConnected } = useAnalysisStore()
+  const { sidebarCollapsed, toggleSidebar, activeTab, samples, apiSamples, samplesLoading, apiConnected } = useAnalysisStore(useShallow((s) => ({
+    sidebarCollapsed: s.sidebarCollapsed,
+    toggleSidebar: s.toggleSidebar,
+    activeTab: s.activeTab,
+    samples: s.samples,
+    apiSamples: s.apiSamples,
+    samplesLoading: s.samplesLoading,
+    apiConnected: s.apiConnected,
+  })))
   const { fetchSamples, openSampleInTab } = useApi()
 
   // Fetch samples on mount only if API is connected
@@ -309,7 +318,14 @@ function FlowCytometrySidebar() {
     setFCSSizeRanges,
     setFCSExperimentalConditions,
     apiConnected,
-  } = useAnalysisStore()
+  } = useAnalysisStore(useShallow((s) => ({
+    fcsAnalysisSettings: s.fcsAnalysisSettings,
+    setFcsAnalysisSettings: s.setFcsAnalysisSettings,
+    fcsAnalysis: s.fcsAnalysis,
+    setFCSSizeRanges: s.setFCSSizeRanges,
+    setFCSExperimentalConditions: s.setFCSExperimentalConditions,
+    apiConnected: s.apiConnected,
+  })))
   const { reanalyzeWithSettings } = useApi()
 
   // Dialog state
@@ -375,9 +391,9 @@ function FlowCytometrySidebar() {
   }, [toast])
 
   // Local state initialized from store (with defaults)
-  const [wavelength, setWavelength] = useState(fcsAnalysisSettings?.laserWavelength?.toString() || "488")
+  const [wavelength, setWavelength] = useState(fcsAnalysisSettings?.laserWavelength?.toString() || "405")
   const [medium, setMedium] = useState("pbs")
-  const [particleRI, setParticleRI] = useState(fcsAnalysisSettings?.particleRI || 1.40)
+  const [particleRI, setParticleRI] = useState(fcsAnalysisSettings?.particleRI || 1.37)
   const [anomalyEnabled, setAnomalyEnabled] = useState(fcsAnalysisSettings?.anomalyDetectionEnabled ?? true)
   const [anomalyMethod, setAnomalyMethod] = useState<"Z-Score" | "IQR" | "Both">(fcsAnalysisSettings?.anomalyMethod || "Both")
   const [zscoreThreshold, setZscoreThreshold] = useState(fcsAnalysisSettings?.zscoreThreshold || 3.0)
@@ -405,9 +421,11 @@ function FlowCytometrySidebar() {
   // Size range presets based on ISEV 2023 guidelines
   const SIZE_PRESETS = {
     standard: [
-      { name: "Small EVs (<50nm)", min: 0, max: 50, color: "#22c55e" },
-      { name: "Exosomes (50-200nm)", min: 50, max: 200, color: "#3b82f6" },
-      { name: "Microvesicles (>200nm)", min: 200, max: 1000, color: "#f59e0b" },
+      { name: "Exomeres (0-50nm)", min: 0, max: 50, color: "#22c55e" },
+      { name: "Small EVs (51-100nm)", min: 51, max: 100, color: "#3b82f6" },
+      { name: "Medium EVs (101-150nm)", min: 101, max: 150, color: "#a855f7" },
+      { name: "Large EVs (151-200nm)", min: 151, max: 200, color: "#f59e0b" },
+      { name: "Very Large EVs (200+nm)", min: 200, max: 1000, color: "#ef4444" },
     ],
     exosome: [
       { name: "Exosomes (40-80nm)", min: 40, max: 80, color: "#22c55e" },
@@ -433,8 +451,8 @@ function FlowCytometrySidebar() {
   // Sync local state when store changes
   useEffect(() => {
     if (fcsAnalysisSettings) {
-      setWavelength(fcsAnalysisSettings.laserWavelength?.toString() || "488")
-      setParticleRI(fcsAnalysisSettings.particleRI || 1.40)
+      setWavelength(fcsAnalysisSettings.laserWavelength?.toString() || "405")
+      setParticleRI(fcsAnalysisSettings.particleRI || 1.37)
       setAnomalyEnabled(fcsAnalysisSettings.anomalyDetectionEnabled ?? true)
       setAnomalyMethod(fcsAnalysisSettings.anomalyMethod || "Both")
       setZscoreThreshold(fcsAnalysisSettings.zscoreThreshold || 3.0)
@@ -1115,7 +1133,10 @@ function FlowCytometrySidebar() {
 }
 
 function NTASidebar() {
-  const { ntaAnalysisSettings, setNtaAnalysisSettings } = useAnalysisStore()
+  const { ntaAnalysisSettings, setNtaAnalysisSettings } = useAnalysisStore(useShallow((s) => ({
+    ntaAnalysisSettings: s.ntaAnalysisSettings,
+    setNtaAnalysisSettings: s.setNtaAnalysisSettings,
+  })))
 
   // Compute viscosity correction factor from temperatures
   // Using Stokes-Einstein: D ∝ T/η, so size correction ≈ (η_ref/η_meas) × (T_meas/T_ref)
@@ -1253,7 +1274,11 @@ function NTASidebar() {
 }
 
 function CrossCompareSidebar() {
-  const { crossComparisonSettings, setCrossComparisonSettings, apiSamples } = useAnalysisStore()
+  const { crossComparisonSettings, setCrossComparisonSettings, apiSamples } = useAnalysisStore(useShallow((s) => ({
+    crossComparisonSettings: s.crossComparisonSettings,
+    setCrossComparisonSettings: s.setCrossComparisonSettings,
+    apiSamples: s.apiSamples,
+  })))
   
   // Get available samples for selection
   const fcsSamples = apiSamples.filter(s => s.files?.fcs)

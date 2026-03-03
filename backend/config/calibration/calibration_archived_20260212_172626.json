@@ -1,0 +1,53 @@
+{
+  "version": "2.0",
+  "created_at": "2026-02-12T17:26:06.720399",
+  "instrument_name": "CytoFLEX_S",
+  "wavelength_nm": 405.0,
+  "fit_method": "power",
+  "fit_params": {
+    "a": 1.5448028471693384e-13,
+    "b": 9.610222295380588,
+    "r_squared": 0.7635666610859445
+  },
+  "calibration_range_nm": [
+    40.0,
+    108.0
+  ],
+  "fsc_range": [
+    372.27880527492783,
+    5376283.618398601
+  ],
+  "bead_datasheet_info": {
+    "kit_part_number": "D03231",
+    "lot_number": "4894789",
+    "refractive_index": 1.591,
+    "material": "polystyrene_latex",
+    "nist_traceable": true
+  },
+  "bead_standards": {
+    "40": {
+      "diameter_nm": 40.0,
+      "diameter_cv": 11.5,
+      "fsc_mean": 372.27880527492783,
+      "fsc_std": 29.02057495597722,
+      "n_events": 15898,
+      "refractive_index": 1.591
+    },
+    "80": {
+      "diameter_nm": 80.0,
+      "diameter_cv": 6.9,
+      "fsc_mean": 2160809.3391658915,
+      "fsc_std": 173178.07367409844,
+      "n_events": 4708,
+      "refractive_index": 1.591
+    },
+    "108": {
+      "diameter_nm": 108.0,
+      "diameter_cv": 5.2,
+      "fsc_mean": 5376283.618398601,
+      "fsc_std": 15206.558305870762,
+      "n_events": 23215,
+      "refractive_index": 1.591
+    }
+  }
+}

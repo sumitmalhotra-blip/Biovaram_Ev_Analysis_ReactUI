@@ -44,6 +44,7 @@ import {
   type NTAExportData
 } from "@/lib/export-utils"
 import type { NTAResult } from "@/lib/api-client"
+import { useToast } from "@/hooks/use-toast"
 
 interface NTAAnalysisResultsProps {
   results: NTAResult

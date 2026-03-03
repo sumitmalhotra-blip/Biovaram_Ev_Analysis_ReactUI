@@ -1,0 +1,118 @@
+{
+  "method": "fcmpass_k_based",
+  "k_instrument": 234.12823745187177,
+  "k_std": 332.53106749291027,
+  "k_cv_pct": 142.0294583481271,
+  "wavelength_nm": 405.0,
+  "n_bead": 1.6336721690788016,
+  "n_ev": 1.37,
+  "n_medium": 1.33,
+  "bead_measurements": {
+    "40": 388.31272528339514,
+    "80": 3613.750911861952,
+    "108": 105333.72158360023,
+    "142": 2173225.2935015587,
+    "304": 2156867.6055649957,
+    "600": 5376349.58933879
+  },
+  "bead_diameters": [
+    40,
+    80,
+    108,
+    142,
+    304,
+    600
+  ],
+  "bead_fsc_measured": [
+    388.31272528339514,
+    3613.750911861952,
+    105333.72158360023,
+    2173225.2935015587,
+    2156867.6055649957,
+    5376349.58933879
+  ],
+  "created_at": "2026-02-24T12:35:39.720399",
+  "bead_kit": "nanovis_d03231.json",
+  "self_validation": {
+    "validated": true,
+    "all_passed": false,
+    "n_beads": 6,
+    "n_passed": 2,
+    "n_failed": 4,
+    "max_error_pct": 60.96,
+    "per_bead": [
+      {
+        "expected_nm": 40,
+        "recovered_nm": 38.8,
+        "error_nm": -1.2,
+        "error_pct": 2.95,
+        "au_measured": 388.31272528339514,
+        "au_predicted": 464.1,
+        "au_error_pct": 19.51,
+        "cv_pct": 5.0,
+        "tolerance_nm": 4.0,
+        "passed": true
+      },
+      {
+        "expected_nm": 80,
+        "recovered_nm": 56.7,
+        "error_nm": -23.3,
+        "error_pct": 29.15,
+        "au_measured": 3613.750911861952,
+        "au_predicted": 26524.9,
+        "au_error_pct": 634.0,
+        "cv_pct": 5.0,
+        "tolerance_nm": 8.0,
+        "passed": false
+      },
+      {
+        "expected_nm": 108,
+        "recovered_nm": 102.8,
+        "error_nm": -5.2,
+        "error_pct": 4.84,
+        "au_measured": 105333.72158360023,
+        "au_predicted": 137144.5,
+        "au_error_pct": 30.2,
+        "cv_pct": 5.0,
+        "tolerance_nm": 10.8,
+        "passed": true
+      },
+      {
+        "expected_nm": 142,
+        "recovered_nm": 193.3,
+        "error_nm": 51.3,
+        "error_pct": 36.14,
+        "au_measured": 2173225.2935015587,
+        "au_predicted": 530596.7,
+        "au_error_pct": 75.58,
+        "cv_pct": 5.0,
+        "tolerance_nm": 14.2,
+        "passed": false
+      },
+      {
+        "expected_nm": 304,
+        "recovered_nm": 193.0,
+        "error_nm": -111.0,
+        "error_pct": 36.5,
+        "au_measured": 2156867.6055649957,
+        "au_predicted": 15893111.7,
+        "au_error_pct": 636.86,
+        "cv_pct": 5.0,
+        "tolerance_nm": 30.4,
+        "passed": false
+      },
+      {
+        "expected_nm": 600,
+        "recovered_nm": 234.2,
+        "error_nm": -365.8,
+        "error_pct": 60.96,
+        "au_measured": 5376349.58933879,
+        "au_predicted": 195729433.1,
+        "au_error_pct": 3540.56,
+        "cv_pct": 5.0,
+        "tolerance_nm": 60.0,
+        "passed": false
+      }
+    ]
+  }
+}

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect, useCallback } from "react"
+import { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -20,6 +20,7 @@ import {
   Grid3X3
 } from "lucide-react"
 import { useAnalysisStore } from "@/lib/store"
+import { useShallow } from "zustand/shallow"
 import { useApi } from "@/hooks/use-api"
 import { SizeDistributionChart } from "./charts/size-distribution-chart"
 import { ScatterPlotChart, type ScatterDataPoint } from "./charts/scatter-plot-with-selection"
@@ -66,7 +67,17 @@ export function AnalysisResults() {
     setSecondaryFCSScatterData,
     setSecondaryFCSLoadingScatter,
     setSecondaryFCSAnomalyData
-  } = useAnalysisStore()
+  } = useAnalysisStore(useShallow((s) => ({
+    pinChart: s.pinChart,
+    fcsAnalysis: s.fcsAnalysis,
+    fcsAnalysisSettings: s.fcsAnalysisSettings,
+    resetFCSAnalysis: s.resetFCSAnalysis,
+    secondaryFcsAnalysis: s.secondaryFcsAnalysis,
+    overlayConfig: s.overlayConfig,
+    setSecondaryFCSScatterData: s.setSecondaryFCSScatterData,
+    setSecondaryFCSLoadingScatter: s.setSecondaryFCSLoadingScatter,
+    setSecondaryFCSAnomalyData: s.setSecondaryFCSAnomalyData,
+  })))
   const { getScatterData, getScatterDataWithAxes, getSizeBins, detectAnomalies } = useApi()
   const { toast } = useToast()
   const [showAnomalyDetails, setShowAnomalyDetails] = useState(false)
@@ -90,6 +101,29 @@ export function AnalysisResults() {
   const [distributionAnalysis, setDistributionAnalysis] = useState<import("@/lib/api-client").DistributionAnalysisResponse | null>(null)
   const [distributionLoading, setDistributionLoading] = useState(false)
 
+  // Phase 4: Gain mismatch warnings from scatter-data response
+  const [gainMismatchWarnings, setGainMismatchWarnings] = useState<string[]>([])
+
+  // PERFORMANCE: Debounce Mie settings changes to avoid 3 simultaneous API calls on every slider tick
+  const [debouncedMieSettings, setDebouncedMieSettings] = useState({
+    wavelength: fcsAnalysisSettings?.laserWavelength,
+    particleRI: fcsAnalysisSettings?.particleRI,
+    mediumRI: fcsAnalysisSettings?.mediumRI,
+  })
+  const mieDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  
+  useEffect(() => {
+    if (mieDebounceRef.current) clearTimeout(mieDebounceRef.current)
+    mieDebounceRef.current = setTimeout(() => {
+      setDebouncedMieSettings({
+        wavelength: fcsAnalysisSettings?.laserWavelength,
+        particleRI: fcsAnalysisSettings?.particleRI,
+        mediumRI: fcsAnalysisSettings?.mediumRI,
+      })
+    }, 500) // 500ms debounce — waits for user to stop adjusting
+    return () => { if (mieDebounceRef.current) clearTimeout(mieDebounceRef.current) }
+  }, [fcsAnalysisSettings?.laserWavelength, fcsAnalysisSettings?.particleRI, fcsAnalysisSettings?.mediumRI])
+
   // Use real results from the API
   const results = fcsAnalysis.results
   const anomalyData = fcsAnalysis.anomalyData
@@ -107,6 +141,64 @@ export function AnalysisResults() {
     setXChannel(newXChannel)
     setYChannel(newYChannel)
   }, [])
+
+  // PERFORMANCE: Memoized callbacks to prevent child chart re-renders
+  const handleSelectionChange = useCallback((indices: number[], coords?: { x1: number; y1: number; x2: number; y2: number }) => {
+    setSelectedIndices(indices)
+    setGateCoordinates(coords || null)
+    if (indices.length > 0) {
+      toast({
+        title: "Population Gated",
+        description: `${indices.length} events selected. Click "Analyze Selection" or "Save Gate" for further analysis.`,
+      })
+    }
+  }, [toast])
+
+  const handleGatedAnalysis = useCallback((selectedData: Array<{ x: number; y: number; diameter?: number }>) => {
+    if (selectedData.length === 0) return
+    const xValues = selectedData.map(p => p.x)
+    const yValues = selectedData.map(p => p.y)
+    const diameters = selectedData.filter(p => p.diameter).map(p => p.diameter!)
+    
+    const meanX = xValues.reduce((a, b) => a + b, 0) / xValues.length
+    const meanY = yValues.reduce((a, b) => a + b, 0) / yValues.length
+    const meanDiam = diameters.length > 0 
+      ? diameters.reduce((a, b) => a + b, 0) / diameters.length 
+      : null
+    
+    toast({
+      title: `Gated Population Analysis (${selectedData.length} events)`,
+      description: `Mean ${xChannel}: ${meanX.toFixed(1)}, Mean ${yChannel}: ${meanY.toFixed(1)}${meanDiam ? `, Mean Diameter: ${meanDiam.toFixed(1)} nm` : ''}`,
+      duration: 8000,
+    })
+  }, [toast, xChannel, yChannel])
+
+  const handleExportSelection = useCallback((indices: number[]) => {
+    const selectedData = scatterData.filter((_, idx) => indices.includes(idx))
+    const csv = [
+      ["Index", xChannel, yChannel, "Diameter (nm)"],
+      ...selectedData.map((p, idx) => [p.index ?? idx, p.x, p.y, p.diameter ?? "N/A"]),
+    ]
+      .map((row) => row.join(","))
+      .join("\n")
+
+    const blob = new Blob([csv], { type: "text/csv" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `gated_population_${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    toast({
+      title: "Export Complete",
+      description: `Exported ${indices.length} events to CSV`,
+    })
+  }, [scatterData, xChannel, yChannel, toast])
+
+  // Stable empty array references to avoid re-renders
+  const emptyAnomalyIndices = useMemo(() => [] as number[], [])
 
   // Initialize channel selection from FCS results when available
   useEffect(() => {
@@ -131,8 +223,6 @@ export function AnalysisResults() {
       if (detectedFsc) setXChannel(detectedFsc)
       if (detectedSsc) setYChannel(detectedSsc)
       setChannelsInitialized(true)
-      
-      console.log(`[AnalysisResults] Auto-detected channels: X=${detectedFsc}, Y=${detectedSsc} from ${channels.length} available channels`)
     }
   }, [results?.channels, channelsInitialized])
 
@@ -153,14 +243,13 @@ export function AnalysisResults() {
         .then((data) => {
           if (!cancelled && data) {
             setScatterData(data.data)
-            // Debug: Log scatter data with diameters
-            const withDiameters = data.data.filter((p: { diameter?: number }) => p.diameter !== undefined && p.diameter !== null && p.diameter > 0)
-            console.log('[AnalysisResults] Scatter data loaded:', {
-              totalPoints: data.data.length,
-              pointsWithDiameters: withDiameters.length,
-              sampleDiameters: withDiameters.slice(0, 5).map((p: { diameter?: number }) => p.diameter),
-              totalEvents: data.total_events
-            })
+            // Phase 4: Capture gain mismatch warnings from response
+            if (data.warnings && data.warnings.length > 0) {
+              setGainMismatchWarnings(data.warnings)
+            } else {
+              setGainMismatchWarnings([])
+            }
+
           }
         })
         .finally(() => {
@@ -169,7 +258,7 @@ export function AnalysisResults() {
     }
     return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sampleId, results, xChannel, yChannel, fcsAnalysisSettings?.laserWavelength, fcsAnalysisSettings?.particleRI, fcsAnalysisSettings?.mediumRI])
+  }, [sampleId, results, xChannel, yChannel, debouncedMieSettings.wavelength, debouncedMieSettings.particleRI, debouncedMieSettings.mediumRI])
   
   // Load secondary scatter data when overlay is enabled
   // Uses fallback channels if primary channels don't exist in secondary file
@@ -185,7 +274,6 @@ export function AnalysisResults() {
       
       // If primary channels don't exist in secondary file, use fallback
       if (!secondaryChannels.includes(xChannel) || !secondaryChannels.includes(yChannel)) {
-        console.log(`[AnalysisResults] Secondary file doesn't have channels ${xChannel}/${yChannel}, using fallback`)
         // Try to find FSC/SSC patterns in secondary file
         const fscPatterns = ['FSC-A', 'VFSC-A', 'FSC-H', 'VFSC-H']
         const sscPatterns = ['SSC-A', 'VSSC1-A', 'SSC-H', 'VSSC1-H', 'VSSC2-A']
@@ -241,19 +329,14 @@ export function AnalysisResults() {
       setDistributionLoading(true)
       import("@/lib/api-client").then(({ apiClient }) => {
         apiClient.getDistributionAnalysis(sampleId, {
-          wavelength_nm: fcsAnalysisSettings?.laserWavelength,
-          n_particle: fcsAnalysisSettings?.particleRI,
-          n_medium: fcsAnalysisSettings?.mediumRI,
+          wavelength_nm: debouncedMieSettings.wavelength,
+          n_particle: debouncedMieSettings.particleRI,
+          n_medium: debouncedMieSettings.mediumRI,
           include_overlays: true,
         })
           .then((data) => {
             if (!cancelled && data) {
               setDistributionAnalysis(data)
-              console.log('[AnalysisResults] Distribution analysis loaded:', {
-                isNormal: data.normality_tests?.is_normal,
-                bestFit: data.distribution_fits?.best_fit_aic,
-                recommendation: data.conclusion?.recommended_distribution
-              })
             }
           })
           .catch((err) => {
@@ -268,7 +351,7 @@ export function AnalysisResults() {
     }
     return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sampleId, results, fcsAnalysisSettings?.laserWavelength, fcsAnalysisSettings?.particleRI, fcsAnalysisSettings?.mediumRI])
+  }, [sampleId, results, debouncedMieSettings.wavelength, debouncedMieSettings.particleRI, debouncedMieSettings.mediumRI])
 
   // Load real size bins from backend - PERFORMANCE FIX: Removed callback AND sizeRanges from deps
   // sizeRanges is an array reference that changes on every Zustand notify → caused infinite API loop
@@ -288,7 +371,7 @@ export function AnalysisResults() {
     }
     return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sampleId, results, fcsAnalysisSettings?.laserWavelength, fcsAnalysisSettings?.particleRI, fcsAnalysisSettings?.mediumRI])
+  }, [sampleId, results, debouncedMieSettings.wavelength, debouncedMieSettings.particleRI, debouncedMieSettings.mediumRI])
 
   if (!results) {
     return (
@@ -797,6 +880,18 @@ export function AnalysisResults() {
             </div>
 
             <TabsContent value="dashboard" className="space-y-4">
+              {/* Phase 4: Gain Mismatch Warning Banner (B3) */}
+              {gainMismatchWarnings.length > 0 && (
+                <Alert className="border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
+                  <AlertCircle className="h-4 w-4 text-amber-500" />
+                  <AlertTitle className="text-sm font-semibold text-amber-700 dark:text-amber-400">Detector Gain Mismatch</AlertTitle>
+                  <AlertDescription className="text-xs text-amber-600 dark:text-amber-300 space-y-0.5">
+                    {gainMismatchWarnings.map((w, i) => (
+                      <div key={i}>{w}</div>
+                    ))}
+                  </AlertDescription>
+                </Alert>
+              )}
               {/* Axis Selection for Dashboard - allows changing scatter plot axes */}
               {sampleId && (
                 <ScatterAxisSelector
@@ -960,38 +1055,11 @@ export function AnalysisResults() {
                       xLabel={xChannel}
                       yLabel={yChannel}
                       data={scatterData}
-                      anomalousIndices={anomalyData?.anomalous_indices || []}
+                      anomalousIndices={anomalyData?.anomalous_indices ?? emptyAnomalyIndices}
                       highlightAnomalies={highlightAnomalies}
                       height={450}
-                      onSelectionChange={(indices, coords) => {
-                        setSelectedIndices(indices)
-                        setGateCoordinates(coords || null)
-                        if (indices.length > 0) {
-                          toast({
-                            title: "Population Gated",
-                            description: `${indices.length} events selected. Click "Analyze Selection" or "Save Gate" for further analysis.`,
-                          })
-                        }
-                      }}
-                      onGatedAnalysis={(selectedData) => {
-                        // Calculate statistics for selected population
-                        if (selectedData.length === 0) return
-                        const xValues = selectedData.map(p => p.x)
-                        const yValues = selectedData.map(p => p.y)
-                        const diameters = selectedData.filter(p => p.diameter).map(p => p.diameter!)
-                        
-                        const meanX = xValues.reduce((a, b) => a + b, 0) / xValues.length
-                        const meanY = yValues.reduce((a, b) => a + b, 0) / yValues.length
-                        const meanDiam = diameters.length > 0 
-                          ? diameters.reduce((a, b) => a + b, 0) / diameters.length 
-                          : null
-                        
-                        toast({
-                          title: `Gated Population Analysis (${selectedData.length} events)`,
-                          description: `Mean ${xChannel}: ${meanX.toFixed(1)}, Mean ${yChannel}: ${meanY.toFixed(1)}${meanDiam ? `, Mean Diameter: ${meanDiam.toFixed(1)} nm` : ''}`,
-                          duration: 8000,
-                        })
-                      }}
+                      onSelectionChange={handleSelectionChange}
+                      onGatedAnalysis={handleGatedAnalysis}
                     />
                   </div>
                   <div className="lg:col-span-1">
@@ -1002,30 +1070,7 @@ export function AnalysisResults() {
                       selectedIndices={selectedIndices}
                       sampleId={sampleId}
                       gateCoordinates={gateCoordinates}
-                      onExportSelection={(indices) => {
-                        // Export selected events to CSV
-                        const selectedData = scatterData.filter((_, idx) => indices.includes(idx))
-                        const csv = [
-                          ["Index", xChannel, yChannel, "Diameter (nm)"],
-                          ...selectedData.map((p, idx) => [p.index ?? idx, p.x, p.y, p.diameter ?? "N/A"]),
-                        ]
-                          .map((row) => row.join(","))
-                          .join("\n")
-
-                        const blob = new Blob([csv], { type: "text/csv" })
-                        const url = URL.createObjectURL(blob)
-                        const a = document.createElement("a")
-                        a.href = url
-                        a.download = `gated_population_${new Date().toISOString().slice(0, 10)}.csv`
-                        document.body.appendChild(a)
-                        a.click()
-                        document.body.removeChild(a)
-                        URL.revokeObjectURL(url)
-                        toast({
-                          title: "Export Complete",
-                          description: `Exported ${indices.length} events to CSV`,
-                        })
-                      }}
+                      onExportSelection={handleExportSelection}
                     />
                   </div>
                 </div>

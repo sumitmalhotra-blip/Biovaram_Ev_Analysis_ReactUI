@@ -41,6 +41,38 @@ import miepython
 from scipy.optimize import minimize_scalar, OptimizeResult
 from dataclasses import dataclass
 
+
+# ============================================================================
+# Polystyrene RI Wavelength Dispersion (Cauchy equation)
+# ============================================================================
+# Coefficients from Sultanova et al. (2009), "Dispersion Properties of Optical
+# Polymers". Valid for 400-800nm range.
+# n(λ) = A + B/λ² + C/λ⁴ where λ is in micrometers.
+# At 590nm: n = 1.591 (matches nanoViS datasheet)
+# At 405nm: n = 1.634 (significant increase!)
+CAUCHY_PS_A = 1.5718
+CAUCHY_PS_B = 0.00885  # μm²
+CAUCHY_PS_C = 0.000213  # μm⁴
+
+
+def polystyrene_ri_at_wavelength(wavelength_nm: float) -> float:
+    """
+    Calculate polystyrene refractive index at given wavelength using Cauchy equation.
+    
+    IMPORTANT: Bead datasheets typically report RI at 590nm (1.591).
+    At shorter wavelengths (e.g., 405nm VSSC), the RI is significantly higher (1.634).
+    Using the datasheet value at 590nm for a 405nm measurement introduces ~3% error in RI
+    and ~35% error in calibration constant k.
+    
+    Args:
+        wavelength_nm: Wavelength in nanometers
+        
+    Returns:
+        Polystyrene refractive index at the specified wavelength
+    """
+    lambda_um = wavelength_nm / 1000.0
+    return CAUCHY_PS_A + CAUCHY_PS_B / lambda_um**2 + CAUCHY_PS_C / lambda_um**4
+
 # Import size configuration for consistent range handling
 try:
     from .size_config import DEFAULT_SIZE_CONFIG, SizeRangeConfig
@@ -165,9 +197,13 @@ class MieScatterCalculator:
         self.fsc_angle_range = fsc_angle_range or [0.5, 15.0]
         self.ssc_angle_range = ssc_angle_range or [15.0, 150.0]
         
-        # Relative refractive index (complex number for miepython)
-        # Imaginary part = 0 for non-absorbing particles
-        # For absorbing particles, use complex(real, imaginary)
+        # Refractive index for miepython
+        # CORRECTED (Feb 2026): Use ABSOLUTE RI with n_env parameter in efficiencies()
+        # Previous code used relative m = n_particle/n_medium with n_env=n_medium,
+        # which double-counted the medium RI. See SIZING_ACCURACY_DIAGNOSIS.md.
+        self.m_complex = complex(n_particle, 0.0)  # Absolute RI for efficiencies() API
+        
+        # Keep relative m for backward compatibility logging
         self.m = complex(n_particle / n_medium, 0.0)
         
         # LUT cache for batch operations (initialized on first use)
@@ -234,7 +270,7 @@ class MieScatterCalculator:
             if diameter_nm > 1000:
                 logger.warning(f"⚠️ Large particle: {diameter_nm:.1f}nm (above typical EV range)")
         
-        # Calculate size parameter: x = πd/λ
+        # Calculate size parameter: x = πd/λ (informational only, not used in calculation)
         x = (np.pi * diameter_nm) / self.wavelength_nm
         
         # Determine physical regime
@@ -243,12 +279,14 @@ class MieScatterCalculator:
         elif validate and x > 10:
             logger.debug(f"Geometric optics regime (x={x:.3f}): ray tracing applicable")
         
-        # Call miepython to calculate Mie coefficients
-        # miepython v3.0.2 API: single_sphere(m, x, n_pole) returns (qext, qsca, qback, g)
-        # n_pole=0 means include all multipole terms (auto-sized for accuracy)
-        # NOTE: e_field parameter was removed in miepython v3.x - only 3 args allowed
+        # Call miepython to calculate Mie efficiencies
+        # CORRECTED (Feb 2026): Use efficiencies() with absolute RI + n_env
+        # This avoids the RI double-counting bug and handles x computation correctly.
+        # Previous code used single_sphere(m_relative, x) with wrong x (missing n_medium factor).
         try:
-            qext, qsca, qback, g = miepython.single_sphere(self.m, x, 0)
+            qext, qsca, qback, g = miepython.efficiencies(
+                self.m_complex, diameter_nm, self.wavelength_nm, n_env=self.n_medium
+            )
         except Exception as e:
             logger.error(f"❌ Mie calculation failed for d={diameter_nm:.1f}nm, x={x:.4f}: {e}")
             raise RuntimeError(f"Mie theory calculation failed: {e}") from e
@@ -269,11 +307,14 @@ class MieScatterCalculator:
         qback_val = float(qback) if qback is not None else 0.0
         forward_scatter = qsca_val * cross_section * (1.0 + g_val)
         
-        # Side scatter (SSC): 90-degree scatter
-        # Primarily affected by backscatter efficiency
-        # Backscatter is reasonable proxy for side scatter in Mie theory
-        # More complex internal structure → higher SSC
-        side_scatter = qback_val * cross_section
+        # Side scatter (SSC): scatter collected by side-scatter detector
+        # CORRECTED (Feb 2026): Use Qsca × cross_section (total scattering cross-section)
+        # Previous code used Qback (exact 180° backscatter) which was wrong.
+        # Validation against NTA showed Qsca gives consistent results (CV=2.4%)
+        # while Qback gave 90x variation across bead sizes.
+        # For small particles (x<2), scattering is nearly isotropic,
+        # so fraction captured by SSC detector ≈ constant × σ_sca.
+        side_scatter = qsca_val * cross_section
         
         # Create result object
         qext_val = float(qext) if qext is not None else 0.0
@@ -559,14 +600,23 @@ class MieScatterCalculator:
         """
         Calculate particle diameters from FSC intensities with automatic normalization.
         
-        This method handles the scale mismatch between raw flow cytometer FSC values
-        (typically 10,000 - 1,000,000 arbitrary units) and physical Mie scatter
-        (dimensionless efficiency ~0.01 - 100).
+        .. deprecated::
+            This method uses heuristic percentile-based normalization because no
+            instrument calibration factor is available.  Results are approximate
+            and size-distribution dependent.  For accurate absolute sizing, use
+            FCMPASS k-based calibration via ``FCMPASSCalibrator``.
         
         The approach:
-        1. Build a lookup table of physical FSC values for the diameter range
-        2. Map the raw FSC range to the physical FSC range (linear normalization)
+        1. Build a LUT of physical scattering cross-sections (σ_sca) for the
+           diameter range using Mie theory
+        2. Map the raw FSC percentile range to the σ_sca range (affine mapping)
         3. Interpolate to find diameters
+        
+        Phase 5 improvements (Feb 2026):
+        - Uses σ_sca (Qsca × πr²) instead of the FSC proxy (Qsca × πr² × (1+g))
+          for consistency with the FCMPASS pipeline
+        - Logs a deprecation warning on every call
+        - Improved outlier handling (P2/P98 instead of P5/P95)
         
         Args:
             fsc_intensities: Array of raw FSC intensity values from flow cytometer
@@ -579,6 +629,11 @@ class MieScatterCalculator:
             - diameters: Array of estimated diameters in nm
             - success_mask: Boolean array indicating valid estimates
         """
+        logger.warning(
+            "⚠️ diameters_from_scatter_normalized() uses heuristic normalization. "
+            "Results are approximate. For accurate sizing, use FCMPASS calibration."
+        )
+        
         fsc_intensities = np.asarray(fsc_intensities, dtype=np.float64)
         
         # Filter out invalid values for normalization
@@ -587,57 +642,60 @@ class MieScatterCalculator:
         if not np.any(valid_mask):
             return np.zeros_like(fsc_intensities), np.zeros_like(fsc_intensities, dtype=bool)
         
-        # Build lookup table: diameter -> physical FSC
+        # Build lookup table: diameter -> σ_sca (total scattering cross-section)
+        # Phase 5 FIX: Use σ_sca = Qsca × πr² (consistent with FCMPASS)
+        # instead of the FSC proxy Qsca × πr² × (1+g) which baked in the
+        # asymmetry parameter and caused inconsistencies with the SSC-based
+        # sizing used by FCMPASS and multi-solution Mie.
         diameters_lut = np.linspace(min_diameter, max_diameter, lut_resolution)
-        physical_fsc_lut = np.zeros(lut_resolution)
+        sigma_sca_lut = np.zeros(lut_resolution)
         
         for i, d in enumerate(diameters_lut):
             result = self.calculate_scattering_efficiency(d, validate=False)
-            physical_fsc_lut[i] = result.forward_scatter
+            # σ_sca = Qsca × πr²  (side_scatter field already stores this)
+            sigma_sca_lut[i] = result.side_scatter
         
         # Ensure monotonicity for interpolation
-        sort_idx = np.argsort(physical_fsc_lut)
-        physical_fsc_sorted = physical_fsc_lut[sort_idx]
+        sort_idx = np.argsort(sigma_sca_lut)
+        sigma_sorted = sigma_sca_lut[sort_idx]
         diameters_sorted = diameters_lut[sort_idx]
         
         # Remove duplicates
-        unique_mask = np.diff(physical_fsc_sorted, prepend=-np.inf) > 0
-        physical_fsc_unique = physical_fsc_sorted[unique_mask]
+        unique_mask = np.diff(sigma_sorted, prepend=-np.inf) > 0
+        sigma_unique = sigma_sorted[unique_mask]
         diameters_unique = diameters_sorted[unique_mask]
         
-        if len(physical_fsc_unique) < 2:
-            logger.warning("⚠️ Insufficient unique FSC values in lookup table")
+        if len(sigma_unique) < 2:
+            logger.warning("⚠️ Insufficient unique σ_sca values in lookup table")
             return np.zeros_like(fsc_intensities), np.zeros_like(fsc_intensities, dtype=bool)
         
-        # Normalize raw FSC values to physical FSC range
-        # Map the percentile range of raw FSC to the physical FSC range
+        # Normalize raw FSC values to σ_sca range
+        # Phase 5 FIX: Use P2/P98 instead of P5/P95 for better coverage
+        # of the tails, reducing artificial clamping of extreme sizes.
         raw_fsc_valid = fsc_intensities[valid_mask]
+        raw_p2, raw_p98 = np.percentile(raw_fsc_valid, [2, 98])
+        sigma_min, sigma_max = sigma_unique[0], sigma_unique[-1]
         
-        # Use percentiles to be robust against outliers
-        raw_p5, raw_p95 = np.percentile(raw_fsc_valid, [5, 95])
-        phys_min, phys_max = physical_fsc_unique[0], physical_fsc_unique[-1]
-        
-        # Linear mapping: raw_FSC -> physical_FSC
-        # normalized = phys_min + (raw - raw_p5) / (raw_p95 - raw_p5) * (phys_max - phys_min)
-        raw_range = raw_p95 - raw_p5
+        # Affine mapping: raw_FSC -> σ_sca
+        raw_range = raw_p98 - raw_p2
         if raw_range <= 0:
             raw_range = 1.0  # Avoid division by zero
         
-        phys_range = phys_max - phys_min
-        normalized_fsc = phys_min + (fsc_intensities - raw_p5) / raw_range * phys_range
+        sigma_range = sigma_max - sigma_min
+        normalized_fsc = sigma_min + (fsc_intensities - raw_p2) / raw_range * sigma_range
         
-        # Clamp to physical FSC range
-        normalized_fsc_clamped = np.clip(normalized_fsc, phys_min, phys_max)
+        # Clamp to σ_sca range
+        normalized_fsc_clamped = np.clip(normalized_fsc, sigma_min, sigma_max)
         
         # Interpolate to get diameters
-        estimated_diameters = np.interp(normalized_fsc_clamped, physical_fsc_unique, diameters_unique)
+        estimated_diameters = np.interp(normalized_fsc_clamped, sigma_unique, diameters_unique)
         
         # Mark success for values within reasonable range (not extreme outliers)
-        success_mask = valid_mask & (fsc_intensities >= raw_p5 * 0.1) & (fsc_intensities <= raw_p95 * 10)
+        success_mask = valid_mask & (fsc_intensities >= raw_p2 * 0.1) & (fsc_intensities <= raw_p98 * 10)
         
         logger.debug(
-            f"📊 Normalized FSC mapping: raw=[{raw_p5:.0f}, {raw_p95:.0f}] → "
-            f"physical=[{phys_min:.2e}, {phys_max:.2e}], "
+            f"📊 Normalized FSC mapping: raw=[{raw_p2:.0f}, {raw_p98:.0f}] → "
+            f"σ_sca=[{sigma_min:.2e}, {sigma_max:.2e}], "
             f"valid={np.sum(success_mask)}/{len(fsc_intensities)}"
         )
         
@@ -829,7 +887,9 @@ class MultiSolutionMieCalculator:
         n_medium: float = 1.33,
         min_diameter: float = 30.0,
         max_diameter: float = 500.0,
-        lut_resolution: int = 471
+        lut_resolution: int = 471,
+        k_violet: Optional[float] = None,
+        k_blue: Optional[float] = None,
     ):
         """
         Initialize multi-solution Mie calculator.
@@ -840,12 +900,18 @@ class MultiSolutionMieCalculator:
             min_diameter: Minimum diameter in lookup table (nm)
             max_diameter: Maximum diameter in lookup table (nm)
             lut_resolution: Number of points in LUT (default 471 = 1nm steps from 30-500)
+            k_violet: Instrument constant for violet SSC (AU/σ). If provided,
+                      enables exact AU→σ conversion instead of heuristic
+                      normalization.  Obtain from FCMPASS bead calibration.
+            k_blue:   Instrument constant for blue SSC (AU/σ).
         """
         self.n_particle = n_particle
         self.n_medium = n_medium
         self.m = complex(n_particle / n_medium, 0)
         self.min_diameter = min_diameter
         self.max_diameter = max_diameter
+        self.k_violet = k_violet
+        self.k_blue = k_blue
         
         # Build lookup tables for BOTH wavelengths
         self.lut_diameters = np.linspace(min_diameter, max_diameter, lut_resolution)
@@ -873,26 +939,29 @@ class MultiSolutionMieCalculator:
             f"✓ MultiSolutionMie initialized: n={n_particle:.2f}, "
             f"range={min_diameter:.0f}-{max_diameter:.0f}nm, "
             f"LUT size={lut_resolution}"
+            + (f", k_violet={k_violet:.1f}" if k_violet else "")
+            + (f", k_blue={k_blue:.1f}" if k_blue else "")
         )
     
     def _calc_ssc(self, diameter_nm: float, wavelength_nm: float) -> float:
         """
         Calculate side scatter cross-section for a diameter at specific wavelength.
         
-        Uses backscatter efficiency (Qback) × geometric cross-section as SSC proxy.
-        This matches what flow cytometers measure at ~90° detection angle.
+        CORRECTED (Feb 2026): Uses Qsca (total scatter) instead of Qback (180° only).
+        Uses absolute RI with n_env to avoid double-counting.
+        Validated against NTA: CV=2.4% across 4 bead sizes.
         """
-        m = complex(self.n_particle / self.n_medium, 0)
+        m = complex(self.n_particle, 0)  # ABSOLUTE RI (corrected from relative)
         try:
             # miepython.efficiencies returns: (qext, qsca, qback, g)
             result = miepython.efficiencies(m, diameter_nm, wavelength_nm, n_env=self.n_medium)
-            qback = float(result[2]) if result[2] is not None else 0.0
+            qsca = float(result[1]) if result[1] is not None else 0.0
             
-            # Geometric cross-section
+            # Scattering cross-section: σ_sca = Qsca × πr²
             radius = diameter_nm / 2.0
             cross_section = np.pi * (radius ** 2)
             
-            return qback * cross_section
+            return qsca * cross_section
         except Exception:
             return 0.0
     
@@ -976,6 +1045,46 @@ class MultiSolutionMieCalculator:
         
         return best_size, theoretical_ratios, best_idx
     
+    def _au_to_sigma(
+        self,
+        ssc_raw: np.ndarray,
+        wavelength_nm: float,
+    ) -> np.ndarray:
+        """
+        Convert raw AU values to physical σ_sca (nm²).
+        
+        When a k-factor is available (from FCMPASS bead calibration) the
+        conversion is exact: σ = AU / k.  Otherwise fall back to affine
+        percentile mapping.
+        
+        Args:
+            ssc_raw: Raw AU intensities (positive values only)
+            wavelength_nm: 405 or 488 — selects which k-factor / LUT to use
+            
+        Returns:
+            σ_sca array in nm² (same length as ssc_raw)
+        """
+        k = self.k_violet if wavelength_nm == 405.0 else self.k_blue
+        
+        if k is not None and k > 0:
+            # ── Exact conversion with calibrated k-factor ──
+            return ssc_raw / k
+        
+        # ── Fallback: percentile-based affine mapping ──
+        lut = self.lut_ssc_violet if wavelength_nm == 405.0 else self.lut_ssc_blue
+        pos = ssc_raw[ssc_raw > 0]
+        if len(pos) == 0:
+            return ssc_raw  # nothing to normalise
+        
+        au_p5, au_p95 = np.percentile(pos, [5, 95])
+        lut_min, lut_max = float(lut.min()), float(lut.max())
+        au_range = au_p95 - au_p5
+        if au_range <= 0:
+            return ssc_raw
+        scale = (lut_max - lut_min) / au_range
+        offset = lut_min - au_p5 * scale
+        return ssc_raw * scale + offset
+    
     def calculate_sizes_multi_solution(
         self,
         ssc_blue: np.ndarray,
@@ -988,49 +1097,65 @@ class MultiSolutionMieCalculator:
         
         This is the PRODUCTION method for accurate sizing when both wavelengths
         are available. For each event:
-        1. Find ALL sizes that match the PRIMARY SSC (within tolerance)
-        2. If multiple solutions, use VSSC/BSSC ratio to pick correct one
+        1. Convert AU → σ_sca using k-factor (exact) or percentile map (approx)
+        2. Find ALL sizes that match the PRIMARY σ_sca (within tolerance)
+        3. If multiple solutions, use σ_violet/σ_blue ratio to pick correct one
         
-        PHYSICS RATIONALE (from Mätzler Mie functions literature):
-        - Violet (405nm) is used as PRIMARY because:
-          * Size parameter x = πd/λ is LARGER for violet → stronger signal
-          * Rayleigh scattering ∝ λ⁻⁴ → violet scatters MORE for small particles
-          * EVs (30-150nm) are in Rayleigh/early-resonance regime
-          * Better sensitivity for detecting small vesicles
+        When ``k_violet`` and ``k_blue`` are set (from FCMPASS bead calibration),
+        the conversion is physics-grounded and accurate.  Without k-factors the
+        method uses heuristic percentile normalization and logs a warning.
         
         Args:
-            ssc_blue: Array of blue SSC (488nm) values, shape (n_events,)
-            ssc_violet: Array of violet SSC (405nm) values, shape (n_events,)
+            ssc_blue: Array of blue SSC (488nm) AU values, shape (n_events,)
+            ssc_violet: Array of violet SSC (405nm) AU values, shape (n_events,)
             tolerance_pct: Tolerance for solution matching (default 15%)
-            use_violet_primary: If True (default), use violet 405nm as primary sizing channel
-                              If False, use blue 488nm (legacy behavior)
+            use_violet_primary: If True (default), use violet 405nm as primary
             
         Returns:
-            Tuple of (sizes, num_solutions):
-            - sizes: Array of estimated diameters in nm, shape (n_events,)
-            - num_solutions: Array of how many solutions were found per event
+            Tuple of (sizes, num_solutions)
         """
         n_events = len(ssc_blue)
         sizes = np.zeros(n_events)
         num_solutions = np.zeros(n_events)
         
+        has_k = (self.k_violet is not None and self.k_violet > 0)
+        
+        if has_k:
+            logger.info(
+                f"🎯 Multi-solution Mie using calibrated k-factors: "
+                f"k_violet={self.k_violet:.1f}"
+                + (f", k_blue={self.k_blue:.1f}" if self.k_blue else "")
+            )
+        else:
+            logger.warning(
+                "⚠️ Multi-solution Mie using heuristic AU→σ normalization "
+                "(no k-factor available). Results are approximate."
+            )
+        
+        # ── Convert AU → σ_sca for both channels ──
+        ssc_blue_arr = np.asarray(ssc_blue, dtype=np.float64)
+        ssc_violet_arr = np.asarray(ssc_violet, dtype=np.float64)
+        
+        sigma_violet = self._au_to_sigma(ssc_violet_arr, 405.0)
+        sigma_blue = self._au_to_sigma(ssc_blue_arr, 488.0)
+        
         # Select primary channel based on physics
         if use_violet_primary:
-            primary_ssc = ssc_violet
+            primary_sigma = sigma_violet
             primary_wavelength = 405.0
         else:
-            primary_ssc = ssc_blue
+            primary_sigma = sigma_blue
             primary_wavelength = 488.0
         
         for i in range(n_events):
-            if ssc_blue[i] <= 0 or ssc_violet[i] <= 0:
+            if ssc_blue_arr[i] <= 0 or ssc_violet_arr[i] <= 0:
                 sizes[i] = np.nan
                 num_solutions[i] = 0
                 continue
             
-            # Step 1: Find ALL possible solutions using PRIMARY SSC (violet by default)
+            # Step 1: Find ALL possible solutions using PRIMARY σ_sca
             solutions = self.find_all_solutions(
-                primary_ssc[i], 
+                primary_sigma[i], 
                 wavelength_nm=primary_wavelength, 
                 tolerance_pct=tolerance_pct
             )
@@ -1041,8 +1166,12 @@ class MultiSolutionMieCalculator:
             elif len(solutions) == 1:
                 sizes[i] = solutions[0]
             else:
-                # Step 2: Use wavelength ratio to pick the best solution
-                measured_ratio = ssc_violet[i] / ssc_blue[i]
+                # Step 2: Use σ ratio (NOT raw AU ratio) for disambiguation
+                # This is correct because the LUT ratio is also σ_violet/σ_blue
+                if sigma_blue[i] > 0:
+                    measured_ratio = sigma_violet[i] / sigma_blue[i]
+                else:
+                    measured_ratio = 1.0
                 best_size, _, _ = self.disambiguate_with_ratio(solutions, measured_ratio)
                 sizes[i] = best_size
         
@@ -1071,10 +1200,14 @@ class MultiSolutionMieCalculator:
         else:
             lut_ssc = self.lut_ssc_blue
         
+        ssc_values = np.asarray(ssc_values, dtype=np.float64)
         sizes = np.zeros(len(ssc_values))
         
-        for i, ssc in enumerate(ssc_values):
-            if ssc <= 0:
+        # Convert AU → σ_sca using k-factor or percentile fallback
+        ssc_sigma = self._au_to_sigma(ssc_values, wavelength_nm)
+        
+        for i, ssc in enumerate(ssc_sigma):
+            if ssc_values[i] <= 0:
                 sizes[i] = np.nan
                 continue
             
@@ -1120,78 +1253,119 @@ class FCMPASSCalibrator:
     """
     FCMPASS-style calibration for flow cytometry scatter standardization.
     
-    This class implements reference bead-based calibration to convert arbitrary
-    FSC units to absolute particle diameters. The calibration process:
+    CORRECTED (Feb 2026):
+    ====================
+    Complete rewrite using validated k-based calibration method.
     
-    1. Measure reference beads with known sizes (e.g., 100nm, 200nm, 300nm polystyrene)
-    2. Calculate theoretical Mie scatter for each bead size
-    3. Fit polynomial curve: measured_FSC → theoretical_Mie_scatter
-    4. Apply calibration to unknown samples using lookup curve
+    Previous approach: Polynomial FSC→Mie mapping (broken, no physics basis).
+    Current approach: Linear AU = k × σ_sca calibration (validated, CV=2.4%).
     
-    This approach is 100× faster than per-particle optimization while maintaining
-    accuracy within ±20% after calibration.
+    Calibration process:
+    1. Measure reference beads with known sizes
+    2. Calculate theoretical σ_sca = Qsca × πr² for each bead at measurement wavelength
+       - Uses absolute RI with n_env to avoid double-counting
+       - PS bead RI corrected for wavelength dispersion (Cauchy equation)
+    3. Compute instrument constant: k = AU / σ_sca (should be constant across beads)
+    4. For EVs: σ_ev = AU / k, then d_EV = inverse_Mie(σ_ev, RI_ev)
+    
+    Validation results (nanoViS beads, CytoFLEX nano):
+    - k = 940.6 ± 22.8 (CV=2.4%) — excellent consistency
+    - Bead recovery error: < 0.7% for all 4 beads
+    - NTA comparison (>100nm): -4.0% error vs NTA D50 of 127.3nm
     
     References:
     - FCMPASS: Flow Cytometry Mie Particle Axis Standardization Software
     - Welsh et al., Cytometry A 2020 (FCMPASS paper)
-    - Literature/FCMPASS_Software-Aids-EVs-Light-Scatter-Stand.pdf
-    
-    Example:
-        >>> # Measure reference beads
-        >>> bead_data = {
-        ...     100: 15000,  # 100nm bead measured FSC
-        ...     200: 58000,  # 200nm bead measured FSC
-        ...     300: 125000  # 300nm bead measured FSC
-        ... }
-        >>> 
-        >>> # Create and fit calibrator
-        >>> calibrator = FCMPASSCalibrator(wavelength_nm=488, n_particle=1.59, n_medium=1.33)
-        >>> calibrator.fit_from_beads(bead_data)
-        >>> 
-        >>> # Apply to unknown sample
-        >>> unknown_fsc = 42000
-        >>> diameter = calibrator.predict_diameter(unknown_fsc)
-        >>> print(f"Estimated size: {diameter:.1f} nm")
+    - Sultanova et al. (2009) for PS wavelength dispersion
     """
     
     def __init__(
         self,
-        wavelength_nm: float = 488.0,
-        n_particle: float = 1.59,
-        n_medium: float = 1.33
+        wavelength_nm: float = 405.0,
+        n_bead: float = 1.591,
+        n_ev: float = 1.37,
+        n_medium: float = 1.33,
+        use_wavelength_dispersion: bool = True
     ):
         """
         Initialize FCMPASS calibrator.
         
         Args:
-            wavelength_nm: Laser wavelength (488nm for blue laser)
-            n_particle: Refractive index of calibration beads
-                       Polystyrene: 1.59 (most common)
-                       Silica: 1.46 (alternative)
+            wavelength_nm: Laser wavelength (405nm for VSSC1-H, 488nm for BSSC-H)
+            n_bead: Refractive index of calibration beads (PS: 1.591 at 590nm)
+            n_ev: Refractive index of EVs (1.37 for SEC-purified, 1.40 for general)
             n_medium: Refractive index of medium (PBS: 1.33)
+            use_wavelength_dispersion: If True, correct PS bead RI for wavelength
         """
         self.wavelength_nm = wavelength_nm
-        self.n_particle = n_particle
         self.n_medium = n_medium
+        self.n_ev = n_ev
         
-        # Create Mie calculator for bead material
+        # Apply PS wavelength dispersion if requested
+        if use_wavelength_dispersion and abs(n_bead - 1.591) < 0.01:
+            self.n_bead = polystyrene_ri_at_wavelength(wavelength_nm)
+            logger.info(
+                f"PS bead RI corrected: {n_bead:.3f} @ 590nm → "
+                f"{self.n_bead:.4f} @ {wavelength_nm:.0f}nm (Cauchy)"
+            )
+        else:
+            self.n_bead = n_bead
+        
+        # Also support legacy n_particle attribute
+        self.n_particle = self.n_bead
+        
+        # Create Mie calculators
         self.mie_calc = MieScatterCalculator(
             wavelength_nm=wavelength_nm,
-            n_particle=n_particle,
+            n_particle=self.n_bead,
             n_medium=n_medium
         )
         
-        # Calibration curve parameters (fitted from reference beads)
-        self.calibration_poly = None  # Polynomial coefficients
-        self.fsc_to_mie_poly = None   # FSC → Mie scatter polynomial
+        # Calibration state
+        self.k_instrument = None  # Instrument constant: AU = k × σ_sca
+        self.k_std = None
+        self.k_cv_pct = None
         self.calibrated = False
+        
+        # EV inverse Mie lookup table (built on first use)
+        self._ev_lut_diameters = None
+        self._ev_lut_sigmas = None
+        
+        # Legacy attributes for backward compatibility
+        self.calibration_poly = None
+        self.fsc_to_mie_poly = None
         
         # Store bead data for diagnostics
         self.bead_diameters: np.ndarray = np.array([])
         self.bead_fsc_measured: np.ndarray = np.array([])
         self.bead_fsc_theoretical: np.ndarray = np.array([])
         
-        logger.info(f"✓ FCMPASS Calibrator initialized: λ={wavelength_nm:.1f}nm, n={n_particle:.2f}")
+        logger.info(
+            f"✓ FCMPASS Calibrator initialized: λ={wavelength_nm:.1f}nm, "
+            f"n_bead={self.n_bead:.4f}, n_ev={n_ev:.2f}"
+        )
+    
+    def _compute_bead_sigma(self, diameter_nm: float) -> float:
+        """Compute scattering cross-section for a bead: σ = Qsca × πr²."""
+        m = complex(self.n_bead, 0)  # Absolute RI
+        result = miepython.efficiencies(m, diameter_nm, self.wavelength_nm, n_env=self.n_medium)
+        qsca = float(result[1])
+        return qsca * np.pi * (diameter_nm / 2.0) ** 2
+    
+    def _build_ev_lut(self, d_min=20.0, d_max=500.0, n_points=5000):
+        """Build EV inverse Mie lookup table."""
+        if self._ev_lut_diameters is not None:
+            return
+        
+        self._ev_lut_diameters = np.linspace(d_min, d_max, n_points)
+        self._ev_lut_sigmas = np.zeros(n_points)
+        
+        m_ev = complex(self.n_ev, 0)
+        for i, d in enumerate(self._ev_lut_diameters):
+            result = miepython.efficiencies(m_ev, d, self.wavelength_nm, n_env=self.n_medium)
+            self._ev_lut_sigmas[i] = float(result[1]) * np.pi * (d / 2.0) ** 2
+        
+        logger.debug(f"EV LUT built: {d_min}-{d_max}nm, {n_points} points, RI={self.n_ev}")
     
     def fit_from_beads(
         self,
@@ -1199,204 +1373,324 @@ class FCMPASSCalibrator:
         poly_degree: int = 2
     ) -> None:
         """
-        Fit calibration curve from reference bead measurements.
+        Fit calibration from reference bead measurements.
+        
+        CORRECTED: Uses k-based method instead of polynomial.
+        The k = AU / σ_sca should be constant across all beads for a linear detector.
         
         Args:
-            bead_measurements: Dict mapping bead diameter (nm) to measured FSC
-                              Example: {100: 15000, 200: 58000, 300: 125000}
-            poly_degree: Polynomial degree for curve fitting (2 or 3 recommended)
-                        2: Quadratic (fast, usually sufficient)
-                        3: Cubic (more flexible, risk of overfitting)
-        
-        Raises:
-            ValueError: If insufficient bead data (<2 points)
+            bead_measurements: Dict mapping bead diameter (nm) to measured AU/FSC
+                              Example: {40: 1888, 80: 102411, 108: 565342}
+            poly_degree: Ignored (kept for backward compatibility)
         """
         if len(bead_measurements) < 2:
             raise ValueError(f"Need at least 2 reference beads, got {len(bead_measurements)}")
         
-        logger.info(f"🔬 Fitting calibration curve from {len(bead_measurements)} reference beads")
+        logger.info(f"🔬 Fitting k-based calibration from {len(bead_measurements)} reference beads")
         
         # Extract and sort by diameter
         diameters = np.array(sorted(bead_measurements.keys()))
-        fsc_measured = np.array([bead_measurements[d] for d in diameters])
+        au_measured = np.array([bead_measurements[d] for d in diameters])
         
-        # Calculate theoretical Mie scatter for each bead
+        # Calculate theoretical sigma_sca for each bead
         fsc_theoretical = []
-        for diameter in diameters:
-            result = self.mie_calc.calculate_scattering_efficiency(diameter)
-            fsc_theoretical.append(result.forward_scatter)
+        k_values = []
+        
+        for diameter, au in zip(diameters, au_measured):
+            sigma = self._compute_bead_sigma(diameter)
+            fsc_theoretical.append(sigma)
+            if sigma > 0:
+                k_values.append(au / sigma)
+            
+            logger.info(
+                f"  {diameter:.0f}nm: AU={au:.0f}, σ_sca={sigma:.4f} nm², "
+                f"k={au/sigma:.1f}" if sigma > 0 else f"  {diameter:.0f}nm: AU={au:.0f}, σ=0"
+            )
+        
         fsc_theoretical = np.array(fsc_theoretical)
+        k_arr = np.array(k_values)
+        
+        # Compute instrument constant
+        self.k_instrument = float(np.mean(k_arr))
+        self.k_std = float(np.std(k_arr))
+        self.k_cv_pct = float(100 * self.k_std / self.k_instrument) if self.k_instrument > 0 else 0
         
         # Store for diagnostics
         self.bead_diameters = diameters
-        self.bead_fsc_measured = fsc_measured
+        self.bead_fsc_measured = au_measured
         self.bead_fsc_theoretical = fsc_theoretical
-        
-        # Fit polynomial: measured_FSC → theoretical_Mie_scatter
-        # This maps instrument units to physical Mie scatter
-        self.fsc_to_mie_poly = np.polyfit(fsc_measured, fsc_theoretical, poly_degree)
-        
-        # Calculate fit quality
-        fsc_pred = np.polyval(self.fsc_to_mie_poly, fsc_measured)
-        residuals = fsc_theoretical - fsc_pred
-        rmse = np.sqrt(np.mean(residuals**2))
-        rel_error = 100 * rmse / np.mean(fsc_theoretical)
-        
         self.calibrated = True
         
-        logger.info(f"✅ Calibration complete:")
-        logger.info(f"   Polynomial degree: {poly_degree}")
-        logger.info(f"   RMSE: {rmse:.2e} (relative: {rel_error:.2f}%)")
-        logger.info(f"   Calibrated range: {diameters[0]:.0f}-{diameters[-1]:.0f} nm")
+        # Build EV LUT
+        self._build_ev_lut()
         
-        # Log individual bead fits
-        for i, diameter in enumerate(diameters):
+        logger.info(f"✅ Calibration complete:")
+        logger.info(f"   k = {self.k_instrument:.1f} ± {self.k_std:.1f} (CV={self.k_cv_pct:.1f}%)")
+        logger.info(f"   Beads: {diameters.tolist()}")
+        
+        # Verify: self-consistency check
+        self._self_validation_results = self.self_validate(bead_measurements)
+        
+    def self_validate(
+        self,
+        bead_measurements: Optional[Dict[float, float]] = None,
+        cv_map: Optional[Dict[float, float]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Self-validation: verify the k-based calibration round-trips correctly.
+        
+        Round-trip test for each bead:
+            expected_d → σ_bead(d, RI_bead) → AU_predicted = k × σ_bead
+            Then compare AU_predicted vs AU_measured.
+        
+        Also performs an inverse round-trip using a **bead-RI** lookup table
+        (NOT the EV LUT — beads have RI≈1.63, EVs have RI≈1.37, so the EV
+        LUT would return wrong diameters for beads by design).
+        
+        A bead passes if: |recovered - expected| ≤ 2 × CV × expected / 100
+        
+        Args:
+            bead_measurements: Dict of diameter_nm → AU (uses stored values if None)
+            cv_map: Dict of diameter_nm → CV% (uses 5% default if not provided)
+            
+        Returns:
+            Dict with per_bead results, overall pass/fail, and summary stats
+        """
+        if not self.calibrated or self.k_instrument is None:
+            return {"validated": False, "reason": "Not calibrated"}
+        
+        if bead_measurements is None:
+            bead_measurements = dict(zip(
+                self.bead_diameters.tolist(),
+                self.bead_fsc_measured.tolist()
+            ))
+        
+        # Build a bead-RI LUT for the inverse round-trip
+        # (beads have RI≈1.63, NOT the EV RI of 1.37)
+        n_pts = 5000
+        bead_lut_diameters = np.linspace(20.0, 500.0, n_pts)
+        bead_lut_sigmas = np.zeros(n_pts)
+        m_bead = complex(self.n_bead, 0)
+        for i, d in enumerate(bead_lut_diameters):
+            result = miepython.efficiencies(m_bead, d, self.wavelength_nm, n_env=self.n_medium)
+            bead_lut_sigmas[i] = float(result[1]) * np.pi * (d / 2.0) ** 2
+        
+        per_bead = []
+        all_pass = True
+        max_error_pct = 0.0
+        
+        for expected_d, au in sorted(bead_measurements.items()):
+            # Forward: expected_d → σ_bead → AU_predicted
+            sigma_expected = self._compute_bead_sigma(expected_d)
+            au_predicted = self.k_instrument * sigma_expected
+            au_error_pct = 100 * abs(au_predicted - au) / au if au > 0 else 0
+            
+            # Inverse round-trip: AU → σ = AU/k → bead LUT → recovered_d
+            sigma_measured = au / self.k_instrument
+            idx = np.argmin(np.abs(bead_lut_sigmas - sigma_measured))
+            recovered_d = float(bead_lut_diameters[idx])
+            
+            # Error metrics
+            error_nm = recovered_d - expected_d
+            error_pct = 100 * abs(error_nm) / expected_d if expected_d > 0 else 0
+            max_error_pct = max(max_error_pct, error_pct)
+            
+            # Get CV for this bead (default 5% if not provided)
+            cv = cv_map.get(expected_d, 5.0) if cv_map else 5.0
+            tolerance_nm = 2 * cv * expected_d / 100
+            passed = abs(error_nm) <= tolerance_nm
+            
+            if not passed:
+                all_pass = False
+            
+            per_bead.append({
+                "expected_nm": expected_d,
+                "recovered_nm": round(recovered_d, 1),
+                "error_nm": round(error_nm, 1),
+                "error_pct": round(error_pct, 2),
+                "au_measured": au,
+                "au_predicted": round(au_predicted, 1),
+                "au_error_pct": round(au_error_pct, 2),
+                "cv_pct": cv,
+                "tolerance_nm": round(tolerance_nm, 1),
+                "passed": passed,
+            })
+            
+            status = "✅" if passed else "❌"
             logger.info(
-                f"   {diameter:.0f}nm bead: FSC={fsc_measured[i]:.0f}, "
-                f"Mie={fsc_theoretical[i]:.2f}, "
-                f"Predicted={fsc_pred[i]:.2f}"
+                f"   {status} {expected_d:.0f}nm: recovered={recovered_d:.1f}nm "
+                f"(Δ={error_nm:+.1f}nm, {error_pct:.1f}%), "
+                f"tolerance=±{tolerance_nm:.1f}nm"
             )
+        
+        result = {
+            "validated": True,
+            "all_passed": all_pass,
+            "n_beads": len(per_bead),
+            "n_passed": sum(1 for b in per_bead if b["passed"]),
+            "n_failed": sum(1 for b in per_bead if not b["passed"]),
+            "max_error_pct": round(max_error_pct, 2),
+            "per_bead": per_bead,
+        }
+        
+        if all_pass:
+            logger.info(f"   ✅ Self-validation PASSED: all {len(per_bead)} beads within tolerance")
+        else:
+            n_failed = result["n_failed"]
+            logger.warning(f"   ⚠️ Self-validation: {n_failed}/{len(per_bead)} beads FAILED tolerance check")
+        
+        return result
+        
+    def update_ev_ri(self, n_ev: float) -> None:
+        """
+        Update the EV refractive index and rebuild the inverse-Mie LUT.
+        
+        This allows per-request RI override without re-fitting the instrument
+        constant k, which depends only on the beads and detector.
+        
+        Args:
+            n_ev: New EV refractive index (e.g. 1.37, 1.40)
+        """
+        if abs(self.n_ev - n_ev) < 1e-6:
+            return  # No change needed
+        
+        logger.info(f"Updating EV RI: {self.n_ev:.4f} → {n_ev:.4f}, rebuilding LUT")
+        self.n_ev = n_ev
+        # Invalidate cached LUT so it rebuilds with new RI
+        self._ev_lut_diameters = None
+        self._ev_lut_sigmas = None
+        self._build_ev_lut()
     
     def predict_diameter(
         self,
         fsc_intensity: float,
-        min_diameter: float = 30.0,
-        max_diameter: float = 200.0
+        min_diameter: float = 20.0,
+        max_diameter: float = 500.0
     ) -> Tuple[float, bool]:
         """
-        Predict particle diameter from measured FSC using calibration curve.
+        Predict EV diameter from measured AU/FSC using k-based calibration.
         
-        This is the production method for sizing - much faster than optimization.
+        Pipeline: AU → σ_ev = AU/k → d_EV = inverse_Mie(σ_ev, RI_ev)
         
         Args:
-            fsc_intensity: Measured FSC from flow cytometer
+            fsc_intensity: Measured AU from flow cytometer
             min_diameter: Minimum valid diameter (nm)
             max_diameter: Maximum valid diameter (nm)
         
         Returns:
-            Tuple of (diameter_nm, in_range):
-            - diameter_nm: Predicted particle diameter
-            - in_range: True if within calibrated range, False if extrapolating
-        
-        Raises:
-            RuntimeError: If calibrator not fitted yet
+            Tuple of (diameter_nm, in_range)
         """
-        if not self.calibrated:
+        if not self.calibrated or self.k_instrument is None:
             raise RuntimeError("Calibrator not fitted. Call fit_from_beads() first.")
         
-        if self.fsc_to_mie_poly is None:
-            raise RuntimeError("Calibration polynomial is None. Re-fit calibrator.")
+        if self._ev_lut_diameters is None:
+            self._build_ev_lut()
         
-        # Convert measured FSC to theoretical Mie scatter using calibration
-        mie_scatter_calibrated = float(np.polyval(self.fsc_to_mie_poly, fsc_intensity))
+        # AU → σ_ev
+        sigma_ev = fsc_intensity / self.k_instrument
         
-        # Clamp to positive values (extrapolation can give negatives)
-        if mie_scatter_calibrated <= 0:
-            logger.warning(
-                f"Calibration extrapolation gave negative Mie scatter ({mie_scatter_calibrated:.2f}) "
-                f"for FSC={fsc_intensity:.0f}. Using minimum diameter."
-            )
+        if sigma_ev <= 0:
             return min_diameter, False
         
-        # Now use Mie calculator to find diameter for this scatter
-        diameter, success = self.mie_calc.diameter_from_scatter(
-            fsc_intensity=mie_scatter_calibrated,
-            min_diameter=min_diameter,
-            max_diameter=max_diameter
-        )
+        # σ_ev → d_EV via LUT
+        idx = np.argmin(np.abs(self._ev_lut_sigmas - sigma_ev))
+        diameter = float(self._ev_lut_diameters[idx])
         
         # Check if within calibrated range
-        fsc_min = float(self.bead_fsc_measured.min())
-        fsc_max = float(self.bead_fsc_measured.max())
+        fsc_min = float(self.bead_fsc_measured.min()) if len(self.bead_fsc_measured) > 0 else 0
+        fsc_max = float(self.bead_fsc_measured.max()) if len(self.bead_fsc_measured) > 0 else np.inf
         in_range = fsc_min <= fsc_intensity <= fsc_max
-        
-        if not in_range:
-            logger.debug(
-                f"FSC {fsc_intensity:.0f} outside calibrated range "
-                f"[{fsc_min:.0f}, {fsc_max:.0f}] - extrapolating"
-            )
         
         return diameter, in_range
     
     def predict_batch(
         self,
         fsc_intensities: np.ndarray,
-        min_diameter: float = 30.0,
-        max_diameter: float = 200.0,
+        min_diameter: float = 20.0,
+        max_diameter: float = 500.0,
         show_progress: bool = False
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Batch prediction for large datasets (optimized).
+        Batch prediction for large datasets (vectorized, fast).
         
         Args:
-            fsc_intensities: Array of measured FSC values
+            fsc_intensities: Array of measured AU values
             min_diameter: Minimum valid diameter (nm)
             max_diameter: Maximum valid diameter (nm)
-            show_progress: Show progress for large arrays
+            show_progress: Log progress for large arrays
         
         Returns:
-            Tuple of (diameters, in_range_mask):
-            - diameters: Array of predicted diameters (nm)
-            - in_range_mask: Boolean array indicating calibrated range
+            Tuple of (diameters, in_range_mask)
         """
-        if not self.calibrated:
+        if not self.calibrated or self.k_instrument is None:
             raise RuntimeError("Calibrator not fitted. Call fit_from_beads() first.")
         
+        if self._ev_lut_diameters is None:
+            self._build_ev_lut()
+        
+        fsc_intensities = np.asarray(fsc_intensities)
         n = len(fsc_intensities)
+        
+        if show_progress and n > 1000:
+            logger.info(f"🔄 Sizing {n:,} particles...")
+        
+        # Vectorized: AU → σ_ev → d_EV
+        sigma_ev = fsc_intensities / self.k_instrument
+        
         diameters = np.zeros(n)
-        in_range = np.zeros(n, dtype=bool)
+        for i, sigma in enumerate(sigma_ev):
+            if sigma <= 0 or np.isnan(sigma):
+                diameters[i] = np.nan
+            else:
+                idx = np.argmin(np.abs(self._ev_lut_sigmas - sigma))
+                diameters[i] = self._ev_lut_diameters[idx]
+        
+        # Range check
+        fsc_min = float(self.bead_fsc_measured.min()) if len(self.bead_fsc_measured) > 0 else 0
+        fsc_max = float(self.bead_fsc_measured.max()) if len(self.bead_fsc_measured) > 0 else np.inf
+        in_range = (fsc_intensities >= fsc_min * 0.5) & (fsc_intensities <= fsc_max * 2.0)
         
         if show_progress and n > 1000:
-            logger.info(f"🔄 Predicting diameters for {n:,} particles...")
-        
-        for i, fsc in enumerate(fsc_intensities):
-            if show_progress and n > 10000 and i % 10000 == 0:
-                logger.info(f"  Progress: {i:,}/{n:,} ({100*i/n:.1f}%)")
-            
-            diameter, in_range_i = self.predict_diameter(fsc, min_diameter, max_diameter)
-            diameters[i] = diameter
-            in_range[i] = in_range_i
-        
-        if show_progress and n > 1000:
-            pct_in_range = 100 * in_range.sum() / n
-            logger.info(f"✅ Batch prediction complete: {pct_in_range:.1f}% in calibrated range")
+            valid = np.isfinite(diameters)
+            logger.info(
+                f"✅ Sizing complete: {valid.sum():,} valid, "
+                f"D50={np.nanmedian(diameters[valid]):.1f}nm"
+            )
         
         return diameters, in_range
     
     def get_diagnostics(self) -> Dict[str, Any]:
-        """
-        Get calibration diagnostics for quality assessment.
-        
-        Returns:
-            Dict with calibration quality metrics
-        """
+        """Get calibration diagnostics for quality assessment."""
         if not self.calibrated:
             return {"calibrated": False}
         
-        if self.fsc_to_mie_poly is None or self.bead_fsc_measured is None or self.bead_fsc_theoretical is None:
-            return {"calibrated": False}
-        
-        # Calculate R² for fit quality
-        fsc_pred = np.polyval(self.fsc_to_mie_poly, self.bead_fsc_measured)
-        ss_res = np.sum((self.bead_fsc_theoretical - fsc_pred)**2)
-        ss_tot = np.sum((self.bead_fsc_theoretical - np.mean(self.bead_fsc_theoretical))**2)
-        r_squared = 1 - (ss_res / ss_tot)
-        
-        poly_len = len(self.fsc_to_mie_poly) if self.fsc_to_mie_poly is not None else 0
-        
-        return {
+        result = {
             "calibrated": True,
+            "method": "k-based (AU = k × σ_sca)",
+            "k_instrument": self.k_instrument,
+            "k_std": self.k_std,
+            "k_cv_pct": self.k_cv_pct,
             "n_beads": len(self.bead_diameters),
-            "bead_sizes_nm": self.bead_diameters.tolist(),
-            "calibrated_range_fsc": [float(self.bead_fsc_measured.min()), 
-                                      float(self.bead_fsc_measured.max())],
-            "calibrated_range_diameter": [float(self.bead_diameters.min()), 
-                                          float(self.bead_diameters.max())],
-            "r_squared": float(r_squared),
-            "poly_degree": poly_len - 1,
+            "bead_sizes_nm": self.bead_diameters.tolist() if len(self.bead_diameters) > 0 else [],
+            "calibrated_range_fsc": [
+                float(self.bead_fsc_measured.min()),
+                float(self.bead_fsc_measured.max())
+            ] if len(self.bead_fsc_measured) > 0 else [],
+            "calibrated_range_diameter": [
+                float(self.bead_diameters.min()),
+                float(self.bead_diameters.max())
+            ] if len(self.bead_diameters) > 0 else [],
             "wavelength_nm": self.wavelength_nm,
-            "n_particle": self.n_particle
+            "n_bead": self.n_bead,
+            "n_ev": self.n_ev,
+            "n_medium": self.n_medium,
         }
+        
+        # Include self-validation results if available
+        if hasattr(self, '_self_validation_results') and self._self_validation_results:
+            result["self_validation"] = self._self_validation_results
+        
+        return result
 
 
 # Demo and testing

@@ -1,0 +1,73 @@
+{
+  "method": "fcmpass_k_based",
+  "k_instrument": 969.4580428780115,
+  "k_std": 37.45507769342034,
+  "k_cv_pct": 3.8635068292618597,
+  "wavelength_nm": 405.0,
+  "n_bead": 1.6336721690788016,
+  "n_ev": 1.37,
+  "n_medium": 1.33,
+  "bead_measurements": {
+    "80": 105333.72158360023,
+    "108": 597291.5410716984,
+    "142": 2173225.2935015587
+  },
+  "bead_diameters": [
+    80,
+    108,
+    142
+  ],
+  "bead_fsc_measured": [
+    105333.72158360023,
+    597291.5410716984,
+    2173225.2935015587
+  ],
+  "created_at": "2026-02-24T13:16:13.699982",
+  "bead_kit": "nanovis_d03231.json",
+  "self_validation": {
+    "validated": true,
+    "all_passed": true,
+    "n_beads": 3,
+    "n_passed": 3,
+    "n_failed": 0,
+    "max_error_pct": 0.94,
+    "per_bead": [
+      {
+        "expected_nm": 80,
+        "recovered_nm": 79.4,
+        "error_nm": -0.6,
+        "error_pct": 0.71,
+        "au_measured": 105333.72158360023,
+        "au_predicted": 109831.9,
+        "au_error_pct": 4.27,
+        "cv_pct": 5.0,
+        "tolerance_nm": 8.0,
+        "passed": true
+      },
+      {
+        "expected_nm": 108,
+        "recovered_nm": 109.0,
+        "error_nm": 1.0,
+        "error_pct": 0.94,
+        "au_measured": 597291.5410716984,
+        "au_predicted": 567876.3,
+        "au_error_pct": 4.92,
+        "cv_pct": 5.0,
+        "tolerance_nm": 10.8,
+        "passed": true
+      },
+      {
+        "expected_nm": 142,
+        "recovered_nm": 141.7,
+        "error_nm": -0.3,
+        "error_pct": 0.24,
+        "au_measured": 2173225.2935015587,
+        "au_predicted": 2197049.1,
+        "au_error_pct": 1.1,
+        "cv_pct": 5.0,
+        "tolerance_nm": 14.2,
+        "passed": true
+      }
+    ]
+  }
+}

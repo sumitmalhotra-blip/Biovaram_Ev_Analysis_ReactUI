@@ -1,0 +1,140 @@
+{
+  "kit_part_number": "1493",
+  "product_name": "Apogee Mix",
+  "lot_number": "generic",
+  "manufacturer": "Apogee Flow Systems",
+  "manufacture_date": null,
+  "expiration_date": null,
+  "quality_cert_date": null,
+  "storage_condition": "2-8°C, protected from light",
+  "material": "mixed_silica_polystyrene",
+  "refractive_index": null,
+  "ri_measurement_wavelength_nm": 590,
+  "ri_measurement_temperature_c": 20,
+  "size_measurement_method": "TEM",
+  "nist_traceable": false,
+  "appearance": "Milky suspension",
+  "subcomponents": {
+    "Silica_Beads": {
+      "sub_lot": "generic",
+      "description": "Apogee Mix - Silica (RI≈1.46) beads for EV-relevant calibration",
+      "overall_refractive_index": 1.46,
+      "overall_appearance": "Milky suspension",
+      "beads": [
+        {
+          "label": "110nm Si",
+          "diameter_nm": 110,
+          "diameter_um": 0.110,
+          "spec_min_um": 0.100,
+          "spec_max_um": 0.120,
+          "cv_pct": 8.0,
+          "target_concentration_ww": null,
+          "concentration_particles_per_ml": null,
+          "material": "silica",
+          "refractive_index": 1.46
+        },
+        {
+          "label": "180nm Si",
+          "diameter_nm": 180,
+          "diameter_um": 0.180,
+          "spec_min_um": 0.165,
+          "spec_max_um": 0.195,
+          "cv_pct": 5.0,
+          "target_concentration_ww": null,
+          "concentration_particles_per_ml": null,
+          "material": "silica",
+          "refractive_index": 1.46
+        },
+        {
+          "label": "240nm Si",
+          "diameter_nm": 240,
+          "diameter_um": 0.240,
+          "spec_min_um": 0.225,
+          "spec_max_um": 0.255,
+          "cv_pct": 5.0,
+          "target_concentration_ww": null,
+          "concentration_particles_per_ml": null,
+          "material": "silica",
+          "refractive_index": 1.46
+        },
+        {
+          "label": "300nm Si",
+          "diameter_nm": 300,
+          "diameter_um": 0.300,
+          "spec_min_um": 0.280,
+          "spec_max_um": 0.320,
+          "cv_pct": 5.0,
+          "target_concentration_ww": null,
+          "concentration_particles_per_ml": null,
+          "material": "silica",
+          "refractive_index": 1.46
+        },
+        {
+          "label": "590nm Si",
+          "diameter_nm": 590,
+          "diameter_um": 0.590,
+          "spec_min_um": 0.560,
+          "spec_max_um": 0.620,
+          "cv_pct": 3.0,
+          "target_concentration_ww": null,
+          "concentration_particles_per_ml": null,
+          "material": "silica",
+          "refractive_index": 1.46
+        },
+        {
+          "label": "880nm Si",
+          "diameter_nm": 880,
+          "diameter_um": 0.880,
+          "spec_min_um": 0.850,
+          "spec_max_um": 0.910,
+          "cv_pct": 3.0,
+          "target_concentration_ww": null,
+          "concentration_particles_per_ml": null,
+          "material": "silica",
+          "refractive_index": 1.46
+        },
+        {
+          "label": "1300nm Si",
+          "diameter_nm": 1300,
+          "diameter_um": 1.300,
+          "spec_min_um": 1.250,
+          "spec_max_um": 1.350,
+          "cv_pct": 3.0,
+          "target_concentration_ww": null,
+          "concentration_particles_per_ml": null,
+          "material": "silica",
+          "refractive_index": 1.46
+        }
+      ]
+    },
+    "Polystyrene_Beads": {
+      "sub_lot": "generic",
+      "description": "Apogee Mix - Polystyrene (RI≈1.59) alignment beads",
+      "overall_refractive_index": 1.591,
+      "overall_appearance": "Milky suspension",
+      "beads": [
+        {
+          "label": "500nm PS",
+          "diameter_nm": 500,
+          "diameter_um": 0.500,
+          "spec_min_um": 0.475,
+          "spec_max_um": 0.525,
+          "cv_pct": 3.0,
+          "target_concentration_ww": null,
+          "concentration_particles_per_ml": null,
+          "material": "polystyrene",
+          "refractive_index": 1.591
+        }
+      ]
+    }
+  },
+  "unique_bead_diameters_nm": [110, 180, 240, 300, 500, 590, 880, 1300],
+  "notes": [
+    "Apogee Mix contains both silica (RI≈1.46) and polystyrene (RI≈1.59) beads",
+    "Silica beads have RI closer to EVs, making them useful for scatter-to-size calibration",
+    "The 500nm PS bead is included for alignment — use with caution for FCMPASS (different RI)",
+    "For FCMPASS calibration, use only one material type at a time (silica OR polystyrene)",
+    "Lot-specific diameters should be updated from the certificate of analysis",
+    "Commonly used in MIFlowCyt-EV standardized reporting"
+  ]
+}

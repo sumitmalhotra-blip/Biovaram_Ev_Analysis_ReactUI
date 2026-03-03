@@ -1,5 +1,6 @@
  import { create } from "zustand"
 import { persist, createJSONStorage } from "zustand/middleware"
+import { useShallow } from "zustand/shallow"
 import { useState, useEffect } from "react"
 import type { Sample as APISample, FCSResult, NTAResult, ProcessingJob, FileMetadata } from "./api-client"
 
@@ -494,9 +495,11 @@ const initialFCSAnalysis: FCSAnalysisState = {
   experimentalConditions: null,
   fileMetadata: null,  // Will be populated from uploaded file
   sizeRanges: [
-    { name: "Small EVs", min: 30, max: 100, color: "#22c55e" },
-    { name: "Medium EVs", min: 100, max: 200, color: "#3b82f6" },
-    { name: "Large EVs", min: 200, max: 500, color: "#a855f7" },
+    { name: "Exomeres (0-50nm)", min: 0, max: 50, color: "#22c55e" },
+    { name: "Small EVs (51-100nm)", min: 51, max: 100, color: "#3b82f6" },
+    { name: "Medium EVs (101-150nm)", min: 101, max: 150, color: "#a855f7" },
+    { name: "Large EVs (151-200nm)", min: 151, max: 200, color: "#f59e0b" },
+    { name: "Very Large EVs (200+nm)", min: 200, max: 1000, color: "#ef4444" },
   ],
 }
 
@@ -785,8 +788,35 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
     })),
   clearSavedImages: () => set({ savedImages: [] }),
 
-  // Analysis Settings
-  fcsAnalysisSettings: null,
+  // Analysis Settings — initialized with correct defaults so API calls
+  // send the right params even before the user clicks "Re-Analyze"
+  fcsAnalysisSettings: {
+    laserWavelength: 405,
+    particleRI: 1.37,
+    mediumRI: 1.34,
+    fscRange: [1, 65535] as [number, number],
+    sscRange: [1, 65535] as [number, number],
+    fscAngleRange: [1, 15] as [number, number],
+    sscAngleRange: [85, 95] as [number, number],
+    diameterRange: [30, 200] as [number, number],
+    diameterPoints: 180,
+    sizeRanges: [
+      { name: "Exomeres (0-50nm)", min: 0, max: 50 },
+      { name: "Small EVs (51-100nm)", min: 51, max: 100 },
+      { name: "Medium EVs (101-150nm)", min: 101, max: 150 },
+      { name: "Large EVs (151-200nm)", min: 151, max: 200 },
+      { name: "Very Large EVs (200+nm)", min: 200, max: 1000 },
+    ],
+    ignoreNegativeH: true,
+    dropNaRows: false,
+    anomalyDetectionEnabled: true,
+    anomalyMethod: "Both" as const,
+    zscoreThreshold: 3.0,
+    iqrFactor: 1.5,
+    highlightAnomalies: true,
+    useInteractivePlots: false,
+    histogramBins: 50,
+  },
   setFcsAnalysisSettings: (settings) => set((state) => ({ 
     fcsAnalysisSettings: state.fcsAnalysisSettings 
       ? { ...state.fcsAnalysisSettings, ...settings }
@@ -937,9 +967,9 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
         },
         // Chat history
         chatMessages: state.chatMessages,
-        // Pinned charts and saved images
-        pinnedCharts: state.pinnedCharts,
-        savedImages: state.savedImages,
+        // Pinned charts and saved images (limit to avoid bloating sessionStorage)
+        pinnedCharts: state.pinnedCharts.slice(0, 20),
+        savedImages: state.savedImages.slice(0, 10),
         // Local samples (not API samples which should be re-fetched)
         samples: state.samples,
       }),
@@ -1016,3 +1046,67 @@ export const useHasHydrated = () => {
   
   return hasHydrated
 }
+
+// ============================================================================
+// PERFORMANCE: Focused selectors to prevent unnecessary re-renders.
+// Use these instead of destructuring the full store in components.
+// Each selector only triggers re-renders when its specific slice changes.
+// ============================================================================
+
+/** UI state only — doesn't re-render on data changes */
+export const useUIState = () => useAnalysisStore(useShallow((s) => ({
+  activeTab: s.activeTab,
+  setActiveTab: s.setActiveTab,
+  sidebarCollapsed: s.sidebarCollapsed,
+  toggleSidebar: s.toggleSidebar,
+  isDarkMode: s.isDarkMode,
+  toggleDarkMode: s.toggleDarkMode,
+})))
+
+/** API connection state only */
+export const useApiConnectionState = () => useAnalysisStore(useShallow((s) => ({
+  apiConnected: s.apiConnected,
+  setApiConnected: s.setApiConnected,
+  apiChecking: s.apiChecking,
+  setApiChecking: s.setApiChecking,
+  lastHealthCheck: s.lastHealthCheck,
+  setLastHealthCheck: s.setLastHealthCheck,
+})))
+
+/** Sample list state only */
+export const useSampleListState = () => useAnalysisStore(useShallow((s) => ({
+  apiSamples: s.apiSamples,
+  setApiSamples: s.setApiSamples,
+  addApiSample: s.addApiSample,
+  removeApiSample: s.removeApiSample,
+  samplesLoading: s.samplesLoading,
+  setSamplesLoading: s.setSamplesLoading,
+  samplesError: s.samplesError,
+  setSamplesError: s.setSamplesError,
+})))
+
+/** FCS analysis state only */
+export const useFCSAnalysisState = () => useAnalysisStore(useShallow((s) => ({
+  fcsAnalysis: s.fcsAnalysis,
+  fcsAnalysisSettings: s.fcsAnalysisSettings,
+  setFCSFile: s.setFCSFile,
+  setFCSSampleId: s.setFCSSampleId,
+  setFCSResults: s.setFCSResults,
+  setFCSAnalyzing: s.setFCSAnalyzing,
+  setFCSError: s.setFCSError,
+  setFCSFileMetadata: s.setFCSFileMetadata,
+  resetFCSAnalysis: s.resetFCSAnalysis,
+})))
+
+/** Overlay state only */
+export const useOverlayState = () => useAnalysisStore(useShallow((s) => ({
+  overlayConfig: s.overlayConfig,
+  setOverlayConfig: s.setOverlayConfig,
+  secondaryFcsAnalysis: s.secondaryFcsAnalysis,
+  setSecondaryFCSFile: s.setSecondaryFCSFile,
+  setSecondaryFCSSampleId: s.setSecondaryFCSSampleId,
+  setSecondaryFCSResults: s.setSecondaryFCSResults,
+  setSecondaryFCSScatterData: s.setSecondaryFCSScatterData,
+  setSecondaryFCSLoadingScatter: s.setSecondaryFCSLoadingScatter,
+  setSecondaryFCSAnomalyData: s.setSecondaryFCSAnomalyData,
+})))

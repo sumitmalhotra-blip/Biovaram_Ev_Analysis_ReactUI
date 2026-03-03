@@ -24,6 +24,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAnalysisStore, type SavedImage } from "@/lib/store"
+import { useShallow } from "zustand/shallow"
 import { useToast } from "@/hooks/use-toast"
 import { captureChartAsImage } from "@/components/dashboard/saved-images-gallery"
 
@@ -88,7 +89,9 @@ export function InteractiveChartWrapper({
   enableCapture = true,
 }: InteractiveChartWrapperProps) {
   const chartRef = useRef<HTMLDivElement>(null)
-  const { saveImage } = useAnalysisStore()
+  const { saveImage } = useAnalysisStore(useShallow((s) => ({
+    saveImage: s.saveImage,
+  })))
   const { toast } = useToast()
 
   const [zoomState, setZoomState] = useState<ZoomState>(initialZoomState)

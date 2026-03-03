@@ -1,0 +1,96 @@
+{
+  "kit_part_number": "NIST-PS-MultiSize",
+  "product_name": "Spherotech NIST-Traceable Size Standards",
+  "lot_number": "generic",
+  "manufacturer": "Spherotech Inc.",
+  "manufacture_date": null,
+  "expiration_date": null,
+  "quality_cert_date": null,
+  "storage_condition": "2-8°C, protected from light",
+  "material": "polystyrene_latex",
+  "refractive_index": 1.591,
+  "ri_measurement_wavelength_nm": 590,
+  "ri_measurement_temperature_c": 20,
+  "size_measurement_method": "NIST SRM traceable",
+  "nist_traceable": true,
+  "appearance": "Milky suspension",
+  "subcomponents": {
+    "NIST_Standards": {
+      "sub_lot": "generic",
+      "description": "Spherotech NIST-traceable polystyrene size standards",
+      "overall_refractive_index": 1.591,
+      "overall_appearance": "Milky suspension",
+      "beads": [
+        {
+          "label": "100nm",
+          "diameter_nm": 100,
+          "diameter_um": 0.100,
+          "spec_min_um": 0.090,
+          "spec_max_um": 0.110,
+          "cv_pct": 5.0,
+          "target_concentration_ww": null,
+          "concentration_particles_per_ml": null
+        },
+        {
+          "label": "200nm",
+          "diameter_nm": 200,
+          "diameter_um": 0.200,
+          "spec_min_um": 0.185,
+          "spec_max_um": 0.215,
+          "cv_pct": 5.0,
+          "target_concentration_ww": null,
+          "concentration_particles_per_ml": null
+        },
+        {
+          "label": "400nm",
+          "diameter_nm": 400,
+          "diameter_um": 0.400,
+          "spec_min_um": 0.380,
+          "spec_max_um": 0.420,
+          "cv_pct": 3.0,
+          "target_concentration_ww": null,
+          "concentration_particles_per_ml": null
+        },
+        {
+          "label": "600nm",
+          "diameter_nm": 600,
+          "diameter_um": 0.600,
+          "spec_min_um": 0.570,
+          "spec_max_um": 0.630,
+          "cv_pct": 3.0,
+          "target_concentration_ww": null,
+          "concentration_particles_per_ml": null
+        },
+        {
+          "label": "800nm",
+          "diameter_nm": 800,
+          "diameter_um": 0.800,
+          "spec_min_um": 0.770,
+          "spec_max_um": 0.830,
+          "cv_pct": 3.0,
+          "target_concentration_ww": null,
+          "concentration_particles_per_ml": null
+        },
+        {
+          "label": "1000nm",
+          "diameter_nm": 1000,
+          "diameter_um": 1.000,
+          "spec_min_um": 0.960,
+          "spec_max_um": 1.040,
+          "cv_pct": 2.5,
+          "target_concentration_ww": null,
+          "concentration_particles_per_ml": null
+        }
+      ]
+    }
+  },
+  "unique_bead_diameters_nm": [100, 200, 400, 600, 800, 1000],
+  "notes": [
+    "Spherotech NIST-traceable polystyrene size standards for flow cytometry",
+    "6 polystyrene bead populations spanning 100-1000nm",
+    "NIST-traceable sizes provide the highest accuracy for calibration curves",
+    "Refractive index evaluated at 590nm and 20°C (PS standard)",
+    "Generic sizes shown — update with lot-specific values from certificate of analysis",
+    "Compatible with both legacy power-law and FCMPASS k-based calibration"
+  ]
+}

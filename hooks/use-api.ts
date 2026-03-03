@@ -1,7 +1,6 @@
 "use client"
 
 import { useCallback, useEffect, useRef } from "react"
-import { useSession } from "next-auth/react"
 import { apiClient, NetworkError, type Sample, type FCSResult, type NTAResult } from "@/lib/api-client"
 import { useAnalysisStore } from "@/lib/store"
 import { useToast } from "@/hooks/use-toast"
@@ -13,12 +12,13 @@ import {
   categorizeError,
 } from "@/lib/error-utils"
 
-const HEALTH_CHECK_INTERVAL = 30000 // 30 seconds
+const HEALTH_CHECK_INTERVAL = 30000 // 30 seconds when connected
+const HEALTH_CHECK_INTERVAL_DISCONNECTED = 5000 // 5 seconds when disconnected (faster recovery)
 
 export function useApi() {
   const { toast } = useToast()
-  const { data: session } = useSession()
-  const healthCheckRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // DESKTOP MODE: No session needed — always authenticated locally
+  const healthCheckRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const {
     setApiConnected,
@@ -77,29 +77,35 @@ export function useApi() {
     }
   }, [setApiChecking, setApiConnected, setLastHealthCheck])
 
-  // Start periodic health checks
+  // Start periodic health checks — adaptive: faster when disconnected, slower when connected
   const startHealthCheck = useCallback(() => {
     // Initial check
     checkHealth()
 
-    // Periodic checks
-    healthCheckRef.current = setInterval(() => {
-      checkHealth()
-    }, HEALTH_CHECK_INTERVAL)
+    // Adaptive periodic checks — poll faster when disconnected
+    const scheduleNext = () => {
+      const interval = apiConnected ? HEALTH_CHECK_INTERVAL : HEALTH_CHECK_INTERVAL_DISCONNECTED
+      healthCheckRef.current = setTimeout(() => {
+        checkHealth()
+        scheduleNext()
+      }, interval)
+    }
+    scheduleNext()
 
     return () => {
       if (healthCheckRef.current) {
-        clearInterval(healthCheckRef.current)
+        clearTimeout(healthCheckRef.current)
       }
     }
-  }, [checkHealth])
+  }, [checkHealth, apiConnected])
 
   // =========================================================================
   // Samples
   // =========================================================================
 
   // Get user ID from session for filtering samples by owner
-  const userId = session?.user?.id ? Number(session.user.id) : undefined
+  // DESKTOP MODE: No user filtering — all samples belong to local user
+  const userId = undefined
 
   const fetchSamples = useCallback(
     async (params?: { treatment?: string; qc_status?: string; processing_status?: string }) => {
