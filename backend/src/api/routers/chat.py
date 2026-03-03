@@ -62,7 +62,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     """Chat request body — matches what the frontend sends."""
     messages: list[ChatMessage] = Field(..., description="Conversation history")
-    model: Optional[str] = Field(None, description="Model override (e.g. 'gpt-4o', 'claude-sonnet-4-20250514')")
+    model: str = Field("gpt-4o-mini", description="Model override (e.g. 'gpt-4o', 'claude-sonnet-4-20250514')")
     temperature: Optional[float] = Field(0.7, description="Sampling temperature")
     max_tokens: Optional[int] = Field(2048, description="Max tokens in response")
     stream: Optional[bool] = Field(True, description="Whether to stream the response")
@@ -171,7 +171,7 @@ def _get_offline_response(messages: list[ChatMessage]) -> str:
 async def _stream_openai(messages: list[ChatMessage], model: str, temperature: float, max_tokens: int):
     """Stream response from OpenAI API in Vercel AI SDK-compatible SSE format."""
     try:
-        import httpx
+        import httpx  # type: ignore[import-untyped]
     except ImportError:
         yield f'0:"{OFFLINE_RESPONSES["default"]}"\n'
         yield 'e:{"finishReason":"stop","usage":{"promptTokens":0,"completionTokens":0}}\n'
@@ -255,7 +255,7 @@ async def _stream_openai(messages: list[ChatMessage], model: str, temperature: f
 async def _stream_anthropic(messages: list[ChatMessage], model: str, temperature: float, max_tokens: int):
     """Stream response from Anthropic API in Vercel AI SDK-compatible SSE format."""
     try:
-        import httpx
+        import httpx  # type: ignore[import-untyped]
     except ImportError:
         yield f'0:"{OFFLINE_RESPONSES["default"]}"\n'
         yield 'e:{"finishReason":"stop"}\n'
@@ -398,7 +398,7 @@ async def _chat_simple(request: ChatRequest):
     max_tokens = request.max_tokens or 2048
     
     try:
-        import httpx
+        import httpx  # type: ignore[import-untyped]
     except ImportError:
         return ChatResponse(content=OFFLINE_RESPONSES["default"], model="offline")
     

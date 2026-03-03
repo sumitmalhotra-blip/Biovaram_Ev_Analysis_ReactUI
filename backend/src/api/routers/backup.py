@@ -257,6 +257,7 @@ async def restore_backup(backup_name: Optional[str] = None, file: Optional[Uploa
     automatically created first.
     """
     db_path = _get_db_path()
+    temp_path: Path | None = None
     
     # Determine source
     if backup_name:
@@ -283,6 +284,8 @@ async def restore_backup(backup_name: Optional[str] = None, file: Optional[Uploa
             raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {e}")
     else:
         raise HTTPException(status_code=400, detail="Provide either backup_name or upload a .db file")
+    
+    pre_restore_name: str | None = None
     
     try:
         # Create a pre-restore backup first (safety net)
@@ -313,7 +316,7 @@ async def restore_backup(backup_name: Optional[str] = None, file: Optional[Uploa
         
         return RestoreResponse(
             success=True,
-            message=f"Database restored successfully. A pre-restore backup was saved as '{pre_restore_name}'." if db_path.exists() else "Database restored successfully.",
+            message=f"Database restored successfully. A pre-restore backup was saved as '{pre_restore_name}'." if pre_restore_name else "Database restored successfully.",
         )
     
     except Exception as e:
@@ -322,7 +325,7 @@ async def restore_backup(backup_name: Optional[str] = None, file: Optional[Uploa
     
     finally:
         # Clean up temp upload file
-        if file and 'temp_path' in locals() and temp_path.exists():
+        if file and temp_path is not None and temp_path.exists():
             try:
                 temp_path.unlink()
             except Exception:

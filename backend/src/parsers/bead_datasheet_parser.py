@@ -34,6 +34,13 @@ except ImportError:
     logger.warning("pdfplumber not installed. PDF bead datasheet parsing disabled.")
 
 
+def _open_pdf(source: Any) -> Any:  # noqa: ANN401
+    """Open a PDF, guarding against pdfplumber being None."""
+    if pdfplumber is None:
+        raise RuntimeError("pdfplumber is not installed")
+    return pdfplumber.open(source)
+
+
 @dataclass
 class BeadPopulation:
     """Single bead population from a datasheet."""
@@ -396,9 +403,9 @@ def parse_pdf_datasheet(file_path: str | Path, content_bytes: Optional[bytes] = 
     try:
         if content_bytes:
             import io
-            pdf = pdfplumber.open(io.BytesIO(content_bytes))
+            pdf = _open_pdf(io.BytesIO(content_bytes))
         else:
-            pdf = pdfplumber.open(str(file_path))
+            pdf = _open_pdf(str(file_path))
         
         all_text_lines = []
         
