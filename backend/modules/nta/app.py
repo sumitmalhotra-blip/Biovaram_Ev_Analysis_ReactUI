@@ -1,6 +1,6 @@
 """
-NTA Module — Nanoparticle Tracking Analysis
-=============================================
+NTA Module — Nanoparticle Tracking Analysis + Dashboard + AI Chat
+==================================================================
 
 Includes:
 - NTA text/PDF file upload & processing
@@ -9,6 +9,7 @@ Includes:
 - NTA metadata display
 - Sample management (NTA-related)
 - Dashboard (read-only overview)
+- AI Research Chat
 
 Default port: 8002
 """
@@ -21,7 +22,7 @@ settings = get_settings()
 app = create_module_app(
     module_name="nta",
     module_title="NTA Analysis",
-    module_description="Nanoparticle Tracking Analysis — Upload NTA text/PDF files, view size distributions and concentration profiles.",
+    module_description="Nanoparticle Tracking Analysis — Upload NTA text/PDF files, view size distributions and concentration profiles. Includes Dashboard & AI Chat.",
 )
 
 # ---- Module-specific routers ----
@@ -62,3 +63,14 @@ app.include_router(
     prefix=f"{settings.api_prefix}",
     tags=["Database"]
 )
+
+# AI Research Chat
+try:
+    from src.api.routers import chat
+    app.include_router(
+        chat.router,
+        prefix=f"{settings.api_prefix}",
+        tags=["AI Chat"]
+    )
+except ImportError:
+    pass

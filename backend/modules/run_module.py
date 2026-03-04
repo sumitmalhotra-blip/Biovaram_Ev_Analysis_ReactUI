@@ -51,12 +51,9 @@ else:
 
 # Default ports per module (avoids conflicts if multiple modules run)
 MODULE_PORTS = {
-    "full": 8000,
+    "full_platform": 8000,
     "nanofacs": 8001,
     "nta": 8002,
-    "cross_compare": 8003,
-    "dashboard": 8004,
-    "chat": 8005,
 }
 
 

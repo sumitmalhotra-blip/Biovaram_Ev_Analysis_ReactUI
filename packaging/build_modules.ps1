@@ -8,10 +8,8 @@
     frontend build (tabs restricted to that module only).
 
     Modules available:
-      nanofacs       — Flow Cytometry / NanoFACS analysis
-      nta            — Nanoparticle Tracking Analysis
-      cross_compare  — FCS vs NTA cross-comparison
-      dashboard      — Dashboard & admin overview
+      nanofacs       — NanoFACS + Dashboard + AI Chat
+      nta            — NTA Analysis + Dashboard + AI Chat
       full_platform  — Full platform (all features)
 
 .PARAMETER Module
@@ -60,18 +58,6 @@ $ModuleDefinitions = @{
         ExeName  = "BioVaram_NTA"
         EnvVar   = "nta"
     }
-    cross_compare = @{
-        Name     = "cross_compare"
-        Title    = "Cross-Compare Analysis"
-        ExeName  = "BioVaram_CrossCompare"
-        EnvVar   = "cross-compare"
-    }
-    dashboard = @{
-        Name     = "dashboard"
-        Title    = "Dashboard"
-        ExeName  = "BioVaram_Dashboard"
-        EnvVar   = "dashboard"
-    }
     full_platform = @{
         Name     = "full_platform"
         Title    = "EV Analysis Platform"
@@ -82,7 +68,7 @@ $ModuleDefinitions = @{
 
 # Resolve "all"
 if ($Module -contains "all") {
-    $Module = @("nanofacs", "nta", "cross_compare", "dashboard", "full_platform")
+    $Module = @("nanofacs", "nta", "full_platform")
 }
 
 # =============================================================================

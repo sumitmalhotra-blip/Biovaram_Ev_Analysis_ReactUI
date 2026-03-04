@@ -147,6 +147,9 @@ hidden_imports += [
 # --- Module system ---
 hidden_imports += [
     'modules', 'modules.base', 'modules.run_module',
+    'modules.nanofacs', 'modules.nanofacs.app',
+    'modules.nta', 'modules.nta.app',
+    'modules.full_platform', 'modules.full_platform.app',
     f'modules.{MODULE_NAME}', f'modules.{MODULE_NAME}.app',
     f'modules.{MODULE_NAME}.run',
 ]

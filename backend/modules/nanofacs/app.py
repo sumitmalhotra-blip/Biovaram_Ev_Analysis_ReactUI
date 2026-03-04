@@ -1,6 +1,6 @@
 """
-NanoFACS Module — Flow Cytometry Analysis
-==========================================
+NanoFACS Module — Flow Cytometry Analysis + Dashboard + AI Chat
+================================================================
 
 Includes:
 - FCS file upload & processing
@@ -9,6 +9,7 @@ Includes:
 - Population shift analysis
 - Sample management (FCS-related)
 - Dashboard (read-only overview)
+- AI Research Chat
 
 Default port: 8001
 """
@@ -20,8 +21,8 @@ settings = get_settings()
 
 app = create_module_app(
     module_name="nanofacs",
-    module_title="NanoFACS",
-    module_description="Flow Cytometry EV Analysis — Upload FCS files, run Mie sizing, view scatter plots and size distributions.",
+    module_title="NanoFACS Analysis",
+    module_description="Flow Cytometry EV Analysis — Upload FCS files, run Mie sizing, view scatter plots and size distributions. Includes Dashboard & AI Chat.",
 )
 
 # ---- Module-specific routers ----
@@ -72,6 +73,17 @@ try:
         calibration_router.router,
         prefix=f"{settings.api_prefix}/calibration",
         tags=["Calibration"]
+    )
+except ImportError:
+    pass
+
+# AI Research Chat
+try:
+    from src.api.routers import chat
+    app.include_router(
+        chat.router,
+        prefix=f"{settings.api_prefix}",
+        tags=["AI Chat"]
     )
 except ImportError:
     pass

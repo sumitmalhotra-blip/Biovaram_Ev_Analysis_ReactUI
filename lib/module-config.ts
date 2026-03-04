@@ -6,17 +6,14 @@
  * Set via NEXT_PUBLIC_MODULE environment variable at build time.
  * 
  * Module Values:
- *   "full"          — All tabs (default, full platform EXE)
- *   "nanofacs"      — Flow Cytometry + Dashboard
- *   "nta"           — NTA Analysis + Dashboard
- *   "cross-compare" — Cross-Compare + Dashboard (needs FCS & NTA data)
- *   "dashboard"     — Dashboard + Admin only
- *   "chat"          — AI Research Chat + Dashboard
+ *   "full"      — All tabs (default, full platform EXE)
+ *   "nanofacs"  — NanoFACS + Dashboard + AI Chat
+ *   "nta"       — NTA Analysis + Dashboard + AI Chat
  */
 
 import type { TabType } from "./store"
 
-export type ModuleType = "full" | "nanofacs" | "nta" | "cross-compare" | "dashboard" | "chat"
+export type ModuleType = "full" | "nanofacs" | "nta"
 
 /** Current module (set at build time via env var) */
 export const CURRENT_MODULE: ModuleType = 
@@ -25,11 +22,8 @@ export const CURRENT_MODULE: ModuleType =
 /** Module display names */
 export const MODULE_NAMES: Record<ModuleType, string> = {
   full: "EV Analysis Platform",
-  nanofacs: "NanoFACS",
+  nanofacs: "NanoFACS Analysis",
   nta: "NTA Analysis",
-  "cross-compare": "Cross-Compare",
-  dashboard: "Dashboard",
-  chat: "AI Research Chat",
 }
 
 /** Default port per module (avoids conflicts if multiple modules run) */
@@ -37,19 +31,13 @@ export const MODULE_PORTS: Record<ModuleType, number> = {
   full: 8000,
   nanofacs: 8001,
   nta: 8002,
-  "cross-compare": 8003,
-  dashboard: 8004,
-  chat: 8005,
 }
 
 /** Which tabs are enabled for each module */
 const MODULE_TABS: Record<ModuleType, TabType[]> = {
   full: ["dashboard", "flow-cytometry", "nta", "cross-compare", "research-chat"],
-  nanofacs: ["dashboard", "flow-cytometry"],
-  nta: ["dashboard", "nta"],
-  "cross-compare": ["dashboard", "cross-compare"],
-  dashboard: ["dashboard"],
-  chat: ["dashboard", "research-chat"],
+  nanofacs: ["dashboard", "flow-cytometry", "research-chat"],
+  nta: ["dashboard", "nta", "research-chat"],
 }
 
 /** Default active tab for each module */
@@ -57,9 +45,6 @@ export const MODULE_DEFAULT_TAB: Record<ModuleType, TabType> = {
   full: "dashboard",
   nanofacs: "flow-cytometry",
   nta: "nta",
-  "cross-compare": "cross-compare",
-  dashboard: "dashboard",
-  chat: "research-chat",
 }
 
 /** Check if a tab is enabled for the current module */
