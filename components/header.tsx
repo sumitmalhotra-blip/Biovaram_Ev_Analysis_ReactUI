@@ -21,6 +21,7 @@ import { Sidebar } from "./sidebar"
 import { AlertPanel } from "./dashboard/alert-panel"
 import Image from "next/image"
 import { apiClient, type DesktopUser } from "@/lib/api-client"
+import { isSingleModule, getModuleName } from "@/lib/module-config"
 
 export function Header() {
   const { apiConnected, apiChecking, lastHealthCheck } = useApiConnectionState()
@@ -94,7 +95,9 @@ export function Header() {
             <span className="font-bold text-lg bg-linear-to-r from-orange-500 via-purple-500 to-green-500 bg-clip-text text-transparent">
               BioVaram
             </span>
-            <span className="text-xs text-muted-foreground">EV Analysis Platform</span>
+            <span className="text-xs text-muted-foreground">
+              {isSingleModule() ? getModuleName() : "EV Analysis Platform"}
+            </span>
           </div>
         </div>
       </div>

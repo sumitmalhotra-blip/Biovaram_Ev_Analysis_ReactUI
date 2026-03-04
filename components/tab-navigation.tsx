@@ -6,14 +6,18 @@ import { useAnalysisStore, type TabType } from "@/lib/store"
 import { useShallow } from "zustand/shallow"
 import { cn } from "@/lib/utils"
 import { LayoutDashboard, Microscope, Atom, GitCompare, MessageCircle } from "lucide-react"
+import { isTabEnabled, isSingleModule, getModuleName } from "@/lib/module-config"
 
-const tabs: { id: TabType; label: string; shortLabel: string; icon: React.ElementType }[] = [
+const allTabs: { id: TabType; label: string; shortLabel: string; icon: React.ElementType }[] = [
   { id: "dashboard", label: "Dashboard", shortLabel: "Home", icon: LayoutDashboard },
   { id: "flow-cytometry", label: "Flow Cytometry", shortLabel: "Flow", icon: Microscope },
   { id: "nta", label: "NTA", shortLabel: "NTA", icon: Atom },
   { id: "cross-compare", label: "Cross-Compare", shortLabel: "Compare", icon: GitCompare },
   { id: "research-chat", label: "Research Chat", shortLabel: "Chat", icon: MessageCircle },
 ]
+
+// Filter tabs based on current module configuration
+const tabs = allTabs.filter(tab => isTabEnabled(tab.id))
 
 export function TabNavigation() {
   const { activeTab, setActiveTab } = useAnalysisStore(useShallow((s) => ({
@@ -23,6 +27,12 @@ export function TabNavigation() {
 
   return (
     <nav className="h-12 border-b border-border/50 bg-card flex items-center px-2 md:px-4 gap-1 overflow-x-auto shrink-0 scrollbar-none">
+      {/* Show module name badge in single-module mode */}
+      {isSingleModule() && (
+        <span className="text-xs font-semibold text-primary bg-primary/10 px-2 py-1 rounded-md mr-2 shrink-0">
+          {getModuleName()}
+        </span>
+      )}
       {tabs.map((tab) => {
         const Icon = tab.icon
         return (

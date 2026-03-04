@@ -20,6 +20,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { ExperimentalConditionsDialog, type ExperimentalConditions } from "@/components/experimental-conditions-dialog"
+import { isTabEnabled } from "@/lib/module-config"
 
 interface SidebarProps {
   isMobile?: boolean
@@ -72,11 +73,11 @@ export function Sidebar({ isMobile = false }: SidebarProps) {
               defaultExpanded={activeTab === "dashboard"}
             />
 
-            {/* Tab-specific content */}
-            {activeTab === "flow-cytometry" && <FlowCytometrySidebar />}
-            {activeTab === "nta" && <NTASidebar />}
-            {activeTab === "cross-compare" && <CrossCompareSidebar />}
-            {activeTab === "dashboard" && (
+            {/* Tab-specific content — only show sections for enabled modules */}
+            {activeTab === "flow-cytometry" && isTabEnabled("flow-cytometry") && <FlowCytometrySidebar />}
+            {activeTab === "nta" && isTabEnabled("nta") && <NTASidebar />}
+            {activeTab === "cross-compare" && isTabEnabled("cross-compare") && <CrossCompareSidebar />}
+            {activeTab === "dashboard" && isTabEnabled("dashboard") && (
               <DashboardSidebar 
                 samples={samples} 
                 apiSamples={apiSamples} 

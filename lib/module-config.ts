@@ -1,0 +1,83 @@
+/**
+ * Module Configuration for Desktop Module Splitting
+ * ==================================================
+ * 
+ * Controls which tabs/features are available in each module build.
+ * Set via NEXT_PUBLIC_MODULE environment variable at build time.
+ * 
+ * Module Values:
+ *   "full"          — All tabs (default, full platform EXE)
+ *   "nanofacs"      — Flow Cytometry + Dashboard
+ *   "nta"           — NTA Analysis + Dashboard
+ *   "cross-compare" — Cross-Compare + Dashboard (needs FCS & NTA data)
+ *   "dashboard"     — Dashboard + Admin only
+ *   "chat"          — AI Research Chat + Dashboard
+ */
+
+import type { TabType } from "./store"
+
+export type ModuleType = "full" | "nanofacs" | "nta" | "cross-compare" | "dashboard" | "chat"
+
+/** Current module (set at build time via env var) */
+export const CURRENT_MODULE: ModuleType = 
+  (process.env.NEXT_PUBLIC_MODULE as ModuleType) || "full"
+
+/** Module display names */
+export const MODULE_NAMES: Record<ModuleType, string> = {
+  full: "EV Analysis Platform",
+  nanofacs: "NanoFACS",
+  nta: "NTA Analysis",
+  "cross-compare": "Cross-Compare",
+  dashboard: "Dashboard",
+  chat: "AI Research Chat",
+}
+
+/** Default port per module (avoids conflicts if multiple modules run) */
+export const MODULE_PORTS: Record<ModuleType, number> = {
+  full: 8000,
+  nanofacs: 8001,
+  nta: 8002,
+  "cross-compare": 8003,
+  dashboard: 8004,
+  chat: 8005,
+}
+
+/** Which tabs are enabled for each module */
+const MODULE_TABS: Record<ModuleType, TabType[]> = {
+  full: ["dashboard", "flow-cytometry", "nta", "cross-compare", "research-chat"],
+  nanofacs: ["dashboard", "flow-cytometry"],
+  nta: ["dashboard", "nta"],
+  "cross-compare": ["dashboard", "cross-compare"],
+  dashboard: ["dashboard"],
+  chat: ["dashboard", "research-chat"],
+}
+
+/** Default active tab for each module */
+export const MODULE_DEFAULT_TAB: Record<ModuleType, TabType> = {
+  full: "dashboard",
+  nanofacs: "flow-cytometry",
+  nta: "nta",
+  "cross-compare": "cross-compare",
+  dashboard: "dashboard",
+  chat: "research-chat",
+}
+
+/** Check if a tab is enabled for the current module */
+export function isTabEnabled(tab: TabType): boolean {
+  return MODULE_TABS[CURRENT_MODULE].includes(tab)
+}
+
+/** Get all enabled tabs for the current module */
+export function getEnabledTabs(): TabType[] {
+  return MODULE_TABS[CURRENT_MODULE]
+}
+
+/** Get the module display name */
+export function getModuleName(): string {
+  return MODULE_NAMES[CURRENT_MODULE]
+}
+
+/** Check if we're running in a single-module mode (not full platform) */
+export function isSingleModule(): boolean {
+  return CURRENT_MODULE !== "full"
+}

@@ -9,6 +9,7 @@ import { useAnalysisStore, useHasHydrated } from "@/lib/store"
 import { Toaster } from "@/components/ui/toaster"
 import { Loader2 } from "lucide-react"
 import { SplashScreen } from "@/components/splash-screen"
+import { isTabEnabled, MODULE_DEFAULT_TAB, CURRENT_MODULE } from "@/lib/module-config"
 
 // PERFORMANCE: Lazy load heavy tab components
 const DashboardTab = lazy(() => import("@/components/dashboard/dashboard-tab").then(m => ({ default: m.DashboardTab })))
@@ -41,7 +42,7 @@ function HydrationLoading() {
 
 export default function Home() {
   const hasHydrated = useHasHydrated()
-  const { activeTab, isDarkMode } = useAnalysisStore()
+  const { activeTab, isDarkMode, setActiveTab } = useAnalysisStore()
   const [appReady, setAppReady] = useState(false)
 
   useEffect(() => {
@@ -51,6 +52,13 @@ export default function Home() {
       document.documentElement.classList.remove("dark")
     }
   }, [isDarkMode])
+
+  // MODULE: If current activeTab is not enabled in this module, reset to default
+  useEffect(() => {
+    if (hasHydrated && !isTabEnabled(activeTab)) {
+      setActiveTab(MODULE_DEFAULT_TAB[CURRENT_MODULE])
+    }
+  }, [hasHydrated, activeTab, setActiveTab])
 
   // Show loading state until Zustand store is hydrated from localStorage
   if (!hasHydrated) {
@@ -76,12 +84,13 @@ export default function Home() {
           <main className="flex-1 overflow-y-auto overflow-x-hidden">
             <ErrorBoundary>
               {/* PERFORMANCE: Wrap lazy-loaded components in Suspense */}
+              {/* MODULE: Only render tabs enabled for the current module */}
               <Suspense fallback={<TabLoading />}>
-                {activeTab === "dashboard" && <DashboardTab />}
-                {activeTab === "flow-cytometry" && <FlowCytometryTab />}
-                {activeTab === "nta" && <NTATab />}
-                {activeTab === "cross-compare" && <CrossCompareTab />}
-                {activeTab === "research-chat" && <ResearchChatTab />}
+                {activeTab === "dashboard" && isTabEnabled("dashboard") && <DashboardTab />}
+                {activeTab === "flow-cytometry" && isTabEnabled("flow-cytometry") && <FlowCytometryTab />}
+                {activeTab === "nta" && isTabEnabled("nta") && <NTATab />}
+                {activeTab === "cross-compare" && isTabEnabled("cross-compare") && <CrossCompareTab />}
+                {activeTab === "research-chat" && isTabEnabled("research-chat") && <ResearchChatTab />}
               </Suspense>
             </ErrorBoundary>
           </main>
