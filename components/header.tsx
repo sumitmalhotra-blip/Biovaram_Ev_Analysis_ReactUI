@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { ChevronDown, HelpCircle, Settings, User, Sun, Moon, Menu, RefreshCw, Wifi, WifiOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -20,14 +20,24 @@ import { cn } from "@/lib/utils"
 import { Sidebar } from "./sidebar"
 import { AlertPanel } from "./dashboard/alert-panel"
 import Image from "next/image"
+import { apiClient, type DesktopUser } from "@/lib/api-client"
 
 export function Header() {
   const { apiConnected, apiChecking, lastHealthCheck } = useApiConnectionState()
   const { isDarkMode, toggleDarkMode } = useUIState()
   const { checkHealth, startHealthCheck } = useApi()
 
-  // DESKTOP MODE: Auto-authenticated, no NextAuth needed
-  const desktopUser = { name: "Lab User", email: "lab@biovaram.local", role: "researcher" }
+  // DESKTOP MODE: Auto-login with real JWT token exchange
+  const [currentUser, setCurrentUser] = useState<DesktopUser>({
+    id: 1, name: "Lab User", email: "lab@biovaram.local", role: "researcher"
+  })
+
+  // Auto-login on mount: get real JWT token from backend
+  useEffect(() => {
+    apiClient.autoLogin().then((user) => {
+      if (user) setCurrentUser(user)
+    })
+  }, [])
 
   // Start health check on mount
   useEffect(() => {
@@ -145,7 +155,7 @@ export function Header() {
             <Button variant="ghost" className="flex items-center gap-1 md:gap-2 px-2 rounded-xl hover:bg-secondary/50">
               <Avatar className="h-8 w-8 ring-2 ring-primary/20">
                 <AvatarFallback className="bg-linear-to-br from-primary/30 to-accent/30 text-sm font-semibold">
-                  {getInitials(desktopUser.name)}
+                  {getInitials(currentUser.name)}
                 </AvatarFallback>
               </Avatar>
               <ChevronDown className="h-4 w-4 text-muted-foreground hidden sm:block" />
@@ -154,10 +164,10 @@ export function Header() {
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel className="font-normal">
               <div className="flex flex-col space-y-1">
-                <p className="text-sm font-medium leading-none">{desktopUser.name}</p>
-                <p className="text-xs leading-none text-muted-foreground">{desktopUser.email}</p>
+                <p className="text-sm font-medium leading-none">{currentUser.name}</p>
+                <p className="text-xs leading-none text-muted-foreground">{currentUser.email}</p>
                 <p className="text-xs leading-none text-muted-foreground capitalize">
-                  {desktopUser.role}
+                  {currentUser.role}
                 </p>
               </div>
             </DropdownMenuLabel>

@@ -191,7 +191,7 @@ def create_desktop_app():
         
         # Override the root redirect to serve index.html
         # Remove existing "/" route that redirects to /docs
-        app.routes[:] = [r for r in app.routes if not (hasattr(r, 'path') and r.path == "/" and hasattr(r, 'methods'))]
+        app.routes[:] = [r for r in app.routes if not (hasattr(r, 'path') and getattr(r, 'path', None) == "/" and hasattr(r, 'methods'))]
         
         @app.get("/", include_in_schema=False)
         async def serve_root():
@@ -251,20 +251,23 @@ def open_browser(port: int, delay: float = 2.0):
         url = f"http://localhost:{port}"
         print(f"\n  Opening browser: {url}")
         
-        # Show a Windows notification if running as frozen EXE (no console)
+        # Show a Windows toast notification if running as frozen EXE (no console)
         if getattr(sys, 'frozen', False) and sys.platform == 'win32':
             try:
                 import ctypes
+                # Use non-blocking timed messagebox (auto-closes after 3s)
                 ctypes.windll.user32.MessageBoxTimeoutW(  # type: ignore[attr-defined]
                     0,
-                    f"BioVaram EV Analysis Platform v{VERSION}\n\nStarting on http://localhost:{port}\n\nYour browser will open automatically.",
+                    f"BioVaram EV Analysis Platform v{VERSION}\n\n"
+                    f"Server running on http://localhost:{port}\n"
+                    f"Your browser will open automatically.",
                     "BioVaram Desktop",
-                    0x00000040 | 0x00000000,  # MB_ICONINFORMATION | MB_OK
-                    0,  # language ID
-                    3000,  # timeout in ms (auto-close after 3 seconds)
+                    0x00000040,  # MB_ICONINFORMATION
+                    0,
+                    3000,  # auto-close after 3 seconds
                 )
             except Exception:
-                pass  # Fallback: just open browser silently
+                pass
         
         webbrowser.open(url)
     
@@ -276,8 +279,19 @@ def open_browser(port: int, delay: float = 2.0):
 # Version Info
 # =============================================================================
 
-VERSION = "1.0.0"
-BUILD_DATE = "2026-03-03"
+def _load_version() -> tuple[str, str]:
+    """Load version from version.json (created by build script), fall back to defaults."""
+    try:
+        import json
+        version_file = APP_DIR / "version.json"
+        if version_file.exists():
+            data = json.loads(version_file.read_text(encoding="utf-8"))
+            return data.get("version", "1.0.0"), data.get("build_date", "dev")
+    except Exception:
+        pass
+    return "1.0.0", "dev"
+
+VERSION, BUILD_DATE = _load_version()
 
 
 def print_banner(port: int):
@@ -312,6 +326,7 @@ def print_banner(port: int):
 def main():
     """Main entry point for the desktop application."""
     import uvicorn
+    import signal
     
     # Find available port
     port = find_available_port(8000)
@@ -325,17 +340,31 @@ def main():
     # Open browser
     open_browser(port)
     
+    # Graceful shutdown handler
+    shutdown_event = threading.Event()
+    
+    def handle_shutdown(signum, frame):
+        print("\n  Shutting down gracefully...")
+        shutdown_event.set()
+    
+    signal.signal(signal.SIGINT, handle_shutdown)
+    signal.signal(signal.SIGTERM, handle_shutdown)
+    
     # Start server
     try:
-        uvicorn.run(
+        config = uvicorn.Config(
             app,
             host="127.0.0.1",
             port=port,
-            log_level="info",
-            access_log=False,  # Reduce noise in desktop mode
+            log_level="warning" if getattr(sys, 'frozen', False) else "info",
+            access_log=not getattr(sys, 'frozen', False),  # Reduce noise in desktop mode
         )
+        server = uvicorn.Server(config)
+        server.run()
     except KeyboardInterrupt:
-        print("\n  Server stopped.")
+        pass
+    finally:
+        print("\n  Server stopped. Goodbye!")
 
 
 if __name__ == "__main__":

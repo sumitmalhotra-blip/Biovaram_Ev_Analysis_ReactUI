@@ -270,11 +270,13 @@ async def health_check():
     Returns:
         Health status with system info
     """
+    import sys
     return {
         "status": "healthy",
         "service": settings.app_name,
         "version": settings.app_version,
         "environment": settings.environment,
+        "desktop_mode": getattr(sys, 'frozen', False),
     }
 
 

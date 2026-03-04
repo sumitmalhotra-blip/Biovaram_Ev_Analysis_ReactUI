@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, Suspense, lazy } from "react"
+import { useEffect, useState, Suspense, lazy } from "react"
 import { Header } from "@/components/header"
 import { TabNavigation } from "@/components/tab-navigation"
 import { Sidebar } from "@/components/sidebar"
@@ -8,6 +8,7 @@ import { ErrorBoundary } from "@/components/error-boundary"
 import { useAnalysisStore, useHasHydrated } from "@/lib/store"
 import { Toaster } from "@/components/ui/toaster"
 import { Loader2 } from "lucide-react"
+import { SplashScreen } from "@/components/splash-screen"
 
 // PERFORMANCE: Lazy load heavy tab components
 const DashboardTab = lazy(() => import("@/components/dashboard/dashboard-tab").then(m => ({ default: m.DashboardTab })))
@@ -41,6 +42,7 @@ function HydrationLoading() {
 export default function Home() {
   const hasHydrated = useHasHydrated()
   const { activeTab, isDarkMode } = useAnalysisStore()
+  const [appReady, setAppReady] = useState(false)
 
   useEffect(() => {
     if (isDarkMode) {
@@ -53,6 +55,11 @@ export default function Home() {
   // Show loading state until Zustand store is hydrated from localStorage
   if (!hasHydrated) {
     return <HydrationLoading />
+  }
+
+  // Show splash screen until backend is connected and auto-login completes
+  if (!appReady) {
+    return <SplashScreen onReady={() => setAppReady(true)} />
   }
 
   return (

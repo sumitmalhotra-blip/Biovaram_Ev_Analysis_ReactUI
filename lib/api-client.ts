@@ -857,11 +857,22 @@ const CACHE_TTL = {
   HEALTH:          5_000,   // 5s
 } as const;
 
+/** Desktop user info from auto-login */
+export interface DesktopUser {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  organization?: string | null;
+}
+
 class ApiClient {
   private baseUrl: string;
   private isOffline: boolean = false;
   private authToken: string | null = null;
   private cache = new RequestCache();
+  private _desktopUser: DesktopUser | null = null;
+  private _autoLoginAttempted: boolean = false;
 
   constructor() {
     // Build base URL, ensuring no double /api/v1 prefix
@@ -889,6 +900,74 @@ class ApiClient {
   // Set JWT auth token (called after login)
   setAuthToken(token: string | null): void {
     this.authToken = token;
+  }
+
+  /** Get the current desktop user (set after auto-login) */
+  get desktopUser(): DesktopUser | null {
+    return this._desktopUser;
+  }
+
+  /**
+   * DESKTOP MODE: Auto-login with the default desktop user credentials.
+   * Called once during app initialization. Authenticates against the FastAPI
+   * backend and stores the JWT token for subsequent API calls.
+   */
+  async autoLogin(): Promise<DesktopUser | null> {
+    if (this._autoLoginAttempted) {
+      return this._desktopUser;
+    }
+    this._autoLoginAttempted = true;
+    
+    try {
+      const response = await fetch(`${this.baseUrl}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: "lab@biovaram.local",
+          password: "desktop_user_2026",
+        }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.access_token) {
+          this.authToken = data.access_token;
+        }
+        if (data.user) {
+          this._desktopUser = {
+            id: data.user.id,
+            name: data.user.name || "Lab User",
+            email: data.user.email,
+            role: data.user.role || "researcher",
+            organization: data.user.organization,
+          };
+        }
+        console.log("[API Client] Desktop auto-login successful");
+        return this._desktopUser;
+      } else {
+        console.warn("[API Client] Desktop auto-login failed:", response.status);
+        // Fallback: use hardcoded user info (API may not require auth)
+        this._desktopUser = {
+          id: 1,
+          name: "Lab User",
+          email: "lab@biovaram.local",
+          role: "researcher",
+          organization: "BioVaram Lab",
+        };
+        return this._desktopUser;
+      }
+    } catch {
+      // Network error — backend not yet ready, use fallback
+      console.warn("[API Client] Desktop auto-login: backend not reachable, using fallback");
+      this._desktopUser = {
+        id: 1,
+        name: "Lab User",
+        email: "lab@biovaram.local",
+        role: "researcher",
+        organization: "BioVaram Lab",
+      };
+      return this._desktopUser;
+    }
   }
 
   // Get default headers including auth if available

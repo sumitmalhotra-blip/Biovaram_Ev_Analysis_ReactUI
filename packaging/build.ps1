@@ -6,16 +6,19 @@
     This script:
     1. Builds the Next.js frontend (static export to out/)
     2. Runs PyInstaller to create the desktop EXE bundle
-    3. Validates the output
+    3. Creates version.json for update tracking
+    4. Validates the output
 
 .EXAMPLE
     .\packaging\build.ps1
     .\packaging\build.ps1 -SkipFrontend
+    .\packaging\build.ps1 -Version "1.1.0"
 #>
 
 param(
     [switch]$SkipFrontend,
-    [switch]$SkipClean
+    [switch]$SkipClean,
+    [string]$Version = "1.0.0"
 )
 
 $ErrorActionPreference = "Stop"
@@ -99,9 +102,30 @@ try {
     }
 
     # =============================================
-    # Step 4: Validate Output
+    # Step 4: Create version.json
     # =============================================
-    Write-Host "[4/4] Validating build output..." -ForegroundColor Yellow
+    Write-Host "[4/5] Creating version metadata..." -ForegroundColor Yellow
+    
+    $buildDate = Get-Date -Format "yyyy-MM-dd"
+    $buildTime = Get-Date -Format "HH:mm:ss"
+    $gitCommit = ""
+    try { $gitCommit = (git rev-parse --short HEAD 2>$null) } catch {}
+    
+    $versionInfo = @{
+        version = $Version
+        build_date = $buildDate
+        build_time = $buildTime
+        git_commit = $gitCommit
+        platform = "windows-x64"
+    } | ConvertTo-Json -Depth 2
+    
+    $versionInfo | Out-File -FilePath "dist\BioVaram\version.json" -Encoding utf8
+    Write-Host "  Version: $Version (built $buildDate)" -ForegroundColor Green
+
+    # =============================================
+    # Step 5: Validate Output
+    # =============================================
+    Write-Host "[5/5] Validating build output..." -ForegroundColor Yellow
     
     $exePath = "dist\BioVaram\BioVaram.exe"
     if (-not (Test-Path $exePath)) {
