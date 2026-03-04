@@ -1,9 +1,10 @@
 "use client"
 
 import type { UIMessage } from "ai"
+import { getApiBaseUrl } from "./module-config"
 
 // DESKTOP MODE: Chat endpoint moved to FastAPI backend
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+const API_BASE = getApiBaseUrl()
 
 export async function sendChatMessage(messages: UIMessage[]) {
   try {

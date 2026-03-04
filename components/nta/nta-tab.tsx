@@ -195,7 +195,7 @@ export function NTATab() {
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Backend Offline</AlertTitle>
             <AlertDescription>
-              Cannot connect to the analysis backend at localhost:8000. Please ensure the FastAPI server is running.
+              Cannot connect to the analysis backend. Please ensure the server is running.
             </AlertDescription>
           </Alert>
         )}

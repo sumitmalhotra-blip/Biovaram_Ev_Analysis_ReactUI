@@ -141,7 +141,7 @@ export function Header() {
               </TooltipTrigger>
               <TooltipContent>
                 <p className="text-xs">
-                  {apiConnected ? "FastAPI backend at localhost:8000" : "Cannot connect to backend"}
+                  {apiConnected ? "FastAPI backend connected" : "Cannot connect to backend"}
                 </p>
                 <p className="text-xs text-muted-foreground">Last check: {formatLastCheck()}</p>
                 <p className="text-xs text-muted-foreground">Click to refresh</p>

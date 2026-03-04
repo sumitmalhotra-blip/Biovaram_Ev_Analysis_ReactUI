@@ -13,6 +13,7 @@ import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport } from "ai"
 import { useToast } from "@/hooks/use-toast"
 import { downloadChatHistory, type ChatMessageForExport } from "@/lib/export-utils"
+import { getApiBaseUrl } from "@/lib/module-config"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,9 +39,7 @@ export function ResearchChatTab() {
   const [localInput, setLocalInput] = useState('')
 
   // DESKTOP: Chat endpoint on FastAPI backend
-  const chatApiUrl = process.env.NEXT_PUBLIC_API_URL
-    ? `${process.env.NEXT_PUBLIC_API_URL}/api/v1/chat`
-    : "http://localhost:8000/api/v1/chat"
+  const chatApiUrl = `${getApiBaseUrl()}/api/v1/chat`
 
   const { messages, sendMessage, status, setMessages } = useChat({
     transport: new DefaultChatTransport({ api: chatApiUrl }),

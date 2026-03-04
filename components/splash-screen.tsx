@@ -53,7 +53,7 @@ export function SplashScreen({ onReady }: SplashScreenProps) {
 
     if (!backendReady) {
       updateStep(0, "error")
-      setError("Could not connect to backend. Make sure the server is running on localhost:8000.")
+      setError("Could not connect to backend. Make sure the server is running.")
       return
     }
     updateStep(0, "done")

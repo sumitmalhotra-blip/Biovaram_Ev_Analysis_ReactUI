@@ -50,8 +50,7 @@ export default function RootLayout({
         {/* PERFORMANCE: Preconnect to external origins */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        {/* PERFORMANCE: DNS prefetch for API */}
-        <link rel="dns-prefetch" href="//localhost:8000" />
+        {/* PERFORMANCE: DNS prefetch for API — port varies by module */}
       </head>
       <body className={`${inter.className} antialiased`}>
         <StoreProvider>

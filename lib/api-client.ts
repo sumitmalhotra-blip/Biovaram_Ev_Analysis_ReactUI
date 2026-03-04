@@ -1,10 +1,12 @@
 /**
  * API Client for BioVaram EV Analysis Platform
- * Connects to FastAPI backend at localhost:8000
+ * Connects to FastAPI backend (port depends on active module)
  */
 
-// Get base URL and strip any trailing /api/v1 to prevent double prefix
-let API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { getApiBaseUrl } from "./module-config"
+
+// Get base URL — uses module-specific port or same-origin in EXE mode
+let API_BASE_URL = getApiBaseUrl();
 // Safety: Remove trailing /api/v1 if present (prevents double prefix bug)
 if (API_BASE_URL.endsWith("/api/v1")) {
   API_BASE_URL = API_BASE_URL.replace(/\/api\/v1$/, "");

@@ -35,7 +35,9 @@ if getattr(sys, 'frozen', False):
     BUNDLE_DIR = Path(sys._MEIPASS)  # type: ignore[attr-defined]
     APP_DIR = Path(sys.executable).parent
 else:
-    BUNDLE_DIR = Path(__file__).parent
+    # __file__ = backend/modules/run_module.py
+    # BUNDLE_DIR should be backend/ (where src/ lives)
+    BUNDLE_DIR = Path(__file__).parent.parent
     APP_DIR = BUNDLE_DIR
 
 BACKEND_DIR = BUNDLE_DIR if getattr(sys, 'frozen', False) else BUNDLE_DIR
@@ -46,6 +48,7 @@ if getattr(sys, 'frozen', False):
     if not FRONTEND_DIR.exists():
         FRONTEND_DIR = APP_DIR / "frontend"
 else:
+    # In dev mode: project_root/out  (backend/../out)
     FRONTEND_DIR = BUNDLE_DIR.parent / "out"
 
 
