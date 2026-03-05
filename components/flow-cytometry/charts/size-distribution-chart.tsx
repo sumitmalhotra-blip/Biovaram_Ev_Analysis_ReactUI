@@ -19,6 +19,7 @@ import {
 import { InteractiveChartWrapper, EnhancedChartTooltip } from "@/components/charts/interactive-chart-wrapper"
 import { CHART_COLORS } from "@/lib/store"
 import { useAnalysisStore, type SizeRange, type ScatterDataPoint } from "@/lib/store"
+import { useShallow } from "zustand/shallow"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Eye, EyeOff, Layers, BarChart3, TrendingUp } from "lucide-react"
