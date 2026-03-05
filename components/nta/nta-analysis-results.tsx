@@ -30,10 +30,9 @@ import { Input } from "@/components/ui/input"
 import { NTASizeDistributionChart } from "./charts/nta-size-distribution-chart"
 import { ConcentrationProfileChart } from "./charts/concentration-profile-chart"
 import { TemperatureCorrectedComparison } from "./charts/temperature-corrected-comparison"
-import { EVSizeCategoryPieChart } from "./charts/ev-size-category-pie-chart"
+import { EVSizeCategoryBarChart } from "./charts/ev-size-category-bar-chart"
 import { NTAStatisticsCards } from "./statistics-cards"
 import { NTASizeDistributionBreakdown } from "./size-distribution-breakdown"
-import { PositionAnalysis } from "./position-analysis"
 import { SupplementaryMetadataTable } from "./supplementary-metadata-table"
 import { 
   generateMarkdownReport, 
@@ -395,10 +394,10 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
       {/* Statistics Cards */}
       <NTAStatisticsCards results={results} />
 
-      {/* Size Distribution Breakdown and Pie Chart */}
+      {/* Size Distribution Breakdown and Bar Chart */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <NTASizeDistributionBreakdown results={results} />
-        <EVSizeCategoryPieChart data={results} />
+        <EVSizeCategoryBarChart data={results} />
       </div>
 
       {/* Quick Summary & Export Options */}
@@ -589,9 +588,6 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
               <TabsTrigger value="concentration" className="shrink-0">
                 Concentration Profile
               </TabsTrigger>
-              <TabsTrigger value="position" className="shrink-0">
-                Position Map
-              </TabsTrigger>
               <TabsTrigger value="corrected" className="shrink-0">
                 Temperature Corrected
               </TabsTrigger>
@@ -650,10 +646,6 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
                 data={results} 
                 secondaryData={secondaryResults || undefined}
               />
-            </TabsContent>
-
-            <TabsContent value="position" className="space-y-4">
-              <PositionAnalysis />
             </TabsContent>
 
             <TabsContent value="corrected" className="space-y-4">
