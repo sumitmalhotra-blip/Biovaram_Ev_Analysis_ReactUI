@@ -177,13 +177,31 @@ export function CrossCompareTab() {
   }, [selectedFcsSample, selectedNtaSample, fcsSamples, ntaSamples, fcsAnalysis.sampleId, ntaAnalysis.sampleId, toast])
 
   const handlePin = (chartTitle: string, chartType: "histogram" | "bar" | "line") => {
+    // Extract cross-validation histogram data if available
+    let pinData: Array<{ x: number; y: number; label?: string }> = []
+    let pinConfig: { xAxisLabel?: string; yAxisLabel?: string; color?: string } = {}
+
+    if (crossValidation) {
+      if (crossValidation.fcs_statistics && crossValidation.nta_statistics) {
+        // Create a simple comparison bar chart data
+        const metrics = ['d10', 'd50', 'd90', 'mean'] as const
+        pinData = metrics.map((m, i) => ({
+          x: i + 1,
+          y: crossValidation.fcs_statistics[m],
+          label: m.toUpperCase(),
+        }))
+      }
+      pinConfig = { xAxisLabel: "Metric", yAxisLabel: "Size (nm)", color: "#8b5cf6" }
+    }
+
     pinChart({
       id: crypto.randomUUID(),
       title: chartTitle,
       source: "Cross-Compare",
       timestamp: new Date(),
       type: chartType,
-      data: null,
+      data: pinData.length > 0 ? pinData : [],
+      config: pinConfig,
     })
     toast({
       title: "Pinned to Dashboard",

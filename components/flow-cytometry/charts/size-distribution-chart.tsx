@@ -422,6 +422,7 @@ export const SizeDistributionChart = memo(function SizeDistributionChart({
             <YAxis
               stroke="#64748b"
               tick={{ fontSize: 11 }}
+              domain={[0, 'auto']}
               label={{ value: "Count", angle: -90, position: "insideLeft", fill: "#64748b", fontSize: 12 }}
             />
             <Tooltip 
@@ -539,6 +540,7 @@ export const SizeDistributionChart = memo(function SizeDistributionChart({
             <YAxis
               stroke="#64748b"
               tick={{ fontSize: 11 }}
+              domain={[0, 'auto']}
               label={{ value: "Count", angle: -90, position: "insideLeft", fill: "#64748b", fontSize: 12 }}
             />
             <Tooltip content={<CustomTooltip />} />

@@ -455,13 +455,66 @@ export function AnalysisResults() {
   }, [anomalyData])
 
   const handlePin = (chartTitle: string, chartType: "histogram" | "scatter" | "line") => {
+    let pinData: Array<{ x: number; y: number; label?: string }> = []
+    let pinConfig: { xAxisLabel?: string; yAxisLabel?: string; color?: string } = {}
+
+    switch (chartTitle) {
+      case "Size Distribution": {
+        if (scatterDiameters.length > 0) {
+          const binCount = 25
+          const maxSize = Math.min(1000, Math.max(...scatterDiameters) * 1.1)
+          const binWidth = maxSize / binCount
+          pinData = Array.from({ length: binCount }, (_, i) => {
+            const binStart = i * binWidth
+            const binEnd = (i + 1) * binWidth
+            const count = scatterDiameters.filter(s => s >= binStart && s < binEnd).length
+            return { x: Math.round(binStart + binWidth / 2), y: count }
+          })
+        }
+        pinConfig = { xAxisLabel: "Diameter (nm)", yAxisLabel: "Count", color: "#8b5cf6" }
+        break
+      }
+      case "Theory vs Measured": {
+        if (theoryMeasuredData && theoryMeasuredData.length > 0) {
+          const step = Math.max(1, Math.floor(theoryMeasuredData.length / 300))
+          pinData = theoryMeasuredData
+            .filter((_, i) => i % step === 0)
+            .map(p => ({ x: p.diameter, y: p.intensity }))
+        }
+        pinConfig = { xAxisLabel: "Diameter (nm)", yAxisLabel: "Intensity", color: "#10b981" }
+        break
+      }
+      case "Diameter vs SSC": {
+        if (diameterVsSSCData.length > 0) {
+          const step = Math.max(1, Math.floor(diameterVsSSCData.length / 500))
+          pinData = diameterVsSSCData
+            .filter((_, i) => i % step === 0)
+            .map(p => ({ x: p.diameter, y: p.ssc }))
+        }
+        pinConfig = { xAxisLabel: "Diameter (nm)", yAxisLabel: "SSC", color: "#f59e0b" }
+        break
+      }
+      case "Event vs Size": {
+        if (scatterData.length > 0) {
+          const validEvents = scatterData.filter(p => p.diameter && p.diameter > 0)
+          const step = Math.max(1, Math.floor(validEvents.length / 500))
+          pinData = validEvents
+            .filter((_, i) => i % step === 0)
+            .map((p, i) => ({ x: i, y: p.diameter as number }))
+        }
+        pinConfig = { xAxisLabel: "Event #", yAxisLabel: "Size (nm)", color: "#3b82f6" }
+        break
+      }
+    }
+
     pinChart({
       id: crypto.randomUUID(),
       title: chartTitle,
       source: "Flow Cytometry",
       timestamp: new Date(),
       type: chartType,
-      data: results,
+      data: pinData.length > 0 ? pinData : [],
+      config: pinConfig,
     })
     toast({
       title: "Pinned to Dashboard",

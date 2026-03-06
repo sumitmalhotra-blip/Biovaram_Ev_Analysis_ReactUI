@@ -130,14 +130,80 @@ export const FullAnalysisDashboard = memo(function FullAnalysisDashboard({
   // Check if overlay mode is enabled and we have secondary data
   const hasOverlay = overlayConfig.enabled && secondaryResults !== null
 
-  const handlePin = (chartTitle: string, chartType: "histogram" | "scatter" | "line") => {
+  const handlePin = (chartId: ChartType, chartTitle: string, chartType: "histogram" | "scatter" | "line") => {
+    let pinData: Array<{ x: number; y: number; label?: string }> = []
+    let pinConfig: { xAxisLabel?: string; yAxisLabel?: string; color?: string; secondaryColor?: string } = {}
+
+    switch (chartId) {
+      case "distribution": {
+        // Bin the actual size data into histogram bins
+        const sizes = distributionSizeData
+        if (sizes && sizes.length > 0) {
+          const binCount = 25
+          const maxSize = Math.min(1000, Math.max(...sizes) * 1.1)
+          const binWidth = maxSize / binCount
+          pinData = Array.from({ length: binCount }, (_, i) => {
+            const binStart = i * binWidth
+            const binEnd = (i + 1) * binWidth
+            const count = sizes.filter(s => s >= binStart && s < binEnd).length
+            return { x: Math.round(binStart + binWidth / 2), y: count }
+          })
+        }
+        pinConfig = { xAxisLabel: "Diameter (nm)", yAxisLabel: "Count", color: "#8b5cf6" }
+        break
+      }
+      case "fsc-ssc": {
+        if (scatterData && scatterData.length > 0) {
+          const step = Math.max(1, Math.floor(scatterData.length / 500))
+          pinData = scatterData
+            .filter((_, i) => i % step === 0)
+            .map(p => ({ x: p.x, y: p.y }))
+        }
+        pinConfig = { xAxisLabel: xChannel, yAxisLabel: yChannel, color: "#3b82f6" }
+        break
+      }
+      case "diameter-ssc": {
+        if (diameterData.length > 0) {
+          const step = Math.max(1, Math.floor(diameterData.length / 500))
+          pinData = diameterData
+            .filter((_, i) => i % step === 0)
+            .map(p => ({ x: p.diameter, y: p.ssc }))
+        }
+        pinConfig = { xAxisLabel: "Diameter (nm)", yAxisLabel: "SSC", color: "#f59e0b" }
+        break
+      }
+      case "theory": {
+        if (theoryPrimaryData && theoryPrimaryData.length > 0) {
+          const step = Math.max(1, Math.floor(theoryPrimaryData.length / 300))
+          pinData = theoryPrimaryData
+            .filter((_, i) => i % step === 0)
+            .map(p => ({ x: p.diameter, y: p.intensity }))
+        }
+        pinConfig = { xAxisLabel: "Diameter (nm)", yAxisLabel: "Intensity", color: "#10b981" }
+        break
+      }
+      case "event-size": {
+        // Event vs Size loads data internally; extract from scatter if available
+        if (scatterData && scatterData.length > 0) {
+          const validEvents = scatterData.filter(p => p.diameter && p.diameter > 0)
+          const step = Math.max(1, Math.floor(validEvents.length / 500))
+          pinData = validEvents
+            .filter((_, i) => i % step === 0)
+            .map((p, i) => ({ x: i, y: p.diameter as number }))
+        }
+        pinConfig = { xAxisLabel: "Event #", yAxisLabel: "Size (nm)", color: "#3b82f6" }
+        break
+      }
+    }
+
     pinChart({
       id: crypto.randomUUID(),
       title: chartTitle,
       source: "Flow Cytometry",
       timestamp: new Date(),
       type: chartType,
-      data: results,
+      data: pinData.length > 0 ? pinData : [],
+      config: pinConfig,
     })
     toast({
       title: "Pinned to Dashboard",
@@ -311,7 +377,7 @@ export const FullAnalysisDashboard = memo(function FullAnalysisDashboard({
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8"
-                onClick={() => handlePin(config.title, config.pinType)}
+                onClick={() => handlePin(config.id, config.title, config.pinType)}
               >
                 <Pin className="h-4 w-4" />
               </Button>
@@ -415,7 +481,7 @@ export const FullAnalysisDashboard = memo(function FullAnalysisDashboard({
                     variant="ghost"
                     size="icon"
                     className="h-6 w-6"
-                    onClick={() => handlePin(config.title, config.pinType)}
+                    onClick={() => handlePin(config.id, config.title, config.pinType)}
                   >
                     <Pin className="h-3 w-3" />
                   </Button>

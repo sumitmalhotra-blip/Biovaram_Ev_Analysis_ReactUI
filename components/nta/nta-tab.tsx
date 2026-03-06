@@ -104,13 +104,45 @@ export function NTATab() {
   }
 
   const handlePin = (chartTitle: string, chartType: "histogram" | "bar" | "line") => {
+    const ntaResults = ntaAnalysis.results
+    let pinData: Array<{ x: number; y: number; label?: string }> = []
+    let pinConfig: { xAxisLabel?: string; yAxisLabel?: string; color?: string } = {}
+
+    if (ntaResults) {
+      if (chartTitle === "NTA Size Distribution") {
+        if (ntaResults.size_distribution && Array.isArray(ntaResults.size_distribution) && ntaResults.size_distribution.length > 0) {
+          pinData = ntaResults.size_distribution
+            .filter((d: any) => d.size != null)
+            .map((d: any) => ({ x: d.size, y: d.count ?? d.concentration ?? 0 }))
+            .sort((a: { x: number }, b: { x: number }) => a.x - b.x)
+        }
+        pinConfig = { xAxisLabel: "Diameter (nm)", yAxisLabel: "Count", color: "#8b5cf6" }
+      } else if (chartTitle === "Concentration Profile") {
+        const bins = [
+          { key: "bin_50_80nm_pct" as const, label: "50-80nm" },
+          { key: "bin_80_100nm_pct" as const, label: "80-100nm" },
+          { key: "bin_100_120nm_pct" as const, label: "100-120nm" },
+          { key: "bin_120_150nm_pct" as const, label: "120-150nm" },
+          { key: "bin_150_200nm_pct" as const, label: "150-200nm" },
+          { key: "bin_200_plus_pct" as const, label: "200+nm" },
+        ]
+        const totalConc = ntaResults.concentration_particles_ml || 2.4e9
+        pinData = bins.map((bin, i) => {
+          const pct = (ntaResults as any)[bin.key] || 0
+          return { x: i + 1, y: parseFloat(((pct / 100) * (totalConc / 1e9)).toFixed(2)), label: bin.label }
+        })
+        pinConfig = { xAxisLabel: "Size Range", yAxisLabel: "Conc (×10⁹ p/mL)", color: "#3b82f6" }
+      }
+    }
+
     pinChart({
       id: crypto.randomUUID(),
       title: chartTitle,
       source: "NTA",
       timestamp: new Date(),
       type: chartType,
-      data: ntaAnalysis.results,
+      data: pinData.length > 0 ? pinData : [],
+      config: pinConfig,
     })
     toast({
       title: "Pinned to Dashboard",

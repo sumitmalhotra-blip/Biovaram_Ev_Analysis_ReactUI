@@ -92,6 +92,9 @@ export function MiniChart({ type, data, config }: MiniChartProps) {
   const gridColor = "#334155"
   const axisColor = "#64748b"
   
+  // Check if data points have labels (e.g. bin ranges)
+  const hasLabels = chartData.some(d => d.label)
+  
   const tooltipStyle = {
     backgroundColor: "#1e293b",
     border: "1px solid #334155",
@@ -100,26 +103,43 @@ export function MiniChart({ type, data, config }: MiniChartProps) {
     color: "#f8fafc",
   }
 
+  // Show empty state if no real data
+  if (!data || (Array.isArray(data) && data.length === 0)) {
+    return (
+      <div className="h-48 flex items-center justify-center text-muted-foreground text-xs">
+        No data available
+      </div>
+    )
+  }
+
   return (
-    <div className="h-32">
+    <div className="h-48">
       <ResponsiveContainer width="100%" height="100%">
         {type === "bar" || type === "histogram" ? (
-          <BarChart data={chartData}>
+          <BarChart data={chartData} margin={{ top: 5, right: 5, left: 0, bottom: 20 }}>
+            <defs>
+              <linearGradient id={`miniBar-${primaryColor.replace('#', '')}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={primaryColor} stopOpacity={0.9} />
+                <stop offset="95%" stopColor={primaryColor} stopOpacity={0.4} />
+              </linearGradient>
+            </defs>
             <CartesianGrid strokeDasharray="3 3" stroke={gridColor} opacity={0.3} />
             <XAxis 
-              dataKey="x" 
-              tick={{ fontSize: 10 }} 
+              dataKey={hasLabels ? "label" : "x"} 
+              tick={{ fontSize: 9, fill: axisColor }} 
               stroke={axisColor}
               label={config?.xAxisLabel ? { 
                 value: config.xAxisLabel, 
                 position: 'bottom', 
                 fontSize: 9,
-                fill: axisColor
+                fill: axisColor,
+                offset: 2,
               } : undefined}
             />
             <YAxis 
-              tick={{ fontSize: 10 }} 
+              tick={{ fontSize: 9, fill: axisColor }} 
               stroke={axisColor}
+              domain={[0, 'auto']}
               label={config?.yAxisLabel ? { 
                 value: config.yAxisLabel, 
                 angle: -90, 
@@ -131,37 +151,87 @@ export function MiniChart({ type, data, config }: MiniChartProps) {
             <Tooltip
               contentStyle={tooltipStyle}
               formatter={(value: number) => [value.toLocaleString(), config?.yAxisLabel || 'Count']}
-              labelFormatter={(label) => `${config?.xAxisLabel || 'Size'}: ${label}`}
+              labelFormatter={(label) => `${config?.xAxisLabel || 'Value'}: ${label}`}
             />
-            <Bar dataKey="y" fill={primaryColor} radius={[2, 2, 0, 0]} />
+            <Bar 
+              dataKey="y" 
+              fill={`url(#miniBar-${primaryColor.replace('#', '')})`} 
+              radius={[2, 2, 0, 0]} 
+            />
           </BarChart>
         ) : type === "line" ? (
-          <AreaChart data={chartData}>
+          <AreaChart data={chartData} margin={{ top: 5, right: 5, left: 0, bottom: 20 }}>
             <defs>
-              <linearGradient id={`gradient-${primaryColor.replace('#', '')}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor={primaryColor} stopOpacity={0.3} />
+              <linearGradient id={`miniGrad-${primaryColor.replace('#', '')}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={primaryColor} stopOpacity={0.4} />
                 <stop offset="95%" stopColor={primaryColor} stopOpacity={0.05} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke={gridColor} opacity={0.3} />
-            <XAxis dataKey="x" tick={{ fontSize: 10 }} stroke={axisColor} />
-            <YAxis tick={{ fontSize: 10 }} stroke={axisColor} />
+            <XAxis 
+              dataKey="x" 
+              tick={{ fontSize: 9, fill: axisColor }} 
+              stroke={axisColor}
+              label={config?.xAxisLabel ? { 
+                value: config.xAxisLabel, 
+                position: 'bottom', 
+                fontSize: 9,
+                fill: axisColor,
+                offset: 2,
+              } : undefined}
+            />
+            <YAxis 
+              tick={{ fontSize: 9, fill: axisColor }} 
+              stroke={axisColor}
+              domain={[0, 'auto']}
+              label={config?.yAxisLabel ? { 
+                value: config.yAxisLabel, 
+                angle: -90, 
+                position: 'insideLeft',
+                fontSize: 9,
+                fill: axisColor
+              } : undefined}
+            />
             <Tooltip contentStyle={tooltipStyle} />
             <Area 
               type="monotone" 
               dataKey="y" 
               stroke={primaryColor} 
               strokeWidth={2} 
-              fill={`url(#gradient-${primaryColor.replace('#', '')})`}
+              fill={`url(#miniGrad-${primaryColor.replace('#', '')})`}
             />
           </AreaChart>
         ) : (
-          <ScatterChart>
+          <ScatterChart margin={{ top: 5, right: 5, left: 0, bottom: 20 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={gridColor} opacity={0.3} />
-            <XAxis dataKey="x" tick={{ fontSize: 10 }} stroke={axisColor} />
-            <YAxis dataKey="y" tick={{ fontSize: 10 }} stroke={axisColor} />
+            <XAxis 
+              dataKey="x" 
+              tick={{ fontSize: 9, fill: axisColor }} 
+              stroke={axisColor}
+              type="number"
+              label={config?.xAxisLabel ? { 
+                value: config.xAxisLabel, 
+                position: 'bottom', 
+                fontSize: 9,
+                fill: axisColor,
+                offset: 2,
+              } : undefined}
+            />
+            <YAxis 
+              dataKey="y" 
+              tick={{ fontSize: 9, fill: axisColor }} 
+              stroke={axisColor}
+              type="number"
+              label={config?.yAxisLabel ? { 
+                value: config.yAxisLabel, 
+                angle: -90, 
+                position: 'insideLeft',
+                fontSize: 9,
+                fill: axisColor
+              } : undefined}
+            />
             <Tooltip contentStyle={tooltipStyle} />
-            <Scatter data={chartData} fill={config?.secondaryColor || "#8b5cf6"} />
+            <Scatter data={chartData} fill={primaryColor} opacity={0.6} />
           </ScatterChart>
         )}
       </ResponsiveContainer>
