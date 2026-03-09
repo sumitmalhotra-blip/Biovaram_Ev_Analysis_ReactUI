@@ -164,6 +164,76 @@ def mount_frontend(app, frontend_dir: Path = FRONTEND_DIR):
         print(f"  The API will still be available at /docs")
 
 
+def _find_browser_exe() -> str | None:
+    """Find Chrome or Edge executable on Windows."""
+    import winreg
+
+    # Check common paths for Chrome and Edge
+    candidates = [
+        # Chrome
+        os.path.join(os.environ.get("PROGRAMFILES", ""), "Google", "Chrome", "Application", "chrome.exe"),
+        os.path.join(os.environ.get("PROGRAMFILES(X86)", ""), "Google", "Chrome", "Application", "chrome.exe"),
+        os.path.join(os.environ.get("LOCALAPPDATA", ""), "Google", "Chrome", "Application", "chrome.exe"),
+        # Edge
+        os.path.join(os.environ.get("PROGRAMFILES", ""), "Microsoft", "Edge", "Application", "msedge.exe"),
+        os.path.join(os.environ.get("PROGRAMFILES(X86)", ""), "Microsoft", "Edge", "Application", "msedge.exe"),
+    ]
+
+    for path in candidates:
+        if path and os.path.isfile(path):
+            return path
+
+    # Try Windows registry for Chrome
+    try:
+        key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                             r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe")
+        chrome_path, _ = winreg.QueryValueEx(key, "")
+        winreg.CloseKey(key)
+        if os.path.isfile(chrome_path):
+            return chrome_path
+    except OSError:
+        pass
+
+    # Try registry for Edge
+    try:
+        key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                             r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\msedge.exe")
+        edge_path, _ = winreg.QueryValueEx(key, "")
+        winreg.CloseKey(key)
+        if os.path.isfile(edge_path):
+            return edge_path
+    except OSError:
+        pass
+
+    return None
+
+
+def _open_as_app_window(url: str, title: str) -> bool:
+    """
+    Open URL in a standalone browser window (no address bar, no tabs).
+    Uses Chrome/Edge --app flag — same as "Install as desktop app" in Chrome.
+    Returns True if successful, False to fall back to regular browser.
+    """
+    import subprocess
+
+    browser_exe = _find_browser_exe()
+    if not browser_exe:
+        return False
+
+    try:
+        # --app= opens in standalone window (PWA-like)
+        # --new-window ensures it doesn't reuse an existing tab
+        subprocess.Popen(
+            [browser_exe, f"--app={url}", "--new-window"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return True
+    except Exception as e:
+        print(f"  Could not open app window: {e}")
+        return False
+
+
 def run_module(
     module_name: str,
     module_title: str,
@@ -226,24 +296,18 @@ def run_module(
     print("=" * 60)
     print()
     
-    # Open browser
+    # Open browser in standalone app window (like a PWA)
     def _open_browser():
         time.sleep(2.0)
         url = f"http://localhost:{port}"
-        print(f"\n  Opening browser: {url}")
-        if getattr(sys, 'frozen', False) and sys.platform == 'win32':
-            try:
-                import ctypes
-                ctypes.windll.user32.MessageBoxTimeoutW(  # type: ignore[attr-defined]
-                    0,
-                    f"BioVaram {module_title} v{version}\n\n"
-                    f"Server running on http://localhost:{port}\n"
-                    f"Your browser will open automatically.",
-                    f"BioVaram {module_title}",
-                    0x00000040, 0, 3000,
-                )
-            except Exception:
-                pass
+        
+        if sys.platform == 'win32':
+            opened = _open_as_app_window(url, module_title)
+            if opened:
+                print(f"\n  Opened standalone window: {url}")
+                return
+        
+        print(f"\n  Opening browser tab: {url}")
         webbrowser.open(url)
     
     threading.Thread(target=_open_browser, daemon=True).start()
