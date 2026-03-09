@@ -15,14 +15,16 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "BioVaram EV Analysis Platform",
   description: "Advanced Extracellular Vesicle Analysis for Flow Cytometry and NTA",
-  generator: 'v0.app',
   manifest: '/manifest.json',
   icons: {
     icon: [
-      { url: '/icon-dark-32x32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/favicon.ico', sizes: '64x64 48x48 32x32 16x16', type: 'image/x-icon' },
+      { url: '/icon-32x32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/icon-192x192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon-512x512.png', sizes: '512x512', type: 'image/png' },
       { url: '/icon.svg', type: 'image/svg+xml' },
     ],
-    apple: '/apple-icon.png',
+    apple: '/icon-192x192.png',
   },
   appleWebApp: {
     capable: true,
