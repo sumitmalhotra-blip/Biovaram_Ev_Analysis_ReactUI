@@ -1,0 +1,177 @@
+; =============================================================================
+; BioVaram EV Analysis Platform — Inno Setup Installer Script
+; =============================================================================
+;
+; This script creates a professional Windows installer for BioVaram module EXEs.
+; It is parameterized via #define directives that can be overridden from the
+; command line using /D flags:
+;
+;   ISCC /DMODULE_NAME=nanofacs /DEXE_NAME=BioVaram_NanoFACS ...
+;
+; Supported modules:
+;   nanofacs       → BioVaram NanoFACS Analysis
+;   nta            → BioVaram NTA Analysis
+;   full_platform  → BioVaram EV Analysis Platform
+;
+; =============================================================================
+
+; ---- Defaults (can be overridden via /D on ISCC command line) ----
+
+#ifndef MODULE_NAME
+  #define MODULE_NAME "nanofacs"
+#endif
+
+#ifndef MODULE_TITLE
+  #define MODULE_TITLE "NanoFACS Analysis"
+#endif
+
+#ifndef EXE_NAME
+  #define EXE_NAME "BioVaram_NanoFACS"
+#endif
+
+#ifndef APP_VERSION
+  #define APP_VERSION "1.0.0"
+#endif
+
+#ifndef DIST_DIR
+  #define DIST_DIR "..\dist\" + EXE_NAME
+#endif
+
+#ifndef OUTPUT_DIR
+  #define OUTPUT_DIR "..\installer_output"
+#endif
+
+; ---- Application metadata ----
+
+#define APP_PUBLISHER "BioVaram / CRM IT"
+#define APP_URL "https://biovaram.com"
+#define APP_SUPPORT_URL "https://biovaram.com/support"
+#define APP_UPDATES_URL "https://biovaram.com/updates"
+
+[Setup]
+; Unique AppId per module so different modules can coexist
+AppId={{BioVaram-{#MODULE_NAME}-Desktop}
+AppName=BioVaram {#MODULE_TITLE}
+AppVersion={#APP_VERSION}
+AppVerName=BioVaram {#MODULE_TITLE} v{#APP_VERSION}
+AppPublisher={#APP_PUBLISHER}
+AppPublisherURL={#APP_URL}
+AppSupportURL={#APP_SUPPORT_URL}
+AppUpdatesURL={#APP_UPDATES_URL}
+
+; Installation directory
+DefaultDirName={autopf}\BioVaram\{#MODULE_TITLE}
+DefaultGroupName=BioVaram
+
+; Allow user to change install directory
+DisableDirPage=no
+DisableProgramGroupPage=yes
+
+; Output installer file
+OutputDir={#OUTPUT_DIR}
+OutputBaseFilename=BioVaram_{#MODULE_NAME}_Setup_v{#APP_VERSION}
+
+; Compression
+Compression=lzma2/ultra64
+SolidCompression=yes
+LZMAUseSeparateProcess=yes
+LZMANumBlockThreads=4
+
+; Visual
+SetupIconFile=biovaram.ico
+WizardStyle=modern
+WizardSizePercent=110
+
+; Privilege level — per-user install by default (no admin needed)
+PrivilegesRequired=lowest
+PrivilegesRequiredOverridesAllowed=dialog
+
+; Uninstaller
+UninstallDisplayIcon={app}\{#EXE_NAME}.exe
+UninstallDisplayName=BioVaram {#MODULE_TITLE}
+CreateUninstallRegKey=yes
+
+; Architecture
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+
+; Version info embedded in installer EXE
+VersionInfoVersion={#APP_VERSION}.0
+VersionInfoCompany={#APP_PUBLISHER}
+VersionInfoDescription=BioVaram {#MODULE_TITLE} Installer
+VersionInfoProductName=BioVaram {#MODULE_TITLE}
+VersionInfoProductVersion={#APP_VERSION}
+
+; Misc
+AllowNoIcons=yes
+CloseApplications=force
+RestartApplications=no
+
+[Languages]
+Name: "english"; MessagesFile: "compiler:Default.isl"
+
+[Tasks]
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
+
+[Files]
+; Bundle the entire dist/<EXE_NAME>/ folder
+Source: "{#DIST_DIR}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+; Version info (created by build script)
+; version.json is already included via the wildcard above
+
+[Icons]
+; Start Menu shortcuts
+Name: "{group}\BioVaram {#MODULE_TITLE}"; Filename: "{app}\{#EXE_NAME}.exe"; Comment: "Launch BioVaram {#MODULE_TITLE}"
+Name: "{group}\Uninstall BioVaram {#MODULE_TITLE}"; Filename: "{uninstallexe}"
+
+; Desktop shortcut (if selected)
+Name: "{autodesktop}\BioVaram {#MODULE_TITLE}"; Filename: "{app}\{#EXE_NAME}.exe"; Tasks: desktopicon; Comment: "Launch BioVaram {#MODULE_TITLE}"
+
+[Run]
+; Option to run app after install
+Filename: "{app}\{#EXE_NAME}.exe"; Description: "{cm:LaunchProgram,BioVaram {#MODULE_TITLE}}"; Flags: nowait postinstall skipifsilent
+
+[UninstallDelete]
+; Clean up logs on uninstall
+Type: files; Name: "{app}\*.log"
+
+[Code]
+// ---- Pascal Script for custom installer logic ----
+
+// Check if a previous version is installed and offer to uninstall
+function InitializeSetup(): Boolean;
+var
+  UninstallKey: string;
+  UninstallString: string;
+  ResultCode: Integer;
+begin
+  Result := True;
+  
+  UninstallKey := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\BioVaram-{#MODULE_NAME}-Desktop_is1';
+  
+  if RegQueryStringValue(HKCU, UninstallKey, 'UninstallString', UninstallString) or
+     RegQueryStringValue(HKLM, UninstallKey, 'UninstallString', UninstallString) then
+  begin
+    if MsgBox(
+      'A previous version of BioVaram {#MODULE_TITLE} is already installed.' + #13#10 + #13#10 +
+      'Would you like to uninstall the previous version first?' + #13#10 + #13#10 +
+      'Your data in %APPDATA%\BioVaram\ will be preserved.',
+      mbConfirmation, MB_YESNO
+    ) = IDYES then
+    begin
+      Exec(RemoveQuotes(UninstallString), '/SILENT', '', SW_SHOW, ewWaitUntilTerminated, ResultCode);
+    end;
+  end;
+end;
+
+// Kill the running application before uninstall
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  ResultCode: Integer;
+begin
+  if CurUninstallStep = usUninstall then
+  begin
+    Exec('taskkill', '/F /IM {#EXE_NAME}.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  end;
+end;
