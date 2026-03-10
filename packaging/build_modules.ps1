@@ -8,9 +8,9 @@
     frontend build (tabs restricted to that module only).
 
     Modules available:
-      nanofacs       — NanoFACS + Dashboard + AI Chat
-      nta            — NTA Analysis + Dashboard + AI Chat
-      full_platform  — Full platform (all features)
+      nanofacs       - NanoFACS + Dashboard + AI Chat
+      nta            - NTA Analysis + Dashboard + AI Chat
+      full_platform  - Full platform (all features)
 
 .PARAMETER Module
     Which module(s) to build. Use "all" to build everything.
@@ -117,7 +117,7 @@ try {
         $def = $ModuleDefinitions[$mod]
         
         if (-not $def) {
-            Write-Host "  Unknown module '$mod' — skipping" -ForegroundColor Red
+            Write-Host "  Unknown module '$mod' -- skipping" -ForegroundColor Red
             $results += @{ Module = $mod; Status = "SKIPPED"; Reason = "Unknown module" }
             continue
         }
@@ -125,7 +125,7 @@ try {
         Write-Host ""
         Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
         Write-Host "  [$currentModule/$totalModules] Building: $($def.Title)" -ForegroundColor Cyan
-        Write-Host "  Module: $($def.Name) → $($def.ExeName).exe" -ForegroundColor Cyan
+        Write-Host "  Module: $($def.Name) => $($def.ExeName).exe" -ForegroundColor Cyan
         Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
 
         $outDir = "out_$($def.Name)"
@@ -156,12 +156,12 @@ try {
             
             $fileCount = (Get-ChildItem -Path $outDir -Recurse -File).Count
             $totalSize = [math]::Round((Get-ChildItem -Path $outDir -Recurse -File | Measure-Object -Property Length -Sum).Sum / 1MB, 2)
-            Write-Host "  Frontend: $fileCount files, ${totalSize} MB → $outDir/" -ForegroundColor Green
+            Write-Host "  Frontend: $fileCount files, ${totalSize} MB => $outDir/" -ForegroundColor Green
             
             # Reset env var
             Remove-Item Env:\NEXT_PUBLIC_MODULE -ErrorAction SilentlyContinue
         } else {
-            Write-Host "  [A] Skipping frontend build (--SkipFrontend)" -ForegroundColor DarkGray
+            Write-Host "  [A] Skipping frontend build (-SkipFrontend)" -ForegroundColor DarkGray
             if (-not (Test-Path "$outDir\index.html")) {
                 # Fall back to default out/
                 if (-not (Test-Path "out\index.html")) {
@@ -189,7 +189,7 @@ try {
         # =================================================================
         # Step C: Run PyInstaller with module spec
         # =================================================================
-        Write-Host "  [C] Running PyInstaller → $($def.ExeName).exe..." -ForegroundColor Yellow
+        Write-Host "  [C] Running PyInstaller => $($def.ExeName).exe..." -ForegroundColor Yellow
         
         $env:BIOVARAM_MODULE_NAME = $def.Name
         $env:BIOVARAM_MODULE_TITLE = $def.Title
@@ -243,10 +243,10 @@ try {
         if (Test-Path $exePath) {
             $exeSize = [math]::Round((Get-Item $exePath).Length / 1MB, 2)
             $totalSize = [math]::Round((Get-ChildItem -Path $distDir -Recurse -File | Measure-Object -Property Length -Sum).Sum / 1MB, 2)
-            Write-Host "  ✅ $($def.ExeName).exe — $exeSize MB (total: $totalSize MB)" -ForegroundColor Green
+            Write-Host "  [OK] $($def.ExeName).exe -- $exeSize MB (total: $totalSize MB)" -ForegroundColor Green
             $results += @{ Module = $mod; Status = "OK"; ExeSize = "$exeSize MB"; TotalSize = "$totalSize MB"; Path = $exePath }
         } else {
-            Write-Host "  ❌ $($def.ExeName).exe NOT FOUND at $exePath" -ForegroundColor Red
+            Write-Host "  [FAIL] $($def.ExeName).exe NOT FOUND at $exePath" -ForegroundColor Red
             $results += @{ Module = $mod; Status = "FAILED"; Reason = "EXE not found" }
         }
     }
@@ -262,19 +262,21 @@ try {
     
     foreach ($r in $results) {
         if ($r.Status -eq "OK") {
-            Write-Host "  ✅ $($r.Module.PadRight(16)) → dist\$($ModuleDefinitions[$r.Module].ExeName)\$($ModuleDefinitions[$r.Module].ExeName).exe ($($r.TotalSize))" -ForegroundColor Green
+            Write-Host "  [OK]   $($r.Module.PadRight(16)) => dist\$($ModuleDefinitions[$r.Module].ExeName)\$($ModuleDefinitions[$r.Module].ExeName).exe ($($r.TotalSize))" -ForegroundColor Green
         } elseif ($r.Status -eq "SKIPPED") {
-            Write-Host "  ⏭️  $($r.Module.PadRight(16)) → SKIPPED: $($r.Reason)" -ForegroundColor Yellow
+            Write-Host "  [SKIP] $($r.Module.PadRight(16)) => SKIPPED: $($r.Reason)" -ForegroundColor Yellow
         } else {
-            Write-Host "  ❌ $($r.Module.PadRight(16)) → FAILED: $($r.Reason)" -ForegroundColor Red
+            Write-Host "  [FAIL] $($r.Module.PadRight(16)) => FAILED: $($r.Reason)" -ForegroundColor Red
         }
     }
 
     $successCount = ($results | Where-Object { $_.Status -eq "OK" }).Count
     Write-Host ""
-    Write-Host "  $successCount/$totalModules modules built successfully." -ForegroundColor ($successCount -eq $totalModules ? "Green" : "Yellow")
+    if ($successCount -eq $totalModules) { $statusColor = "Green" } else { $statusColor = "Yellow" }
+    $msg = "  " + $successCount + "/" + $totalModules + " modules built successfully."
+    Write-Host $msg -ForegroundColor $statusColor
     Write-Host ""
-    Write-Host "  To run a module:  .\dist\<ExeName>\<ExeName>.exe"
+    Write-Host '  To run a module:  .\dist\<ExeName>\<ExeName>.exe'
     Write-Host ""
 
 } finally {
