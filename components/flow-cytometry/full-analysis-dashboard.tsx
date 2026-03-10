@@ -136,7 +136,6 @@ export const FullAnalysisDashboard = memo(function FullAnalysisDashboard({
 
     switch (chartId) {
       case "distribution": {
-        // Bin the actual size data into histogram bins
         const sizes = distributionSizeData
         if (sizes && sizes.length > 0) {
           const binCount = 25
@@ -148,8 +147,22 @@ export const FullAnalysisDashboard = memo(function FullAnalysisDashboard({
             const count = sizes.filter(s => s >= binStart && s < binEnd).length
             return { x: Math.round(binStart + binWidth / 2), y: count }
           })
+        } else if (scatterData && scatterData.length > 0) {
+          // Fallback: use SSC (y) values as intensity histogram
+          const yValues = scatterData.map(p => p.y).filter(v => v > 0)
+          if (yValues.length > 0) {
+            const binCount = 25
+            const maxVal = Math.max(...yValues) * 1.1
+            const binWidth = maxVal / binCount
+            pinData = Array.from({ length: binCount }, (_, i) => {
+              const binStart = i * binWidth
+              const binEnd = (i + 1) * binWidth
+              const count = yValues.filter(v => v >= binStart && v < binEnd).length
+              return { x: Math.round(binStart + binWidth / 2), y: count }
+            })
+          }
         }
-        pinConfig = { xAxisLabel: "Diameter (nm)", yAxisLabel: "Count", color: "#8b5cf6" }
+        pinConfig = { xAxisLabel: (sizes && sizes.length > 0) ? "Diameter (nm)" : "Intensity", yAxisLabel: "Count", color: "#8b5cf6" }
         break
       }
       case "fsc-ssc": {
@@ -168,8 +181,14 @@ export const FullAnalysisDashboard = memo(function FullAnalysisDashboard({
           pinData = diameterData
             .filter((_, i) => i % step === 0)
             .map(p => ({ x: p.diameter, y: p.ssc }))
+        } else if (scatterData && scatterData.length > 0) {
+          // Fallback: use raw scatter data
+          const step = Math.max(1, Math.floor(scatterData.length / 500))
+          pinData = scatterData
+            .filter((_, i) => i % step === 0)
+            .map(p => ({ x: p.x, y: p.y }))
         }
-        pinConfig = { xAxisLabel: "Diameter (nm)", yAxisLabel: "SSC", color: "#f59e0b" }
+        pinConfig = { xAxisLabel: diameterData.length > 0 ? "Diameter (nm)" : (xChannel || "FSC"), yAxisLabel: "SSC", color: "#f59e0b" }
         break
       }
       case "theory": {
@@ -178,22 +197,45 @@ export const FullAnalysisDashboard = memo(function FullAnalysisDashboard({
           pinData = theoryPrimaryData
             .filter((_, i) => i % step === 0)
             .map(p => ({ x: p.diameter, y: p.intensity }))
+        } else if (scatterData && scatterData.length > 0) {
+          // Fallback: use raw scatter data
+          const step = Math.max(1, Math.floor(scatterData.length / 300))
+          pinData = scatterData
+            .filter((_, i) => i % step === 0)
+            .map(p => ({ x: p.x, y: p.y }))
         }
-        pinConfig = { xAxisLabel: "Diameter (nm)", yAxisLabel: "Intensity", color: "#10b981" }
+        pinConfig = { xAxisLabel: (theoryPrimaryData && theoryPrimaryData.length > 0) ? "Diameter (nm)" : (xChannel || "FSC"), yAxisLabel: "Intensity", color: "#10b981" }
         break
       }
       case "event-size": {
-        // Event vs Size loads data internally; extract from scatter if available
         if (scatterData && scatterData.length > 0) {
-          const validEvents = scatterData.filter(p => p.diameter && p.diameter > 0)
-          const step = Math.max(1, Math.floor(validEvents.length / 500))
-          pinData = validEvents
-            .filter((_, i) => i % step === 0)
-            .map((p, i) => ({ x: i, y: p.diameter as number }))
+          const hasAnyDiameter = scatterData.some(p => p.diameter && p.diameter > 0)
+          if (hasAnyDiameter) {
+            const validEvents = scatterData.filter(p => p.diameter && p.diameter > 0)
+            const step = Math.max(1, Math.floor(validEvents.length / 500))
+            pinData = validEvents
+              .filter((_, i) => i % step === 0)
+              .map((p, i) => ({ x: i, y: p.diameter as number }))
+          } else {
+            // Fallback: use y-values (SSC) per event
+            const step = Math.max(1, Math.floor(scatterData.length / 500))
+            pinData = scatterData
+              .filter((_, i) => i % step === 0)
+              .map((p, i) => ({ x: i, y: p.y }))
+          }
         }
-        pinConfig = { xAxisLabel: "Event #", yAxisLabel: "Size (nm)", color: "#3b82f6" }
+        pinConfig = { xAxisLabel: "Event #", yAxisLabel: (scatterData?.some(p => p.diameter && p.diameter > 0)) ? "Size (nm)" : (yChannel || "SSC"), color: "#3b82f6" }
         break
       }
+    }
+
+    if (pinData.length === 0) {
+      toast({
+        title: "No Data to Pin",
+        description: `${chartTitle} has no data available to pin. Please ensure analysis is complete.`,
+        variant: "destructive",
+      })
+      return
     }
 
     pinChart({
@@ -202,7 +244,7 @@ export const FullAnalysisDashboard = memo(function FullAnalysisDashboard({
       source: "Flow Cytometry",
       timestamp: new Date(),
       type: chartType,
-      data: pinData.length > 0 ? pinData : [],
+      data: pinData,
       config: pinConfig,
     })
     toast({

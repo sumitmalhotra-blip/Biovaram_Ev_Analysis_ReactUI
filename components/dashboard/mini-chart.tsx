@@ -34,14 +34,20 @@ const defaultData: ChartDataPoint[] = [
   { x: 300, y: 90 },
 ]
 
-// Validate and normalize chart data
+// Validate and normalize chart data — filter out NaN/Infinity values
 function normalizeChartData(data: unknown): ChartDataPoint[] {
   if (!data) return defaultData
   
   if (Array.isArray(data)) {
+    if (data.length === 0) return defaultData
+
     // Check if it's already in the right format
-    if (data.length > 0 && typeof data[0] === 'object' && 'x' in data[0]) {
-      return data as ChartDataPoint[]
+    if (typeof data[0] === 'object' && data[0] !== null && 'x' in data[0]) {
+      // Filter out invalid values that would break Recharts
+      const valid = (data as ChartDataPoint[]).filter(
+        d => Number.isFinite(d.x) && Number.isFinite(d.y)
+      )
+      return valid.length > 0 ? valid : defaultData
     }
     
     // Try to convert from various formats
@@ -103,11 +109,11 @@ export function MiniChart({ type, data, config }: MiniChartProps) {
     color: "#f8fafc",
   }
 
-  // Show empty state if no real data
-  if (!data || (Array.isArray(data) && data.length === 0)) {
+  // Show empty state only when explicitly no data and no fallback possible
+  if (!data || (Array.isArray(data) && data.length === 0 && chartData === defaultData)) {
     return (
       <div className="h-48 flex items-center justify-center text-muted-foreground text-xs">
-        No data available
+        No chart data available
       </div>
     )
   }

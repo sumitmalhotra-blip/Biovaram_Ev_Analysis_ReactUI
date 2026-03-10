@@ -455,6 +455,15 @@ export function AnalysisResults() {
   }, [anomalyData])
 
   const handlePin = (chartTitle: string, chartType: "histogram" | "scatter" | "line") => {
+    if (loadingScatter && scatterData.length === 0) {
+      toast({
+        title: "Data Still Loading",
+        description: "Please wait for the analysis data to finish loading before pinning.",
+        variant: "destructive",
+      })
+      return
+    }
+
     let pinData: Array<{ x: number; y: number; label?: string }> = []
     let pinConfig: { xAxisLabel?: string; yAxisLabel?: string; color?: string } = {}
 
@@ -470,8 +479,22 @@ export function AnalysisResults() {
             const count = scatterDiameters.filter(s => s >= binStart && s < binEnd).length
             return { x: Math.round(binStart + binWidth / 2), y: count }
           })
+        } else if (scatterData.length > 0) {
+          // Fallback: use SSC (y) values as size proxy when diameter not computed
+          const yValues = scatterData.map(p => p.y).filter(v => v > 0)
+          if (yValues.length > 0) {
+            const binCount = 25
+            const maxVal = Math.max(...yValues) * 1.1
+            const binWidth = maxVal / binCount
+            pinData = Array.from({ length: binCount }, (_, i) => {
+              const binStart = i * binWidth
+              const binEnd = (i + 1) * binWidth
+              const count = yValues.filter(v => v >= binStart && v < binEnd).length
+              return { x: Math.round(binStart + binWidth / 2), y: count }
+            })
+          }
         }
-        pinConfig = { xAxisLabel: "Diameter (nm)", yAxisLabel: "Count", color: "#8b5cf6" }
+        pinConfig = { xAxisLabel: scatterDiameters.length > 0 ? "Diameter (nm)" : "Intensity", yAxisLabel: "Count", color: "#8b5cf6" }
         break
       }
       case "Theory vs Measured": {
@@ -480,8 +503,14 @@ export function AnalysisResults() {
           pinData = theoryMeasuredData
             .filter((_, i) => i % step === 0)
             .map(p => ({ x: p.diameter, y: p.intensity }))
+        } else if (scatterData.length > 0) {
+          // Fallback: use raw scatter x vs y
+          const step = Math.max(1, Math.floor(scatterData.length / 300))
+          pinData = scatterData
+            .filter((_, i) => i % step === 0)
+            .map(p => ({ x: p.x, y: p.y }))
         }
-        pinConfig = { xAxisLabel: "Diameter (nm)", yAxisLabel: "Intensity", color: "#10b981" }
+        pinConfig = { xAxisLabel: theoryMeasuredData && theoryMeasuredData.length > 0 ? "Diameter (nm)" : xChannel, yAxisLabel: "Intensity", color: "#10b981" }
         break
       }
       case "Diameter vs SSC": {
@@ -490,21 +519,55 @@ export function AnalysisResults() {
           pinData = diameterVsSSCData
             .filter((_, i) => i % step === 0)
             .map(p => ({ x: p.diameter, y: p.ssc }))
+        } else if (scatterData.length > 0) {
+          // Fallback: use raw scatter x vs y
+          const step = Math.max(1, Math.floor(scatterData.length / 500))
+          pinData = scatterData
+            .filter((_, i) => i % step === 0)
+            .map(p => ({ x: p.x, y: p.y }))
         }
-        pinConfig = { xAxisLabel: "Diameter (nm)", yAxisLabel: "SSC", color: "#f59e0b" }
+        pinConfig = { xAxisLabel: diameterVsSSCData.length > 0 ? "Diameter (nm)" : xChannel, yAxisLabel: "SSC", color: "#f59e0b" }
+        break
+      }
+      case "FSC vs SSC": {
+        if (scatterData.length > 0) {
+          const step = Math.max(1, Math.floor(scatterData.length / 500))
+          pinData = scatterData
+            .filter((_, i) => i % step === 0)
+            .map(p => ({ x: p.x, y: p.y }))
+        }
+        pinConfig = { xAxisLabel: xChannel || "FSC", yAxisLabel: yChannel || "SSC", color: "#3b82f6" }
         break
       }
       case "Event vs Size": {
         if (scatterData.length > 0) {
-          const validEvents = scatterData.filter(p => p.diameter && p.diameter > 0)
-          const step = Math.max(1, Math.floor(validEvents.length / 500))
-          pinData = validEvents
-            .filter((_, i) => i % step === 0)
-            .map((p, i) => ({ x: i, y: p.diameter as number }))
+          // Use diameter if available, otherwise fall back to y (SSC) values
+          const hasAnyDiameter = scatterData.some(p => p.diameter && p.diameter > 0)
+          if (hasAnyDiameter) {
+            const validEvents = scatterData.filter(p => p.diameter && p.diameter > 0)
+            const step = Math.max(1, Math.floor(validEvents.length / 500))
+            pinData = validEvents
+              .filter((_, i) => i % step === 0)
+              .map((p, i) => ({ x: i, y: p.diameter as number }))
+          } else {
+            const step = Math.max(1, Math.floor(scatterData.length / 500))
+            pinData = scatterData
+              .filter((_, i) => i % step === 0)
+              .map((p, i) => ({ x: i, y: p.y }))
+          }
         }
-        pinConfig = { xAxisLabel: "Event #", yAxisLabel: "Size (nm)", color: "#3b82f6" }
+        pinConfig = { xAxisLabel: "Event #", yAxisLabel: scatterData.some(p => p.diameter && p.diameter > 0) ? "Size (nm)" : yChannel || "SSC", color: "#3b82f6" }
         break
       }
+    }
+
+    if (pinData.length === 0) {
+      toast({
+        title: "No Data to Pin",
+        description: `${chartTitle} has no data available to pin. Please ensure analysis is complete.`,
+        variant: "destructive",
+      })
+      return
     }
 
     pinChart({
@@ -513,7 +576,7 @@ export function AnalysisResults() {
       source: "Flow Cytometry",
       timestamp: new Date(),
       type: chartType,
-      data: pinData.length > 0 ? pinData : [],
+      data: pinData,
       config: pinConfig,
     })
     toast({
@@ -1048,6 +1111,15 @@ export function AnalysisResults() {
                 
                 {/* UI-002: View Mode Toggle */}
                 <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => handlePin("FSC vs SSC", "scatter")}
+                    title="Pin to Dashboard"
+                  >
+                    <Pin className="h-4 w-4" />
+                  </Button>
                   <span className="text-xs text-muted-foreground">View:</span>
                   <div className="flex rounded-md border">
                     <Button
