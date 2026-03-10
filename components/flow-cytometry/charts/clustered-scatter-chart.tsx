@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useCallback, useRef, useEffect } from "react"
+import { useState, useMemo, useCallback, useRef, useEffect, memo } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -94,7 +94,7 @@ const CLUSTER_COLORS = [
   "#059669", // Emerald
 ]
 
-export function ClusteredScatterChart({
+export const ClusteredScatterChart = memo(function ClusteredScatterChart({
   sampleId,
   title = "Scatter Plot (Clustered View)",
   xLabel = "FSC",
@@ -116,13 +116,15 @@ export function ClusteredScatterChart({
   const [hoveredCluster, setHoveredCluster] = useState<ClusterData | null>(null)
   const [dimensions, setDimensions] = useState({ width: 800, height: 500 })
   
-  // Viewport for zoom level 3
+  // Viewport for zoom level 3 — use ref to avoid recreating fetchClusteredData on viewport change
   const [viewport, setViewport] = useState<{
     x_min: number
     x_max: number
     y_min: number
     y_max: number
   } | null>(null)
+  const viewportRef = useRef(viewport)
+  viewportRef.current = viewport
 
   // Update dimensions on resize
   useEffect(() => {
@@ -137,7 +139,7 @@ export function ClusteredScatterChart({
     return () => window.removeEventListener('resize', updateDimensions)
   }, [height])
 
-  // Fetch clustered data
+  // Fetch clustered data — viewport accessed via ref to keep callback identity stable
   const fetchClusteredData = useCallback(async (level: number, vp?: typeof viewport) => {
     setLoading(true)
     setError(null)
@@ -158,7 +160,7 @@ export function ClusteredScatterChart({
       setData(result)
       
       // Set initial viewport from bounds if not set
-      if (!viewport && result.bounds) {
+      if (!viewportRef.current && result.bounds) {
         setViewport({
           x_min: result.bounds.x_min,
           x_max: result.bounds.x_max,
@@ -171,11 +173,11 @@ export function ClusteredScatterChart({
     } finally {
       setLoading(false)
     }
-  }, [sampleId, viewport, xChannel, yChannel])
+  }, [sampleId, xChannel, yChannel])
 
   // Fetch on mount and zoom change
   useEffect(() => {
-    fetchClusteredData(zoomLevel, zoomLevel === 3 ? viewport : undefined)
+    fetchClusteredData(zoomLevel, zoomLevel === 3 ? viewportRef.current : undefined)
   }, [zoomLevel, fetchClusteredData])
 
   // Calculate chart dimensions
@@ -679,7 +681,7 @@ export function ClusteredScatterChart({
       </CardContent>
     </Card>
   )
-}
+})
 
 // Helper functions
 function formatAxisValue(value: number): string {
@@ -701,3 +703,6 @@ function formatCount(count: number): string {
 }
 
 export default ClusteredScatterChart
+
+// Re-export for named import compatibility
+// Component is wrapped with memo() above for performance

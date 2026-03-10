@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect, useCallback, useRef } from "react"
+import { useState, useMemo, useEffect, useCallback, useRef, useTransition } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -96,6 +96,14 @@ export function AnalysisResults() {
   
   // UI-002: Clustered scatter view mode for large datasets
   const [scatterViewMode, setScatterViewMode] = useState<"standard" | "clustered">("standard")
+  const [isPending, startTransition] = useTransition()
+  
+  // Non-blocking toggle handler — keeps UI responsive during mode switch
+  const handleViewModeChange = useCallback((mode: "standard" | "clustered") => {
+    startTransition(() => {
+      setScatterViewMode(mode)
+    })
+  }, [])
   
   // Distribution analysis state
   const [distributionAnalysis, setDistributionAnalysis] = useState<import("@/lib/api-client").DistributionAnalysisResponse | null>(null)
@@ -1126,7 +1134,8 @@ export function AnalysisResults() {
                       variant={scatterViewMode === "standard" ? "secondary" : "ghost"}
                       size="sm"
                       className="h-8 rounded-r-none gap-1.5"
-                      onClick={() => setScatterViewMode("standard")}
+                      disabled={isPending}
+                      onClick={() => handleViewModeChange("standard")}
                     >
                       <Grid3X3 className="h-3.5 w-3.5" />
                       Standard
@@ -1135,12 +1144,16 @@ export function AnalysisResults() {
                       variant={scatterViewMode === "clustered" ? "secondary" : "ghost"}
                       size="sm"
                       className="h-8 rounded-l-none gap-1.5"
-                      onClick={() => setScatterViewMode("clustered")}
+                      disabled={isPending}
+                      onClick={() => handleViewModeChange("clustered")}
                     >
                       <Layers className="h-3.5 w-3.5" />
                       Clustered
                     </Button>
                   </div>
+                  {isPending && (
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  )}
                   {scatterViewMode === "clustered" && (
                     <Badge variant="outline" className="text-xs">
                       Large Dataset Mode

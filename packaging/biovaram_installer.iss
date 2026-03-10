@@ -122,11 +122,11 @@ Source: "{#DIST_DIR}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs c
 
 [Icons]
 ; Start Menu shortcuts
-Name: "{group}\BioVaram {#MODULE_TITLE}"; Filename: "{app}\{#EXE_NAME}.exe"; Comment: "Launch BioVaram {#MODULE_TITLE}"
+Name: "{group}\BioVaram {#MODULE_TITLE}"; Filename: "{app}\{#EXE_NAME}.exe"; IconFilename: "{app}\{#EXE_NAME}.exe"; IconIndex: 0; Comment: "Launch BioVaram {#MODULE_TITLE}"
 Name: "{group}\Uninstall BioVaram {#MODULE_TITLE}"; Filename: "{uninstallexe}"
 
 ; Desktop shortcut (if selected)
-Name: "{autodesktop}\BioVaram {#MODULE_TITLE}"; Filename: "{app}\{#EXE_NAME}.exe"; Tasks: desktopicon; Comment: "Launch BioVaram {#MODULE_TITLE}"
+Name: "{autodesktop}\BioVaram {#MODULE_TITLE}"; Filename: "{app}\{#EXE_NAME}.exe"; Tasks: desktopicon; IconFilename: "{app}\{#EXE_NAME}.exe"; IconIndex: 0; Comment: "Launch BioVaram {#MODULE_TITLE}"
 
 [Run]
 ; Option to run app after install

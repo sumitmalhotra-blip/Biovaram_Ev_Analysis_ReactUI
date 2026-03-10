@@ -1791,7 +1791,7 @@ class ApiClient {
     channels: { fsc: string; ssc: string };
     individual_points: Array<{ x: number; y: number; index: number; diameter?: number }> | null;
   }> {
-    const cacheKey = `sample:${sampleId}:clustered:${JSON.stringify(options || {})}`;
+    const cacheKey = `sample:${sampleId}:clustered:z${options?.zoom_level ?? 1}:${options?.fsc_channel ?? ''}:${options?.ssc_channel ?? ''}:vp${options?.viewport_x_min ?? ''}_${options?.viewport_x_max ?? ''}_${options?.viewport_y_min ?? ''}_${options?.viewport_y_max ?? ''}`;
     return this.cache.dedup(cacheKey, async () => {
       try {
         const params = new URLSearchParams();

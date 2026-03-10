@@ -806,19 +806,15 @@ async def get_scatter_data(
                 detail=f"No FCS file associated with sample {sample_id}"
             )
         
-        # Parse FCS file to get scatter data
-        from src.parsers.fcs_parser import FCSParser  # type: ignore[import-not-found]
+        # Parse FCS file to get scatter data (cached)
+        from src.utils.fcs_cache import get_cached_fcs_data  # type: ignore[import-not-found]
         from src.utils.channel_config import get_channel_config  # type: ignore[import-not-found]
         import pandas as pd
         import numpy as np
         
         logger.info(f"📊 Loading scatter data for sample: {sample_id}")
         
-        parser = FCSParser(sample.file_path_fcs)
-        parsed_data = parser.parse()
-        
-        # Get available channels
-        channels = parser.channel_names
+        parsed_data, channels = get_cached_fcs_data(sample.file_path_fcs)
         
         # Get channel configuration
         channel_config = get_channel_config()
@@ -1163,15 +1159,13 @@ async def get_clustered_scatter_data(
                 detail=f"No FCS file associated with sample {sample_id}"
             )
         
-        # Parse FCS file
-        from src.parsers.fcs_parser import FCSParser
+        # Parse FCS file (cached to avoid re-parsing on every request)
+        from src.utils.fcs_cache import get_cached_fcs_data
         from src.utils.channel_config import get_channel_config
         
         logger.info(f"📊 Loading clustered scatter data for {sample_id} at zoom level {zoom_level}")
         
-        parser = FCSParser(sample.file_path_fcs)
-        parsed_data = parser.parse()
-        channels = parser.channel_names
+        parsed_data, channels = get_cached_fcs_data(sample.file_path_fcs)
         
         # Detect channels
         channel_config = get_channel_config()
@@ -1508,14 +1502,13 @@ async def analyze_gated_population(
                 detail=f"No FCS file associated with sample {sample_id}"
             )
         
-        # Parse FCS file
-        from src.parsers.fcs_parser import FCSParser
+        # Parse FCS file (cached)
+        from src.utils.fcs_cache import get_cached_fcs_data
         from src.utils.channel_config import get_channel_config
         
         logger.info(f"🎯 Running gated analysis for sample: {sample_id}, gate: {request.gate_name}")
         
-        parser = FCSParser(sample.file_path_fcs)
-        parsed_data = parser.parse()
+        parsed_data, _channels = get_cached_fcs_data(sample.file_path_fcs)
         
         # Validate channels exist
         available_channels = list(parsed_data.columns)
@@ -1864,17 +1857,13 @@ async def get_recommended_axes(
                 detail=f"No FCS file associated with sample {sample_id}"
             )
         
-        # Parse FCS file
-        from src.parsers.fcs_parser import FCSParser
+        # Parse FCS file (cached)
+        from src.utils.fcs_cache import get_cached_fcs_data
         from src.visualization.auto_axis_selector import AutoAxisSelector
         
         logger.info(f"🎯 Analyzing optimal axes for sample: {sample_id}")
         
-        parser = FCSParser(sample.file_path_fcs)
-        parsed_data = parser.parse()
-        
-        # Get all available channels
-        all_channels = parser.channel_names
+        parsed_data, all_channels = get_cached_fcs_data(sample.file_path_fcs)
         
         # Initialize auto-axis selector
         selector = AutoAxisSelector()
@@ -2024,17 +2013,13 @@ async def get_size_bins(
                 detail=f"No FCS file associated with sample {sample_id}"
             )
         
-        # Parse FCS file and calculate sizes
-        from src.parsers.fcs_parser import FCSParser  # type: ignore[import-not-found]
+        # Parse FCS file (cached)
+        from src.utils.fcs_cache import get_cached_fcs_data  # type: ignore[import-not-found]
         import numpy as np
         
         logger.info(f"📏 Calculating size bins for sample: {sample_id}")
         
-        parser = FCSParser(sample.file_path_fcs)
-        parsed_data = parser.parse()
-        
-        # Get available channels
-        channels = parser.channel_names
+        parsed_data, channels = get_cached_fcs_data(sample.file_path_fcs)
         
         # Get channel configuration
         from src.utils.channel_config import get_channel_config  # type: ignore[import-not-found]
@@ -2553,18 +2538,14 @@ async def detect_anomalies(
                 detail=f"No FCS file associated with sample {sample_id}"
             )
         
-        # Parse FCS file
-        from src.parsers.fcs_parser import FCSParser
+        # Parse FCS file (cached)
+        from src.utils.fcs_cache import get_cached_fcs_data
         from src.utils.channel_config import get_channel_config
         import numpy as np
         
         logger.info(f"🔍 Running anomaly detection for sample: {sample_id}")
         
-        parser = FCSParser(sample.file_path_fcs)
-        parsed_data = parser.parse()
-        
-        # Get channels
-        channels = parser.channel_names
+        parsed_data, channels = get_cached_fcs_data(sample.file_path_fcs)
         channel_config = get_channel_config()
         
         fsc_ch = fsc_channel or channel_config.detect_fsc_channel(channels)
@@ -2721,13 +2702,12 @@ async def reanalyze_sample(
         
         logger.info(f"🔄 Re-analyzing sample {sample_id} with params: λ={request.wavelength_nm}nm, n_p={request.n_particle}, n_m={request.n_medium}")
         
-        # Parse FCS file
-        from src.parsers.fcs_parser import FCSParser
+        # Parse FCS file (cached)
+        from src.utils.fcs_cache import get_cached_fcs_data
         import numpy as np
         
-        parser = FCSParser(sample.file_path_fcs)
-        parsed_data = parser.parse()
-        stats = parser.get_statistics()
+        parsed_data, channels = get_cached_fcs_data(sample.file_path_fcs)
+        stats = {}  # Statistics computed inline when needed
         
         # Detect FSC and SSC channels
         channels = list(parsed_data.columns)
@@ -2751,9 +2731,14 @@ async def reanalyze_sample(
                 elif ssc_channel is None:
                     ssc_channel = ch
         
-        # Get statistics for detected channels
-        fsc_stats = stats.get(fsc_channel, {}) if fsc_channel else {}
-        ssc_stats = stats.get(ssc_channel, {}) if ssc_channel else {}
+        # Get statistics for detected channels (computed inline since we use cached parser data)
+        def _channel_stats(df, col):
+            if col and col in df.columns:
+                s = df[col]
+                return {'mean': float(s.mean()), 'median': float(s.median()), 'std': float(s.std()), 'min': float(s.min()), 'max': float(s.max())}
+            return {}
+        fsc_stats = _channel_stats(parsed_data, fsc_channel)
+        ssc_stats = _channel_stats(parsed_data, ssc_channel)
         
         # Check for multi-solution Mie capability
         multi_solution_info = detect_multi_solution_channels(channels)
@@ -3348,12 +3333,11 @@ async def get_available_channels(
                 detail=f"No FCS file associated with sample {sample_id}"
             )
         
-        from src.parsers.fcs_parser import FCSParser  # type: ignore[import-not-found]
+        from src.utils.fcs_cache import get_cached_fcs_data  # type: ignore[import-not-found]
         from src.utils.channel_config import get_channel_config  # type: ignore[import-not-found]
         import numpy as np
         
-        parser = FCSParser(sample.file_path_fcs)
-        parsed_data = parser.parse()
+        parsed_data, _channels = get_cached_fcs_data(sample.file_path_fcs)
         
         config = get_channel_config()
         
@@ -3386,8 +3370,8 @@ async def get_available_channels(
             })
         
         # Detect channels based on config
-        detected_fsc = config.detect_fsc_channel(parser.channel_names)
-        detected_ssc = config.detect_ssc_channel(parser.channel_names)
+        detected_fsc = config.detect_fsc_channel(_channels)
+        detected_ssc = config.detect_ssc_channel(_channels)
         
         return {
             "sample_id": sample_id,
@@ -3443,10 +3427,10 @@ async def get_fcs_metadata(
                 detail=f"No FCS file associated with sample {sample_id}"
             )
         
-        # Parse FCS file
+        # Parse FCS file (cached) + get metadata
         from src.parsers.fcs_parser import FCSParser
         parser = FCSParser(sample.file_path_fcs)
-        parser.parse()
+        parser.parse()  # metadata extraction needs parser instance
         
         # Extract metadata
         metadata = parser.extract_metadata()
@@ -3537,17 +3521,15 @@ async def get_fcs_values(
         
         logger.info(f"📊 Getting FCS values for {sample_id} with Mie params: λ={wavelength_nm}nm, n_p={n_particle}, n_m={n_medium}")
         
-        # Parse FCS file
-        from src.parsers.fcs_parser import FCSParser
+        # Parse FCS file (cached)
+        from src.utils.fcs_cache import get_cached_fcs_data
         from src.utils.channel_config import ChannelConfig
         import numpy as np
         
-        parser = FCSParser(sample.file_path_fcs)
-        parsed_data = parser.parse()
+        parsed_data, channels = get_cached_fcs_data(sample.file_path_fcs)
         
         # Detect FSC channel
         config = ChannelConfig()
-        channels = parser.channel_names
         fsc_channel = config.detect_fsc_channel(channels)
         ssc_channel = config.detect_ssc_channel(channels)
         
@@ -3970,12 +3952,10 @@ async def cross_validate_fcs_nta(
         if not fcs_sample.file_path_fcs:
             raise HTTPException(status_code=404, detail=f"No FCS file for sample '{fcs_sample_id}'")
         
-        from src.parsers.fcs_parser import FCSParser
+        from src.utils.fcs_cache import get_cached_fcs_data
         from src.utils.channel_config import ChannelConfig
         
-        fcs_parser = FCSParser(fcs_sample.file_path_fcs)
-        fcs_data = fcs_parser.parse()
-        fcs_channels = fcs_parser.channel_names
+        fcs_data, fcs_channels = get_cached_fcs_data(fcs_sample.file_path_fcs)
         
         config = ChannelConfig()
         fsc_channel = config.detect_fsc_channel(fcs_channels)
