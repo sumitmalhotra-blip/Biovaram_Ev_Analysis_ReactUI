@@ -1028,6 +1028,7 @@ class ApiClient {
     }
   }
 
+  /** @deprecated Unused — no frontend consumer */
   async getStatus(): Promise<{ status: string; database: string; timestamp: string }> {
     try {
       const response = await fetch(`${this.baseUrl}/status`, {
@@ -1175,6 +1176,7 @@ class ApiClient {
     }
   }
 
+  /** @deprecated Unused — no frontend consumer */
   async uploadBatch(files: File[]): Promise<{
     success: boolean;
     uploaded: number;
@@ -1384,6 +1386,7 @@ class ApiClient {
   /**
    * Get available channels for a specific FCS sample.
    */
+  /** @deprecated Unused — no frontend consumer */
   async getAvailableChannels(sampleId: string): Promise<{
     success: boolean;
     sample_id: string;
@@ -1416,6 +1419,7 @@ class ApiClient {
   /**
    * Get user profile by ID.
    */
+  /** @deprecated Unused — no frontend consumer */
   async getUserProfile(userId: number): Promise<{
     id: number;
     email: string;
@@ -1441,6 +1445,7 @@ class ApiClient {
   /**
    * Update user profile (name, organization).
    */
+  /** @deprecated Unused — no frontend consumer */
   async updateUserProfile(userId: number, data: {
     name?: string;
     organization?: string;
@@ -1470,6 +1475,7 @@ class ApiClient {
   /**
    * List all users (admin only).
    */
+  /** @deprecated Unused — no frontend consumer */
   async listUsers(skip: number = 0, limit: number = 100): Promise<Array<{
     id: number;
     email: string;
@@ -1527,6 +1533,7 @@ class ApiClient {
    * Request a password reset email.
    * Always returns success to prevent email enumeration.
    */
+  /** @deprecated Unused — no frontend consumer */
   async requestPasswordReset(email: string): Promise<{ success: boolean; message: string }> {
     try {
       const response = await fetch(`${this.baseUrl}/auth/forgot-password`, {
@@ -1545,6 +1552,7 @@ class ApiClient {
   /**
    * Reset password using a valid reset token.
    */
+  /** @deprecated Unused — no frontend consumer */
   async resetPassword(token: string, newPassword: string): Promise<{ success: boolean; message: string }> {
     try {
       const response = await fetch(`${this.baseUrl}/auth/reset-password`, {
@@ -1610,6 +1618,7 @@ class ApiClient {
     }
   }
 
+  /** @deprecated Unused — no frontend consumer */
   async getExperimentalConditions(
     sampleId: string
   ): Promise<{
@@ -1631,6 +1640,7 @@ class ApiClient {
     }
   }
 
+  /** @deprecated Unused — no frontend consumer */
   async updateExperimentalConditions(
     sampleId: string,
     conditions: Partial<{
@@ -1673,6 +1683,7 @@ class ApiClient {
   // Processing Jobs
   // =========================================================================
 
+  /** @deprecated Unused — no frontend consumer */
   async listJobs(): Promise<{ jobs: ProcessingJob[]; total: number }> {
     try {
       const response = await fetch(`${this.baseUrl}/jobs`, {
@@ -1687,6 +1698,7 @@ class ApiClient {
     }
   }
 
+  /** @deprecated Unused — no frontend consumer */
   async getJob(jobId: string): Promise<ProcessingJob> {
     try {
       const response = await fetch(`${this.baseUrl}/jobs/${jobId}`, {
@@ -1701,6 +1713,7 @@ class ApiClient {
     }
   }
 
+  /** @deprecated Unused — no frontend consumer */
   async cancelJob(jobId: string): Promise<{ success: boolean; message: string }> {
     try {
       const response = await fetch(`${this.baseUrl}/jobs/${jobId}`, {
@@ -1715,6 +1728,7 @@ class ApiClient {
     }
   }
 
+  /** @deprecated Unused — no frontend consumer */
   async retryJob(jobId: string): Promise<{ success: boolean; new_job_id: string }> {
     try {
       const response = await fetch(`${this.baseUrl}/jobs/${jobId}/retry`, {
@@ -2281,6 +2295,7 @@ class ApiClient {
   // Statistical Analysis
   // =========================================================================
 
+  /** @deprecated Unused — no frontend consumer */
   async runStatisticalTests(
     groupA: string[],
     groupB: string[],
@@ -2351,6 +2366,7 @@ class ApiClient {
     }
   }
 
+  /** @deprecated Unused — no frontend consumer */
   async compareDistributions(
     sampleIdA: string,
     sampleIdB: string,
@@ -2569,6 +2585,7 @@ class ApiClient {
     }
   }
 
+  /** @deprecated Unused — no frontend consumer */
   async getAlert(alertId: number): Promise<{
     id: number;
     sample_id: number | null;
@@ -2844,6 +2861,7 @@ class ApiClient {
   /**
    * Get FCS file metadata only (no event data)
    */
+  /** @deprecated Unused — no frontend consumer */
   async getFCSMetadata(sampleId: string): Promise<{
     sample_id: string;
     file_info: {
@@ -3467,6 +3485,7 @@ class ApiClient {
   /**
    * Get NTA size and concentration values
    */
+  /** @deprecated Unused — no frontend consumer */
   async getNTAValues(sampleId: string): Promise<{
     sample_id: string;
     measurement_type: string;

@@ -22,7 +22,7 @@ import { ValidationVerdictCard } from "./validation-verdict-card"
 import * as XLSX from 'xlsx'
 
 export function CrossCompareTab() {
-  const { pinChart, apiSamples, fcsAnalysis, ntaAnalysis, apiConnected } = useAnalysisStore()
+  const { pinChart, apiSamples, fcsAnalysis, ntaAnalysis, apiConnected, crossComparisonSettings } = useAnalysisStore()
   const { fetchSamples } = useApi()
   const { toast } = useToast()
 
@@ -136,6 +136,19 @@ export function CrossCompareTab() {
       setNtaResults(ntaAnalysis.results)
     }
   }, [ntaAnalysis.results, selectedNtaSample])
+
+  // Sync sidebar selections into local state
+  useEffect(() => {
+    if (crossComparisonSettings.selectedFcsSampleId && crossComparisonSettings.selectedFcsSampleId !== selectedFcsSample) {
+      setSelectedFcsSample(crossComparisonSettings.selectedFcsSampleId)
+    }
+  }, [crossComparisonSettings.selectedFcsSampleId])
+
+  useEffect(() => {
+    if (crossComparisonSettings.selectedNtaSampleId && crossComparisonSettings.selectedNtaSampleId !== selectedNtaSample) {
+      setSelectedNtaSample(crossComparisonSettings.selectedNtaSampleId)
+    }
+  }, [crossComparisonSettings.selectedNtaSampleId])
 
   // Run cross-validation when both API samples are selected (not current analysis)
   const runCrossValidation = useCallback(async () => {

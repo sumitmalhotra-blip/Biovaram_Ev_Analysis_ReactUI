@@ -1305,7 +1305,10 @@ function CrossCompareSidebar() {
         <div className="space-y-3">
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">FCS File</Label>
-            <Select>
+            <Select
+              value={crossComparisonSettings.selectedFcsSampleId || undefined}
+              onValueChange={(value) => handleSettingChange("selectedFcsSampleId", value)}
+            >
               <SelectTrigger className="h-9">
                 <SelectValue placeholder="Select FCS file..." />
               </SelectTrigger>
@@ -1317,10 +1320,7 @@ function CrossCompareSidebar() {
                     </SelectItem>
                   ))
                 ) : (
-                  <>
-                    <SelectItem value="l5_f10_cd81">L5_F10_CD81.fcs</SelectItem>
-                    <SelectItem value="sample_cd9">Sample_CD9.fcs</SelectItem>
-                  </>
+                  <SelectItem value="_none" disabled>No FCS files uploaded</SelectItem>
                 )}
               </SelectContent>
             </Select>
@@ -1328,7 +1328,10 @@ function CrossCompareSidebar() {
 
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">NTA File</Label>
-            <Select>
+            <Select
+              value={crossComparisonSettings.selectedNtaSampleId || undefined}
+              onValueChange={(value) => handleSettingChange("selectedNtaSampleId", value)}
+            >
               <SelectTrigger className="h-9">
                 <SelectValue placeholder="Select NTA file..." />
               </SelectTrigger>
@@ -1340,10 +1343,7 @@ function CrossCompareSidebar() {
                     </SelectItem>
                   ))
                 ) : (
-                  <>
-                    <SelectItem value="ev_ipsc_p1">EV_IPSC_P1_NTA.txt</SelectItem>
-                    <SelectItem value="ev_sample2">EV_Sample2.csv</SelectItem>
-                  </>
+                  <SelectItem value="_none" disabled>No NTA files uploaded</SelectItem>
                 )}
               </SelectContent>
             </Select>

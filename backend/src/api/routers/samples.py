@@ -2272,7 +2272,7 @@ async def get_distribution_analysis(
                 detail="Sample has no FCS data for distribution analysis"
             )
         
-        # Parse FCS file
+        # Parse FCS file (cached)
         import os
         if not os.path.exists(sample.file_path_fcs):
             raise HTTPException(
@@ -2280,7 +2280,8 @@ async def get_distribution_analysis(
                 detail=f"FCS file not found: {sample.file_path_fcs}"
             )
         
-        parsed_data = FCSParser(Path(sample.file_path_fcs)).parse()
+        from src.utils.fcs_cache import get_cached_fcs_data
+        parsed_data, _channels = get_cached_fcs_data(sample.file_path_fcs)
         if parsed_data.empty:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

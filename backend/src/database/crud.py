@@ -26,7 +26,6 @@ from src.database.models import (  # type: ignore[import-not-found]
     FCSResult,
     NTAResult,
     ProcessingJob,
-    QCReport,
     ExperimentalConditions,
     Alert,
     ProcessingStatus,
@@ -121,22 +120,6 @@ async def get_sample_by_id(db: AsyncSession, sample_id: str) -> Optional[Sample]
         Sample object or None if not found
     """
     query = select(Sample).where(Sample.sample_id == sample_id)
-    result = await db.execute(query)
-    return result.scalar_one_or_none()
-
-
-async def get_sample_by_db_id(db: AsyncSession, id: int) -> Optional[Sample]:
-    """
-    Get sample by database ID.
-    
-    Args:
-        db: Database session
-        id: Database primary key
-        
-    Returns:
-        Sample object or None if not found
-    """
-    query = select(Sample).where(Sample.id == id)
     result = await db.execute(query)
     return result.scalar_one_or_none()
 
@@ -291,25 +274,6 @@ async def create_fcs_result(
         raise
 
 
-async def get_fcs_results_by_sample(
-    db: AsyncSession,
-    sample_id: int
-) -> List[FCSResult]:
-    """
-    Get all FCS results for a sample.
-    
-    Args:
-        db: Database session
-        sample_id: Database ID of sample
-        
-    Returns:
-        List of FCSResult objects
-    """
-    query = select(FCSResult).where(FCSResult.sample_id == sample_id)
-    result = await db.execute(query)
-    return list(result.scalars().all())
-
-
 # ============================================================================
 # NTA Result CRUD Operations
 # ============================================================================
@@ -423,52 +387,6 @@ async def get_job_by_id(db: AsyncSession, job_id: str) -> Optional[ProcessingJob
     return result.scalar_one_or_none()
 
 
-async def update_job_progress(
-    db: AsyncSession,
-    job_id: str,
-    progress_percent: int,
-    current_step: Optional[str] = None,
-) -> Optional[ProcessingJob]:
-    """
-    Update job progress.
-    
-    Args:
-        db: Database session
-        job_id: Job UUID
-        progress_percent: Progress percentage (0-100)
-        current_step: Description of current step
-        
-    Returns:
-        Updated ProcessingJob object or None if not found
-    """
-    try:
-        job = await get_job_by_id(db, job_id)
-        if not job:
-            logger.warning(f"⚠️ Job not found for progress update: {job_id}")
-            return None
-        
-        setattr(job, 'progress_percent', progress_percent)
-        if current_step:
-            setattr(job, 'current_step', current_step)
-        
-        # Set started_at if not already set
-        job_status = getattr(job, 'status', None)
-        if job_status == "pending":
-            setattr(job, 'status', "running")
-            setattr(job, 'started_at', datetime.utcnow())
-        
-        await db.commit()
-        await db.refresh(job)
-        
-        logger.info(f"📊 Job progress: {job_id} → {progress_percent}%")
-        return job
-        
-    except Exception as e:
-        await db.rollback()
-        logger.exception(f"❌ Failed to update job progress: {e}")
-        raise
-
-
 async def update_job_status(
     db: AsyncSession,
     job_id: str,
@@ -551,164 +469,6 @@ async def get_jobs_by_sample(
     )
     result = await db.execute(query)
     return list(result.scalars().all())
-
-
-# ============================================================================
-# QC Report CRUD Operations
-# ============================================================================
-
-async def create_qc_report(
-    db: AsyncSession,
-    sample_id: int,
-    qc_status: str,
-    checks_performed: Dict[str, Any],
-    **kwargs
-) -> QCReport:
-    """
-    Create QC report.
-    
-    Args:
-        db: Database session
-        sample_id: Database ID of parent sample
-        qc_status: QC status (pass/warning/fail)
-        checks_performed: Dictionary of QC checks and results
-        **kwargs: Additional fields (warnings_count, errors_count, etc.)
-        
-    Returns:
-        Created QCReport object
-    """
-    try:
-        qc_report = QCReport(
-            sample_id=sample_id,
-            qc_status=qc_status,
-            checks_performed=checks_performed,
-            **kwargs
-        )
-        
-        db.add(qc_report)
-        await db.commit()
-        await db.refresh(qc_report)
-        
-        logger.success(f"✅ Created QC report for sample ID {sample_id}: {qc_status}")
-        return qc_report
-        
-    except Exception as e:
-        await db.rollback()
-        logger.exception(f"❌ Failed to create QC report: {e}")
-        raise
-
-
-async def get_qc_reports_by_sample(
-    db: AsyncSession,
-    sample_id: int
-) -> List[QCReport]:
-    """
-    Get all QC reports for a sample.
-    
-    Args:
-        db: Database session
-        sample_id: Database ID of sample
-        
-    Returns:
-        List of QCReport objects
-    """
-    query = select(QCReport).where(QCReport.sample_id == sample_id).order_by(
-        QCReport.created_at.desc()
-    )
-    result = await db.execute(query)
-    return list(result.scalars().all())
-
-
-# ============================================================================
-# Utility Functions
-# ============================================================================
-
-async def get_sample_counts(db: AsyncSession) -> Dict[str, int]:
-    """
-    Get counts of samples by status.
-    
-    Args:
-        db: Database session
-        
-    Returns:
-        Dictionary with counts
-    """
-    # Total samples
-    total_query = select(func.count()).select_from(Sample)
-    total = (await db.execute(total_query)).scalar() or 0
-    
-    # By processing status
-    pending_query = select(func.count()).select_from(Sample).where(  # type: ignore[arg-type]
-        Sample.processing_status == ProcessingStatus.PENDING
-    )
-    pending = (await db.execute(pending_query)).scalar() or 0
-    
-    processing_query = select(func.count()).select_from(Sample).where(  # type: ignore[arg-type]
-        Sample.processing_status == ProcessingStatus.RUNNING
-    )
-    processing = (await db.execute(processing_query)).scalar() or 0
-    
-    completed_query = select(func.count()).select_from(Sample).where(  # type: ignore[arg-type]
-        Sample.processing_status == ProcessingStatus.COMPLETED
-    )
-    completed = (await db.execute(completed_query)).scalar() or 0
-    
-    failed_query = select(func.count()).select_from(Sample).where(
-        Sample.processing_status == ProcessingStatus.FAILED
-    )
-    failed = (await db.execute(failed_query)).scalar() or 0
-    
-    return {
-        "total": total,
-        "pending": pending,
-        "processing": processing,
-        "completed": completed,
-        "failed": failed,
-    }
-
-
-async def get_job_counts(db: AsyncSession) -> Dict[str, int]:
-    """
-    Get counts of jobs by status.
-    
-    Args:
-        db: Database session
-        
-    Returns:
-        Dictionary with counts
-    """
-    # Total jobs
-    total_query = select(func.count()).select_from(ProcessingJob)
-    total = (await db.execute(total_query)).scalar() or 0
-    
-    # By status
-    pending_query = select(func.count()).select_from(ProcessingJob).where(
-        ProcessingJob.status == "pending"
-    )
-    pending = (await db.execute(pending_query)).scalar() or 0
-    
-    running_query = select(func.count()).select_from(ProcessingJob).where(
-        ProcessingJob.status == "running"
-    )
-    running = (await db.execute(running_query)).scalar() or 0
-    
-    completed_query = select(func.count()).select_from(ProcessingJob).where(
-        ProcessingJob.status == "completed"
-    )
-    completed = (await db.execute(completed_query)).scalar() or 0
-    
-    failed_query = select(func.count()).select_from(ProcessingJob).where(
-        ProcessingJob.status == "failed"
-    )
-    failed = (await db.execute(failed_query)).scalar() or 0
-    
-    return {
-        "total": total,
-        "pending": pending,
-        "running": running,
-        "completed": completed,
-        "failed": failed,
-    }
 
 
 # ============================================================================
@@ -850,41 +610,6 @@ async def update_experimental_conditions(
     except Exception as e:
         await db.rollback()
         logger.error(f"❌ Failed to update experimental conditions: {e}")
-        raise
-
-
-async def delete_experimental_conditions(
-    db: AsyncSession,
-    conditions_id: int
-) -> bool:
-    """
-    Delete experimental conditions.
-    
-    Args:
-        db: Database session
-        conditions_id: ID of the conditions record
-        
-    Returns:
-        True if deleted, False if not found
-    """
-    try:
-        query = delete(ExperimentalConditions).where(
-            ExperimentalConditions.id == conditions_id
-        )
-        result = await db.execute(query)
-        await db.commit()
-        
-        deleted = result.rowcount > 0
-        if deleted:
-            logger.success(f"✅ Deleted experimental conditions: {conditions_id}")
-        else:
-            logger.warning(f"⚠️ Experimental conditions not found for deletion: {conditions_id}")
-        
-        return deleted
-        
-    except Exception as e:
-        await db.rollback()
-        logger.error(f"❌ Failed to delete experimental conditions: {e}")
         raise
 
 

@@ -237,6 +237,8 @@ export interface CrossComparisonSettings {
   showStatistics: boolean
   minSizeFilter: number
   maxSizeFilter: number
+  selectedFcsSampleId: string
+  selectedNtaSampleId: string
 }
 
 // NTA Analysis Settings
@@ -476,11 +478,7 @@ export interface AnalysisState {
   removeGate: (gateId: string) => void
   updateGate: (gateId: string, updates: Partial<Gate>) => void
   setActiveGate: (gateId: string | null) => void
-  setGateDrawing: (isDrawing: boolean) => void
-  addDrawingPoint: (point: { x: number; y: number }) => void
-  clearDrawingPoints: () => void
   setSelectedIndices: (indices: number[]) => void
-  setGatedStatistics: (stats: GatedStatistics | null) => void
   clearAllGates: () => void
   resetGatingState: () => void
 }
@@ -834,6 +832,8 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
     showStatistics: true,
     minSizeFilter: 0,
     maxSizeFilter: 500,
+    selectedFcsSampleId: "",
+    selectedNtaSampleId: "",
   },
   setCrossComparisonSettings: (settings) => set({ crossComparisonSettings: settings }),
 
@@ -880,32 +880,9 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
       gatingState: { ...state.gatingState, activeGateId: gateId },
     })),
     
-  setGateDrawing: (isDrawing) =>
-    set((state) => ({
-      gatingState: { ...state.gatingState, isDrawing },
-    })),
-    
-  addDrawingPoint: (point) =>
-    set((state) => ({
-      gatingState: {
-        ...state.gatingState,
-        drawingPoints: [...state.gatingState.drawingPoints, point],
-      },
-    })),
-    
-  clearDrawingPoints: () =>
-    set((state) => ({
-      gatingState: { ...state.gatingState, drawingPoints: [] },
-    })),
-    
   setSelectedIndices: (indices) =>
     set((state) => ({
       gatingState: { ...state.gatingState, selectedIndices: indices },
-    })),
-    
-  setGatedStatistics: (stats) =>
-    set((state) => ({
-      gatingState: { ...state.gatingState, statistics: stats },
     })),
     
   clearAllGates: () =>
@@ -1073,40 +1050,4 @@ export const useApiConnectionState = () => useAnalysisStore(useShallow((s) => ({
   setLastHealthCheck: s.setLastHealthCheck,
 })))
 
-/** Sample list state only */
-export const useSampleListState = () => useAnalysisStore(useShallow((s) => ({
-  apiSamples: s.apiSamples,
-  setApiSamples: s.setApiSamples,
-  addApiSample: s.addApiSample,
-  removeApiSample: s.removeApiSample,
-  samplesLoading: s.samplesLoading,
-  setSamplesLoading: s.setSamplesLoading,
-  samplesError: s.samplesError,
-  setSamplesError: s.setSamplesError,
-})))
 
-/** FCS analysis state only */
-export const useFCSAnalysisState = () => useAnalysisStore(useShallow((s) => ({
-  fcsAnalysis: s.fcsAnalysis,
-  fcsAnalysisSettings: s.fcsAnalysisSettings,
-  setFCSFile: s.setFCSFile,
-  setFCSSampleId: s.setFCSSampleId,
-  setFCSResults: s.setFCSResults,
-  setFCSAnalyzing: s.setFCSAnalyzing,
-  setFCSError: s.setFCSError,
-  setFCSFileMetadata: s.setFCSFileMetadata,
-  resetFCSAnalysis: s.resetFCSAnalysis,
-})))
-
-/** Overlay state only */
-export const useOverlayState = () => useAnalysisStore(useShallow((s) => ({
-  overlayConfig: s.overlayConfig,
-  setOverlayConfig: s.setOverlayConfig,
-  secondaryFcsAnalysis: s.secondaryFcsAnalysis,
-  setSecondaryFCSFile: s.setSecondaryFCSFile,
-  setSecondaryFCSSampleId: s.setSecondaryFCSSampleId,
-  setSecondaryFCSResults: s.setSecondaryFCSResults,
-  setSecondaryFCSScatterData: s.setSecondaryFCSScatterData,
-  setSecondaryFCSLoadingScatter: s.setSecondaryFCSLoadingScatter,
-  setSecondaryFCSAnomalyData: s.setSecondaryFCSAnomalyData,
-})))
