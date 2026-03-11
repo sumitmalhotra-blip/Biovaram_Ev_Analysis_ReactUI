@@ -30,7 +30,7 @@ from loguru import logger
 
 from src.database.connection import get_session
 from src.database.models import User
-from src.api.auth_middleware import create_access_token, create_refresh_token
+from src.api.auth_middleware import create_access_token, create_refresh_token, require_auth, require_admin
 
 router = APIRouter()
 
@@ -285,10 +285,13 @@ async def login_user(
 @router.get("/me/{user_id}", response_model=UserResponse)
 async def get_current_user(
     user_id: int,
+    current_user: dict = Depends(require_auth),
     db: AsyncSession = Depends(get_session)
 ):
     """
     Get current user profile by ID.
+    Requires authentication. Users can only access their own profile.
+    Admins can access any profile.
     
     **Path Parameters:**
     - user_id: User ID
@@ -296,6 +299,15 @@ async def get_current_user(
     **Response:** User profile data
     """
     try:
+        # Ownership check: users can only view their own profile
+        token_user_id = int(current_user.get("sub", 0))
+        token_role = current_user.get("role", "user")
+        if token_user_id != user_id and token_role != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only access your own profile"
+            )
+
         result = await db.execute(
             select(User).where(User.id == user_id)
         )
@@ -312,10 +324,10 @@ async def get_current_user(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f"❌ Failed to get user: {e}")
+        logger.exception(f"Failed to get user: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get user: {str(e)}"
+            detail="Failed to get user"
         )
 
 
@@ -323,10 +335,13 @@ async def get_current_user(
 async def update_profile(
     user_id: int,
     request: UserProfileUpdateRequest,
+    current_user: dict = Depends(require_auth),
     db: AsyncSession = Depends(get_session)
 ):
     """
     Update user profile.
+    Requires authentication. Users can only update their own profile.
+    Admins can update any profile.
     
     **Path Parameters:**
     - user_id: User ID
@@ -340,6 +355,15 @@ async def update_profile(
     ```
     """
     try:
+        # Ownership check: users can only update their own profile
+        token_user_id = int(current_user.get("sub", 0))
+        token_role = current_user.get("role", "user")
+        if token_user_id != user_id and token_role != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only update your own profile"
+            )
+
         result = await db.execute(
             select(User).where(User.id == user_id)
         )
@@ -360,28 +384,29 @@ async def update_profile(
         await db.commit()
         await db.refresh(user)
         
-        logger.info(f"✅ Profile updated for user: {user.email}")
+        logger.info(f"Profile updated for user: {user.email}")
         
         return UserResponse.model_validate(user)
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f"❌ Profile update failed: {e}")
+        logger.exception(f"Profile update failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Profile update failed: {str(e)}"
+            detail="Profile update failed"
         )
 
 
 @router.get("/users", response_model=list[UserResponse])
 async def list_users(
+    current_user: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_session),
     skip: int = 0,
     limit: int = 100
 ):
     """
-    List all users (admin only in production).
+    List all users. Requires admin role.
     
     **Query Parameters:**
     - skip: Number of records to skip

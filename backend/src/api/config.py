@@ -63,9 +63,19 @@ class Settings(BaseSettings):
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
     
     # Security
-    secret_key: str = "CHANGE_THIS_IN_PRODUCTION_USE_SECURE_RANDOM_KEY"
+    secret_key: str = ""
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
+
+    @property
+    def effective_secret_key(self) -> str:
+        """Return the secret key, auto-generating one if not configured."""
+        if self.secret_key and self.secret_key != "CHANGE_THIS_IN_PRODUCTION_USE_SECURE_RANDOM_KEY":
+            return self.secret_key
+        import secrets as _secrets
+        if not hasattr(self, "_generated_key"):
+            object.__setattr__(self, "_generated_key", _secrets.token_urlsafe(32))
+        return object.__getattribute__(self, "_generated_key")
     
     # Processing
     max_workers: int = 4

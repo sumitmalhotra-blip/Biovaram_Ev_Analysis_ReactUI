@@ -22,12 +22,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from loguru import logger
 
 from src.api.config import get_settings
+from src.api.auth_middleware import require_auth, require_admin
 from src.database.connection import get_engine
 
 router = APIRouter()
@@ -98,7 +99,7 @@ def _get_backup_dir() -> Path:
 # ============================================================================
 
 @router.get("/db/info", response_model=DatabaseInfo)
-async def database_info():
+async def database_info(current_user: dict = Depends(require_auth)):
     """
     Get database file info: size, location, table row counts.
     """
@@ -132,9 +133,13 @@ async def database_info():
             tables = await cursor.fetchall()
             
             counts = {}
-            for (table_name,) in tables:
+            # table_name comes from sqlite_master, not user input
+            allowed_tables = {row[0] for row in tables}
+            for table_name in allowed_tables:
                 try:
-                    cursor = await conn.execute(f"SELECT COUNT(*) FROM [{table_name}]")
+                    cursor = await conn.execute(
+                        f"SELECT COUNT(*) FROM [{table_name}]"  # nosec: table_name from sqlite_master
+                    )
                     row = await cursor.fetchone()
                     counts[table_name] = row[0] if row else 0
                 except Exception:
@@ -147,7 +152,7 @@ async def database_info():
 
 
 @router.post("/db/backup", response_model=BackupResponse)
-async def create_backup():
+async def create_backup(current_user: dict = Depends(require_auth)):
     """
     Create a timestamped backup of the SQLite database.
     Backup is saved to the `backups/` directory next to the database file.
@@ -203,7 +208,7 @@ async def create_backup():
 
 
 @router.get("/db/backups", response_model=list[BackupInfo])
-async def list_backups():
+async def list_backups(current_user: dict = Depends(require_auth)):
     """
     List all available database backups, newest first.
     """
@@ -224,7 +229,7 @@ async def list_backups():
 
 
 @router.get("/db/backup/{name}")
-async def download_backup(name: str):
+async def download_backup(name: str, current_user: dict = Depends(require_auth)):
     """
     Download a specific backup file.
     """
@@ -246,7 +251,7 @@ async def download_backup(name: str):
 
 
 @router.post("/db/restore", response_model=RestoreResponse)
-async def restore_backup(backup_name: Optional[str] = None, file: Optional[UploadFile] = File(None)):
+async def restore_backup(backup_name: Optional[str] = None, file: Optional[UploadFile] = File(None), current_user: dict = Depends(require_admin)):
     """
     Restore database from a named backup or an uploaded file.
     
@@ -333,7 +338,7 @@ async def restore_backup(backup_name: Optional[str] = None, file: Optional[Uploa
 
 
 @router.delete("/db/backup/{name}")
-async def delete_backup(name: str):
+async def delete_backup(name: str, current_user: dict = Depends(require_admin)):
     """
     Delete a specific backup file.
     """

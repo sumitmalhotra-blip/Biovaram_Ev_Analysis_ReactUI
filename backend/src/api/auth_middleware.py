@@ -45,6 +45,12 @@ ALGORITHM = "HS256"
 # Token Creation
 # ============================================================================
 
+def _get_secret_key() -> str:
+    """Get the effective secret key from settings."""
+    settings = get_settings()
+    return settings.effective_secret_key
+
+
 def create_access_token(
     data: dict,
     expires_delta: Optional[timedelta] = None,
@@ -69,7 +75,7 @@ def create_access_token(
     )
     to_encode.update({"exp": expire, "iat": datetime.now(timezone.utc)})
 
-    return jwt.encode(to_encode, settings.secret_key, algorithm=ALGORITHM)
+    return jwt.encode(to_encode, _get_secret_key(), algorithm=ALGORITHM)
 
 
 def create_refresh_token(
@@ -87,7 +93,7 @@ def create_refresh_token(
     )
     to_encode.update({"exp": expire, "iat": datetime.now(timezone.utc), "type": "refresh"})
 
-    return jwt.encode(to_encode, settings.secret_key, algorithm=ALGORITHM)
+    return jwt.encode(to_encode, _get_secret_key(), algorithm=ALGORITHM)
 
 
 # ============================================================================
@@ -101,8 +107,7 @@ def decode_token(token: str) -> dict:
     Raises:
         JWTError: If the token is invalid or expired.
     """
-    settings = get_settings()
-    return jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
+    return jwt.decode(token, _get_secret_key(), algorithms=[ALGORITHM])
 
 
 # ============================================================================
@@ -159,3 +164,21 @@ async def optional_auth(
         return payload if payload.get("sub") else None
     except JWTError:
         return None
+
+
+async def require_admin(
+    current_user: dict = Depends(require_auth),
+) -> dict:
+    """
+    Dependency that requires a valid JWT token with admin role.
+    Returns the decoded token payload.
+
+    Raises 403 if the user is not an admin.
+    """
+    role = current_user.get("role", "user")
+    if role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+    return current_user

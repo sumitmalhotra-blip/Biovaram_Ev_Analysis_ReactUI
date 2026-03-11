@@ -158,14 +158,22 @@ app = FastAPI(
 # Middleware
 # ============================================================================
 
-# CORS - Allow frontend to call API
+# CORS - Restrict to known frontend origins
+_cors_origins = settings.cors_origins_list + [
+    "http://localhost:3000",
+    "http://localhost:8000",
+    "http://localhost:8001",
+]
+# Deduplicate while preserving order
+_cors_origins = list(dict.fromkeys(_cors_origins))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
-    expose_headers=["*"],
+    expose_headers=["Content-Disposition", "X-Request-Id"],
     max_age=3600,  # Cache preflight requests for 1 hour
 )
 
