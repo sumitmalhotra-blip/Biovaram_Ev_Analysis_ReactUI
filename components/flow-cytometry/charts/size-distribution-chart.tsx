@@ -53,7 +53,7 @@ interface SizeDistributionChartProps {
   distributionLoading?: boolean
 }
 
-// Generate sample histogram data with configurable bins and dynamic ranges
+// Generate histogram data from actual size data with configurable bins and dynamic ranges
 // TASK-019: Support configurable histogram bin size
 // Now supports dynamic size ranges from store
 const generateHistogramData = (
@@ -61,6 +61,9 @@ const generateHistogramData = (
   sizeRanges?: SizeRange[],
   sizeData?: number[]
 ) => {
+  // Only generate data if we have actual size data
+  if (!sizeData || sizeData.length === 0) return null
+
   const data = []
   const maxSize = 500
   const binWidth = maxSize / binCount
@@ -77,96 +80,19 @@ const generateHistogramData = (
     const binEnd = (i + 1) * binWidth
     const size = Math.round(binStart + binWidth / 2)
     
-    // If we have actual size data, calculate real counts
-    if (sizeData && sizeData.length > 0) {
-      const binData: Record<string, number | string> = { size }
-      let totalCount = 0
-      
-      // Count particles in this bin for each size range
-      ranges.forEach((range, idx) => {
-        const count = sizeData.filter(s => 
-          s >= binStart && s < binEnd && s >= range.min && s <= range.max
-        ).length
-        binData[`range${idx}`] = count
-        totalCount += count
-      })
-      
-      binData.total = totalCount
-      data.push(binData)
-    } else {
-      // Generate sample data
-      let count = 0
-      // Small EVs peak around 30-40nm
-      count += Math.max(0, 800 * Math.exp(-Math.pow((size - 35) / 20, 2)))
-      // Exosomes peak around 100-150nm
-      count += Math.max(0, 2000 * Math.exp(-Math.pow((size - 120) / 50, 2)))
-      // Large EVs peak around 250-300nm
-      count += Math.max(0, 600 * Math.exp(-Math.pow((size - 280) / 80, 2)))
-
-      // Use deterministic variation based on index to avoid hydration mismatch
-      const variation = 0.3 + ((Math.sin(i * 7) + 1) / 2) * 0.2
-      const binData: Record<string, number | string> = { size, total: Math.round(count * variation) }
-      
-      // Distribute count among ranges based on bin position
-      ranges.forEach((range, idx) => {
-        if (size >= range.min && size <= range.max) {
-          binData[`range${idx}`] = Math.round(count * 0.7)
-        } else {
-          binData[`range${idx}`] = 0
-        }
-      })
-      
-      data.push(binData)
-    }
-  }
-  return data
-}
-
-// Generate demo secondary histogram data for overlay comparison
-// Uses different distribution pattern to show comparison effect
-const generateDemoSecondaryHistogramData = (
-  binCount: number = 20, 
-  sizeRanges?: SizeRange[]
-) => {
-  const data = []
-  const maxSize = 500
-  const binWidth = maxSize / binCount
-  
-  // Default ranges if none provided
-  const ranges = sizeRanges?.length ? sizeRanges : [
-    { name: "Small EVs", min: 30, max: 100, color: "#22c55e" },
-    { name: "Medium EVs", min: 100, max: 200, color: "#7c3aed" },
-    { name: "Large EVs", min: 200, max: 500, color: "#f59e0b" },
-  ]
-  
-  for (let i = 0; i < binCount; i++) {
-    const binStart = i * binWidth
-    const binEnd = (i + 1) * binWidth
-    const size = Math.round(binStart + binWidth / 2)
+    const binData: Record<string, number | string> = { size }
+    let totalCount = 0
     
-    // Generate secondary data with DIFFERENT distribution pattern
-    let count = 0
-    // Shifted peaks for comparison visibility
-    // Small EVs peak around 45nm (shifted from primary's 35nm)
-    count += Math.max(0, 700 * Math.exp(-Math.pow((size - 45) / 22, 2)))
-    // Exosomes peak around 140nm (shifted from primary's 120nm)
-    count += Math.max(0, 1800 * Math.exp(-Math.pow((size - 140) / 55, 2)))
-    // Large EVs peak around 300nm (shifted from primary's 280nm)
-    count += Math.max(0, 500 * Math.exp(-Math.pow((size - 300) / 85, 2)))
-
-    // Use different deterministic variation pattern
-    const variation = 0.35 + ((Math.sin(i * 5 + 2) + 1) / 2) * 0.25
-    const binData: Record<string, number | string> = { size, total: Math.round(count * variation) }
-    
-    // Distribute count among ranges based on bin position
+    // Count particles in this bin for each size range
     ranges.forEach((range, idx) => {
-      if (size >= range.min && size <= range.max) {
-        binData[`range${idx}`] = Math.round(count * 0.65)
-      } else {
-        binData[`range${idx}`] = 0
-      }
+      const count = sizeData.filter(s => 
+        s >= binStart && s < binEnd && s >= range.min && s <= range.max
+      ).length
+      binData[`range${idx}`] = count
+      totalCount += count
     })
     
+    binData.total = totalCount
     data.push(binData)
   }
   return data
@@ -296,14 +222,10 @@ export const SizeDistributionChart = memo(function SizeDistributionChart({
     return generateHistogramData(binCount, sizeRanges, sizeData)
   }, [propData, binCount, sizeRanges, sizeData])
   
-  // Generate secondary data for overlay - use real data if available, otherwise generate demo
+  // Generate secondary data for overlay - only use real data
   const secondaryData = useMemo(() => {
-    if (!hasOverlay) return null
-    if (hasRealSecondaryData && secondarySizeData) {
-      return generateHistogramData(binCount, sizeRanges, secondarySizeData)
-    }
-    // Generate demo secondary data with different variation pattern
-    return generateDemoSecondaryHistogramData(binCount, sizeRanges)
+    if (!hasOverlay || !hasRealSecondaryData || !secondarySizeData) return null
+    return generateHistogramData(binCount, sizeRanges, secondarySizeData)
   }, [hasOverlay, hasRealSecondaryData, secondarySizeData, binCount, sizeRanges])
   
   // Merge primary and secondary data for overlay chart
@@ -391,13 +313,33 @@ export const SizeDistributionChart = memo(function SizeDistributionChart({
   // running O(bins × fitPoints) on every render and creating new array reference each time
   const mergedChartData = useMemo(() => {
     if (fitOverlayData && showFitOverlay) {
-      return data.map((item) => {
+      return data?.map((item) => {
         const fitPoint = fitOverlayData.find(f => f.fitX !== null && Math.abs((f.fitX as number) - (item.size as number)) < 15)
         return { ...item, ...(fitPoint || {}) }
-      })
+      }) ?? null
     }
     return data
   }, [data, fitOverlayData, showFitOverlay])
+
+  if (!data) {
+    return (
+      <InteractiveChartWrapper
+        title="Size Distribution"
+        source="FCS Analysis"
+        chartType="histogram"
+        showControls={false}
+        height={height}
+      >
+        <div className="h-full flex flex-col items-center justify-center text-muted-foreground border border-dashed border-border rounded-lg bg-muted/10">
+          <BarChart3 className="h-10 w-10 mb-3 opacity-40" />
+          <p className="text-sm font-medium">No Size Distribution Data</p>
+          <p className="text-xs mt-1 max-w-xs text-center">
+            Upload and analyze an FCS file to see the particle size distribution.
+          </p>
+        </div>
+      </InteractiveChartWrapper>
+    )
+  }
 
   return (
     <InteractiveChartWrapper

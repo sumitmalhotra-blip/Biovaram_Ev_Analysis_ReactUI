@@ -72,26 +72,6 @@ function silvermanBandwidth(data: number[]): number {
   return 1.06 * std * Math.pow(n, -0.2)
 }
 
-// Deterministic pseudo-random based on seed (avoids hydration mismatch)
-function seededRandom(seed: number): number {
-  const x = Math.sin(seed * 9999) * 10000
-  return x - Math.floor(x)
-}
-
-// Generate demo data if none provided - using deterministic values
-function generateDemoData(center: number, spread: number, count: number): number[] {
-  const data: number[] = []
-  for (let i = 0; i < count; i++) {
-    // Normal distribution approximation using seeded random
-    const u1 = seededRandom(i * 2) || 0.5
-    const u2 = seededRandom(i * 2 + 1)
-    const normal = Math.sqrt(-2 * Math.log(Math.max(0.001, u1))) * Math.cos(2 * Math.PI * u2)
-    const value = center + normal * spread
-    if (value > 0) data.push(value)
-  }
-  return data
-}
-
 export function KDEComparisonChart({
   fcsData,
   ntaData,
@@ -99,38 +79,47 @@ export function KDEComparisonChart({
   showLegend = true,
   bandwidth: customBandwidth,
 }: KDEComparisonChartProps) {
+  const hasData = (fcsData && fcsData.length > 0) || (ntaData && ntaData.length > 0)
+
   const chartData = useMemo(() => {
-    // Extract size values or generate demo data
+    if (!hasData) return null
+
+    // Extract size values from real data only
     const fcsValues = fcsData && fcsData.length > 0
       ? fcsData.flatMap(d => Array(d.count || 1).fill(d.size))
-      : generateDemoData(120, 35, 1000)
+      : []
     
     const ntaValues = ntaData && ntaData.length > 0
       ? ntaData.flatMap(d => Array(d.count || 1).fill(d.size))
-      : generateDemoData(135, 40, 1000)
+      : []
+
+    const activeValues = [...fcsValues, ...ntaValues]
+    if (activeValues.length === 0) return null
 
     // Determine common range
-    const allValues = [...fcsValues, ...ntaValues]
-    const minX = Math.max(0, Math.min(...allValues) - 20)
-    const maxX = Math.max(...allValues) + 20
+    const minX = Math.max(0, Math.min(...activeValues) - 20)
+    const maxX = Math.max(...activeValues) + 20
 
     // Calculate bandwidth (use custom or auto-select)
-    const fcsBandwidth = customBandwidth || silvermanBandwidth(fcsValues)
-    const ntaBandwidth = customBandwidth || silvermanBandwidth(ntaValues)
+    const fcsBandwidth = fcsValues.length > 0 ? (customBandwidth || silvermanBandwidth(fcsValues)) : 10
+    const ntaBandwidth = ntaValues.length > 0 ? (customBandwidth || silvermanBandwidth(ntaValues)) : 10
 
     // Calculate KDEs
-    const fcsKDE = calculateKDE(fcsValues, fcsBandwidth, minX, maxX)
-    const ntaKDE = calculateKDE(ntaValues, ntaBandwidth, minX, maxX)
+    const fcsKDE = fcsValues.length > 0 ? calculateKDE(fcsValues, fcsBandwidth, minX, maxX) : []
+    const ntaKDE = ntaValues.length > 0 ? calculateKDE(ntaValues, ntaBandwidth, minX, maxX) : []
+
+    // Use whichever KDE has data as the base
+    const baseKDE = fcsKDE.length > 0 ? fcsKDE : ntaKDE
 
     // Find peaks (mode)
-    const fcsMode = fcsKDE.reduce((max, d) => d.density > max.density ? d : max, fcsKDE[0])
-    const ntaMode = ntaKDE.reduce((max, d) => d.density > max.density ? d : max, ntaKDE[0])
+    const fcsMode = fcsKDE.length > 0 ? fcsKDE.reduce((max, d) => d.density > max.density ? d : max, fcsKDE[0]).x : 0
+    const ntaMode = ntaKDE.length > 0 ? ntaKDE.reduce((max, d) => d.density > max.density ? d : max, ntaKDE[0]).x : 0
 
     // Merge into single dataset
-    const merged = fcsKDE.map((fd, i) => ({
+    const merged = baseKDE.map((fd, i) => ({
       size: fd.x,
-      fcs: fd.density,
-      nta: ntaKDE[i]?.density || 0,
+      fcs: fcsKDE.length > 0 ? fcsKDE[i]?.density || 0 : 0,
+      nta: ntaKDE.length > 0 ? ntaKDE[i]?.density || 0 : 0,
     }))
 
     // Normalize so max is 1 for easier comparison
@@ -138,25 +127,55 @@ export function KDEComparisonChart({
       ...merged.map(d => Math.max(d.fcs, d.nta))
     )
 
-    const normalized = merged.map(d => ({
+    const normalized = maxDensity > 0 ? merged.map(d => ({
       size: d.size,
       fcs: d.fcs / maxDensity,
       nta: d.nta / maxDensity,
-    }))
+    })) : merged
 
     return {
       data: normalized,
-      fcsMode: fcsMode.x,
-      ntaMode: ntaMode.x,
+      fcsMode,
+      ntaMode,
       fcsBandwidth,
       ntaBandwidth,
     }
-  }, [fcsData, ntaData, customBandwidth])
+  }, [fcsData, ntaData, customBandwidth, hasData])
 
-  const modeDifference = Math.abs(chartData.fcsMode - chartData.ntaMode)
-  const modeAgreement = modeDifference < 10 ? "Excellent" :
+  const modeDifference = chartData ? Math.abs(chartData.fcsMode - chartData.ntaMode) : 0
+  const modeAgreement = !chartData ? "N/A" :
+                        modeDifference < 10 ? "Excellent" :
                         modeDifference < 20 ? "Good" :
                         modeDifference < 30 ? "Fair" : "Poor"
+
+  if (!chartData) {
+    return (
+      <Card className={cn("card-3d", className)}>
+        <CardHeader className="pb-2">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-primary/10">
+              <TrendingUp className="h-4 w-4 text-primary" />
+            </div>
+            <div>
+              <CardTitle className="text-base md:text-lg">KDE Distribution Comparison</CardTitle>
+              <CardDescription className="text-xs">
+                Kernel Density Estimation overlay of FCS and NTA size distributions
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[300px] flex flex-col items-center justify-center text-muted-foreground border border-dashed border-border rounded-lg bg-muted/10">
+            <TrendingUp className="h-10 w-10 mb-3 opacity-40" />
+            <p className="text-sm font-medium">No Distribution Data Available</p>
+            <p className="text-xs mt-1 max-w-xs text-center">
+              Upload and analyze both FCS and NTA files to see the KDE comparison.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
 
   return (
     <Card className={cn("card-3d", className)}>

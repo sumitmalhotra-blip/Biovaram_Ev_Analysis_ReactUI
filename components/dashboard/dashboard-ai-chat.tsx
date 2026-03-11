@@ -13,6 +13,7 @@ import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport } from "ai"
 import { useToast } from "@/hooks/use-toast"
 import { downloadChatHistory, type ChatMessageForExport } from "@/lib/export-utils"
+import { getApiBaseUrl } from "@/lib/module-config"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,8 +42,10 @@ export function DashboardAIChat({ onMinimize, isMinimized = false }: DashboardAI
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  const chatApiUrl = `${getApiBaseUrl()}/api/v1/chat`
+
   const { messages, sendMessage, isLoading, append } = useChat({
-    transport: new DefaultChatTransport({ api: "/api/research/chat" }),
+    transport: new DefaultChatTransport({ api: chatApiUrl }),
     onFinish: () => {
       // Auto scroll to bottom after AI response
       scrollToBottom()

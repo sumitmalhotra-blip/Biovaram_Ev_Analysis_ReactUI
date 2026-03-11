@@ -4,7 +4,7 @@ import { useMemo, useState } from "react"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from "recharts"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Eye, EyeOff, Layers } from "lucide-react"
+import { Eye, EyeOff, Layers, BarChart3 } from "lucide-react"
 import type { NTAResult } from "@/lib/api-client"
 
 interface ConcentrationProfileChartProps {
@@ -16,15 +16,7 @@ interface ConcentrationProfileChartProps {
 // Generate concentration profile from size bins
 const generateConcentrationData = (results?: NTAResult, label?: string) => {
   if (!results) {
-    // Default mock data
-    return [
-      { position: 1, range: "50-80nm", concentration: 2.4, percentage: 15 },
-      { position: 2, range: "80-100nm", concentration: 2.2, percentage: 13 },
-      { position: 3, range: "100-120nm", concentration: 2.6, percentage: 16 },
-      { position: 4, range: "120-150nm", concentration: 2.3, percentage: 14 },
-      { position: 5, range: "150-200nm", concentration: 2.5, percentage: 15 },
-      { position: 6, range: "200+nm", concentration: 2.1, percentage: 12 },
-    ]
+    return null
   }
 
   // Use size bins to create concentration profile
@@ -99,11 +91,25 @@ export function ConcentrationProfileChart({
   const secondaryData = useMemo(() => generateConcentrationData(secondaryResults), [secondaryResults])
   
   const overlayData = useMemo(() => {
-    if (!hasOverlay) return primaryData
+    if (!hasOverlay || !primaryData || !secondaryData) return primaryData
     return mergeDataForOverlay(primaryData, secondaryData)
   }, [primaryData, secondaryData, hasOverlay])
   
-  const avgConcentration = primaryData.reduce((sum, d) => sum + d.concentration, 0) / primaryData.length
+  const avgConcentration = primaryData ? primaryData.reduce((sum, d) => sum + d.concentration, 0) / primaryData.length : 0
+
+  if (!primaryData) {
+    return (
+      <div className="space-y-3">
+        <div className="h-80 flex flex-col items-center justify-center text-muted-foreground border border-dashed border-border rounded-lg bg-muted/10">
+          <BarChart3 className="h-10 w-10 mb-3 opacity-40" />
+          <p className="text-sm font-medium">No Concentration Data Available</p>
+          <p className="text-xs mt-1 max-w-xs text-center">
+            Upload and analyze an NTA file to see the concentration profile.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-3">

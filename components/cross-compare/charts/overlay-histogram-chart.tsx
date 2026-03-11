@@ -3,6 +3,7 @@
 import { useMemo } from "react"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts"
 import { CHART_COLORS } from "@/lib/store"
+import { BarChart3 } from "lucide-react"
 
 // Support both array format and bins/counts format
 type SizeDistributionArray = Array<{ size: number; count?: number; concentration?: number }>
@@ -32,29 +33,6 @@ interface OverlayHistogramChartProps {
   fcsData?: SizeDistribution
   ntaData?: SizeDistribution
   crossValidationData?: Array<{ size: number; fcs: number; nta: number; fcs_raw: number; nta_raw: number }>
-}
-
-// Generate default overlay histogram data
-const generateDefaultData = () => {
-  const data = []
-  for (let size = 0; size <= 500; size += 20) {
-    // FCS distribution
-    const fcs = Math.max(0, 2000 * Math.exp(-Math.pow((size - 127) / 55, 2)))
-    // NTA distribution (slightly shifted)
-    const nta = Math.max(0, 1500 * Math.exp(-Math.pow((size - 140) / 50, 2)))
-    
-    // Use deterministic variation based on index to avoid hydration mismatch
-    const index = size / 20
-    const variation1 = 0.9 + ((Math.sin(index * 7) + 1) / 2) * 0.2
-    const variation2 = 0.9 + ((Math.sin(index * 11 + 3) + 1) / 2) * 0.2
-
-    data.push({
-      size,
-      fcs: Math.round(fcs * variation1),
-      nta: Math.round(nta * variation2),
-    })
-  }
-  return data
 }
 
 export function OverlayHistogramChart({ fcsData, ntaData, crossValidationData }: OverlayHistogramChartProps) {
@@ -107,9 +85,21 @@ export function OverlayHistogramChart({ fcsData, ntaData, crossValidationData }:
       }))
     }
     
-    // Default data for demo
-    return generateDefaultData()
+    // No data available
+    return null
   }, [fcsData, ntaData, crossValidationData])
+
+  if (!chartData) {
+    return (
+      <div className="h-80 flex flex-col items-center justify-center text-muted-foreground border border-dashed border-border rounded-lg bg-muted/10">
+        <BarChart3 className="h-10 w-10 mb-3 opacity-40" />
+        <p className="text-sm font-medium">No Overlay Data Available</p>
+        <p className="text-xs mt-1 max-w-xs text-center">
+          Upload and analyze both FCS and NTA files, then run cross-validation to see this comparison.
+        </p>
+      </div>
+    )
+  }
 
   const yAxisLabel = crossValidationData ? "% of Total" : "Count"
 

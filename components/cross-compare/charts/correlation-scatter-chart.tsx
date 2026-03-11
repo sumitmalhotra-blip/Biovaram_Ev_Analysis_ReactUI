@@ -15,6 +15,7 @@ import {
 } from "recharts"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { ScatterChart as ScatterChartIcon } from "lucide-react"
 
 interface CorrelationScatterChartProps {
   fcsValues: number[]
@@ -62,22 +63,6 @@ function calculateLinearRegression(points: ScatterPoint[]) {
   return { slope, intercept, r2: Math.max(0, Math.min(1, r2)) }
 }
 
-// Generate default correlation data for demo
-// Note: Mean removed from labels per client request (Surya, Dec 3, 2025)
-// "Mean is basically not the real metric... median is what really existed in the data set"
-const generateDefaultData = (): ScatterPoint[] => {
-  const labels = ["D10", "D50 (Median)", "D90", "Mode", "Std Dev"]
-  const fcsBase = [89.2, 127.4, 198.3, 125.0, 45.2]
-  const ntaBase = [92.1, 135.2, 201.8, 132.0, 42.8]
-
-  // Use deterministic variation based on index to avoid hydration mismatch
-  return labels.map((label, i) => ({
-    fcs: fcsBase[i] * (0.95 + ((Math.sin(i * 7) + 1) / 2) * 0.1),
-    nta: ntaBase[i] * (0.95 + ((Math.sin(i * 11 + 3) + 1) / 2) * 0.1),
-    label,
-  }))
-}
-
 // Custom tooltip component
 function CustomTooltip({ active, payload }: any) {
   if (!active || !payload || !payload.length) return null
@@ -112,20 +97,24 @@ export function CorrelationScatterChart({
   metric = "Size",
   title = "FCS vs NTA Correlation",
 }: CorrelationScatterChartProps) {
-  const { scatterData, regression, minVal, maxVal } = useMemo(() => {
-    let data: ScatterPoint[]
+  const hasData = fcsValues.length > 0 && ntaValues.length > 0
 
-    if (fcsValues.length > 0 && ntaValues.length > 0) {
-      // Pair the values
-      const len = Math.min(fcsValues.length, ntaValues.length)
-      data = Array.from({ length: len }, (_, i) => ({
-        fcs: fcsValues[i],
-        nta: ntaValues[i],
-      }))
-    } else {
-      // Use default demo data
-      data = generateDefaultData()
+  const { scatterData, regression, minVal, maxVal } = useMemo(() => {
+    if (!hasData) {
+      return {
+        scatterData: [] as ScatterPoint[],
+        regression: { slope: 1, intercept: 0, r2: 0 },
+        minVal: 0,
+        maxVal: 100,
+      }
     }
+
+    // Pair the values
+    const len = Math.min(fcsValues.length, ntaValues.length)
+    const data = Array.from({ length: len }, (_, i) => ({
+      fcs: fcsValues[i],
+      nta: ntaValues[i],
+    }))
 
     const reg = calculateLinearRegression(data)
 
@@ -140,7 +129,7 @@ export function CorrelationScatterChart({
       minVal: min,
       maxVal: max,
     }
-  }, [fcsValues, ntaValues])
+  }, [fcsValues, ntaValues, hasData])
 
   // Generate regression line points
   const regressionLine = useMemo(() => {
@@ -158,6 +147,28 @@ export function CorrelationScatterChart({
     if (r2 >= 0.5) return { label: "Moderate", color: "bg-yellow-500" }
     return { label: "Weak", color: "bg-red-500" }
   }, [regression.r2])
+
+  if (!hasData) {
+    return (
+      <Card className="card-3d">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">{title}</CardTitle>
+          <CardDescription>
+            {metric} measurements comparison between Flow Cytometry and NTA
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="h-80 flex flex-col items-center justify-center text-muted-foreground border border-dashed border-border rounded-lg bg-muted/10">
+            <ScatterChartIcon className="h-10 w-10 mb-3 opacity-40" />
+            <p className="text-sm font-medium">No Correlation Data Available</p>
+            <p className="text-xs mt-1 max-w-xs text-center">
+              Upload and analyze both FCS and NTA files to see the correlation scatter plot.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
 
   return (
     <Card className="card-3d">
