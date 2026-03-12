@@ -3,6 +3,11 @@ const nextConfig = {
   // DESKTOP: Static export for PyInstaller bundling
   // Produces pure HTML/CSS/JS in 'out/' directory — served by FastAPI
   output: 'export',
+  // DESKTOP: Force-inline NEXT_PUBLIC_MODULE at build time for Turbopack
+  // Set via env var: NEXT_PUBLIC_MODULE=nta pnpm build
+  env: {
+    NEXT_PUBLIC_MODULE: process.env.NEXT_PUBLIC_MODULE || 'full',
+  },
   
   typescript: {
     ignoreBuildErrors: true,
