@@ -258,6 +258,28 @@ export interface CrossValidationResult {
     verdict: "PASS" | "ACCEPTABLE" | "WARNING" | "FAIL";
     verdict_detail: string;
   };
+  concentration?: {
+    nta: {
+      measured_per_ml: number | null;
+      dilution_factor: number | null;
+      corrected_per_ml: number | null;
+      dilution_source: string;
+    };
+    fcs: {
+      measured_per_ml: number | null;
+      dilution_factor: number | null;
+      corrected_per_ml: number | null;
+      dilution_source: string;
+    };
+    comparison: {
+      ratio_corrected_nta_to_fcs: number | null;
+      percent_difference_corrected: number | null;
+    };
+  };
+  flags?: {
+    missing_dilution_factor: boolean;
+    missing_measured_concentration: boolean;
+  };
   statistical_tests: {
     kolmogorov_smirnov: { statistic: number; p_value: number; interpretation: string };
     mann_whitney_u: { statistic: number; p_value: number; interpretation: string };
@@ -270,6 +292,99 @@ export interface CrossValidationResult {
     fcs_raw: number;
     nta_raw: number;
   }>;
+}
+
+export interface MetadataResolutionResponse {
+  sample_id: string;
+  resolved: {
+    laser_wavelength_nm: number | null;
+    instrument_model: string | null;
+    dilution_factor: number | null;
+  };
+  provenance: {
+    laser_wavelength_nm: string;
+    instrument_model: string;
+    dilution_factor: string;
+  };
+  completeness_score: number;
+  missing_required: string[];
+  sources: {
+    sidecar_xml_path: string | null;
+    has_manual_overrides: boolean;
+    has_experimental_conditions: boolean;
+  };
+  fcs_metadata_snapshot: {
+    acquisition_date: string | null;
+    acquisition_time: string | null;
+    cytometer: string | null;
+    operator: string | null;
+    channel_count: number | null;
+    channel_names: string[];
+  };
+}
+
+export interface ManualMetadataPayload {
+  laser_wavelength_nm?: number;
+  dilution_factor?: number;
+  instrument_model?: string;
+  operator_notes?: string;
+}
+
+export interface ManualMetadataUpsertResponse {
+  success: boolean;
+  sample_id: string;
+  message?: string;
+  updated_fields?: string[];
+  metadata_resolution: MetadataResolutionResponse;
+}
+
+export interface MultiSolutionEventsResponse {
+  sample_id: string;
+  total_events_scanned: number;
+  ambiguous_events_found: number;
+  channel_mode_used: "violet_primary" | "blue_primary";
+  vssc_channel: string;
+  bssc_channel: string;
+  events: Array<{
+    event_id: number;
+    candidate_solutions_nm: number[];
+    selected_solution_nm: number;
+    selection_reason: string;
+    scores: {
+      cross_channel_error: number;
+      calibration_fit_error: number;
+      final_weighted_score: number;
+    };
+    ambiguity_score: number;
+    num_solutions: number;
+    measured_ratio: number;
+    signals?: {
+      vssc: number;
+      bssc: number;
+    };
+  }>;
+}
+
+export interface MultiSolutionEventDetailResponse {
+  sample_id: string;
+  event_id: number;
+  signals: {
+    vssc: number;
+    bssc: number;
+    ratio_vb: number;
+  };
+  candidates: Array<{
+    diameter_nm: number;
+    ratio_theoretical: number;
+    cross_channel_error: number;
+    calibration_fit_error: number;
+    weighted_score: number;
+  }>;
+  candidate_solutions_nm: number[];
+  selected_diameter_nm: number | null;
+  selection_reason: string;
+  ambiguity_score: number | null;
+  num_solutions: number;
 }
 
 /**
@@ -1094,6 +1209,11 @@ class ApiClient {
     file: File,
     metadata?: {
       treatment?: string;
+      marker?: string;
+      dye?: string;
+      marker_concentration?: number;
+      marker_concentration_unit?: string;
+      preparation_method?: string;
       temperature_celsius?: number;
       operator?: string;
       notes?: string;
@@ -1105,6 +1225,13 @@ class ApiClient {
       formData.append("file", file);
 
       if (metadata?.treatment) formData.append("treatment", metadata.treatment);
+      if (metadata?.marker) formData.append("marker", metadata.marker);
+      if (metadata?.dye) formData.append("dye", metadata.dye);
+      if (metadata?.marker_concentration != null)
+        formData.append("marker_concentration", metadata.marker_concentration.toString());
+      if (metadata?.marker_concentration_unit)
+        formData.append("marker_concentration_unit", metadata.marker_concentration_unit);
+      if (metadata?.preparation_method) formData.append("preparation_method", metadata.preparation_method);
       if (metadata?.temperature_celsius)
         formData.append("temperature_celsius", metadata.temperature_celsius.toString());
       if (metadata?.operator) formData.append("operator", metadata.operator);
@@ -1117,6 +1244,8 @@ class ApiClient {
       });
 
       this.isOffline = false;
+      // Invalidate sample list cache after upload
+      this.cache.invalidate("samples:list");
       return this.handleResponse<UploadResponse>(response);
     } catch (error) {
       this.handleNetworkError(error);
@@ -3007,6 +3136,115 @@ class ApiClient {
       return this.handleResponse(response);
     } catch (error) {
       console.error("[API] Cross-validation failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  /**
+   * Resolve sample metadata from FCS, sidecar XML, experimental conditions, and manual overrides.
+   */
+  async getSampleMetadataResolution(sampleId: string): Promise<MetadataResolutionResponse> {
+    try {
+      const response = await fetch(`${this.baseUrl}/samples/${sampleId}/metadata-resolution`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      this.isOffline = false;
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Metadata resolution failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  /**
+   * Persist manual metadata overrides for a sample.
+   */
+  async upsertSampleManualMetadata(
+    sampleId: string,
+    payload: ManualMetadataPayload
+  ): Promise<ManualMetadataUpsertResponse> {
+    try {
+      const response = await fetch(`${this.baseUrl}/samples/${sampleId}/metadata/manual`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      this.isOffline = false;
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Manual metadata upsert failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  /**
+   * Return events with multiple valid diameter solutions and selection diagnostics.
+   */
+  async getMultiSolutionEvents(
+    sampleId: string,
+    options?: {
+      wavelength_nm?: number;
+      n_particle?: number;
+      n_medium?: number;
+      max_events?: number;
+      max_results?: number;
+      ambiguity_threshold?: number;
+      min_signal?: number;
+    }
+  ): Promise<MultiSolutionEventsResponse> {
+    try {
+      const params = new URLSearchParams();
+      if (options?.wavelength_nm) params.set("wavelength_nm", String(options.wavelength_nm));
+      if (options?.n_particle) params.set("n_particle", String(options.n_particle));
+      if (options?.n_medium) params.set("n_medium", String(options.n_medium));
+      if (options?.max_events) params.set("max_events", String(options.max_events));
+      if (options?.max_results) params.set("max_results", String(options.max_results));
+      if (options?.ambiguity_threshold) params.set("ambiguity_threshold", String(options.ambiguity_threshold));
+      if (options?.min_signal) params.set("min_signal", String(options.min_signal));
+
+      const query = params.toString();
+      const url = `${this.baseUrl}/samples/${sampleId}/multi-solution-events${query ? `?${query}` : ""}`;
+      const response = await fetch(url, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      this.isOffline = false;
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Get multi-solution events failed:", error);
+      this.handleNetworkError(error);
+    }
+  }
+
+  /**
+   * Get full candidate diagnostics for one event.
+   */
+  async getMultiSolutionEventDetail(
+    sampleId: string,
+    eventId: number,
+    options?: {
+      wavelength_nm?: number;
+      n_particle?: number;
+      n_medium?: number;
+    }
+  ): Promise<MultiSolutionEventDetailResponse> {
+    try {
+      const params = new URLSearchParams();
+      if (options?.wavelength_nm) params.set("wavelength_nm", String(options.wavelength_nm));
+      if (options?.n_particle) params.set("n_particle", String(options.n_particle));
+      if (options?.n_medium) params.set("n_medium", String(options.n_medium));
+
+      const query = params.toString();
+      const url = `${this.baseUrl}/samples/${sampleId}/multi-solution-events/${eventId}${query ? `?${query}` : ""}`;
+      const response = await fetch(url, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      this.isOffline = false;
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("[API] Get multi-solution event detail failed:", error);
       this.handleNetworkError(error);
     }
   }

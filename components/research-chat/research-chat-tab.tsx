@@ -34,6 +34,8 @@ export function ResearchChatTab() {
   const { toast } = useToast()
   const [uploadedFiles, setUploadedFiles] = useState<Array<{ name: string; type: string; size: number }>>([])
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [chatStatusMessage, setChatStatusMessage] = useState<string>("")
+  const [chatAvailable, setChatAvailable] = useState<boolean>(true)
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [localInput, setLocalInput] = useState('')
@@ -43,6 +45,14 @@ export function ResearchChatTab() {
 
   const { messages, sendMessage, status, setMessages } = useChat({
     transport: new DefaultChatTransport({ api: chatApiUrl }),
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : "Chat request failed."
+      toast({
+        title: "Chat request failed",
+        description: message,
+        variant: "destructive",
+      })
+    },
   })
 
   // Derive isLoading from status
@@ -64,6 +74,39 @@ export function ResearchChatTab() {
       }
     }
   }, [messages])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const checkChatStatus = async () => {
+      try {
+        const response = await fetch(`${chatApiUrl}/status`)
+        const data = await response.json()
+        if (cancelled) return
+
+        const available = Boolean(data?.available)
+        setChatAvailable(available)
+        setChatStatusMessage(data?.message || "")
+
+        if (!available && data?.message) {
+          toast({
+            title: "AI chat unavailable",
+            description: data.message,
+            variant: "destructive",
+          })
+        }
+      } catch {
+        if (cancelled) return
+        setChatAvailable(false)
+        setChatStatusMessage("Could not reach chat backend status endpoint.")
+      }
+    }
+
+    void checkChatStatus()
+    return () => {
+      cancelled = true
+    }
+  }, [chatApiUrl, toast])
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
@@ -183,6 +226,13 @@ export function ResearchChatTab() {
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col min-h-0 gap-4 card-3d p-4 md:p-6 rounded-2xl border border-border/50 overflow-hidden">
+        {!chatAvailable && (
+          <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+            <p className="font-medium">AI chat is currently unavailable</p>
+            <p className="mt-1">{chatStatusMessage || "Configure provider and API key, then retry."}</p>
+          </div>
+        )}
+
         <div className="flex-1 overflow-y-auto custom-scrollbar">
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-6 text-center min-h-full py-8">
@@ -328,7 +378,7 @@ export function ResearchChatTab() {
           <Input
             placeholder="Ask me anything about your data or analysis methodology..."
             className="flex-1 border-0 bg-transparent focus-visible:ring-0 text-sm md:text-base"
-            disabled={isLoading}
+            disabled={isLoading || !chatAvailable}
             onKeyPress={(e) => {
               if (e.key === "Enter" && !isLoading) {
                 const inputEl = e.currentTarget
@@ -340,7 +390,7 @@ export function ResearchChatTab() {
             }}
           />
           <Button
-            disabled={isLoading}
+            disabled={isLoading || !chatAvailable}
             size="icon"
             className="h-8 w-8 rounded-lg shrink-0"
             onClick={(e) => {

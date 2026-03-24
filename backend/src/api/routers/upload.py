@@ -58,6 +58,23 @@ settings = get_settings()
 router = APIRouter()
 
 
+def _serialize_file_path(path: Path) -> str:
+    """Return a stable file path string without raising relative_to errors."""
+    try:
+        if not path.is_absolute():
+            return str(path)
+
+        resolved_path = path.resolve()
+        cwd = Path.cwd().resolve()
+
+        try:
+            return str(resolved_path.relative_to(cwd))
+        except ValueError:
+            return str(resolved_path)
+    except Exception:
+        return str(path)
+
+
 # ============================================================================
 # Alert Thresholds Configuration (CRMIT-003)
 # ============================================================================
@@ -474,6 +491,23 @@ async def save_uploaded_file(upload_file: UploadFile, destination: Path) -> Path
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to save file: {str(e)}"
         )
+
+
+def _merge_nta_notes(base_notes: Optional[str], extra_fields: dict[str, Optional[str]]) -> Optional[str]:
+    """Merge human notes with structured NTA metadata block for backward-compatible storage."""
+    notes = (base_notes or "").strip()
+    structured_lines = [
+        f"{key}: {value}"
+        for key, value in extra_fields.items()
+        if value is not None and str(value).strip() != ""
+    ]
+    if not structured_lines:
+        return notes or None
+
+    structured_block = "[NTA_UPLOAD_METADATA]\n" + "\n".join(structured_lines)
+    if notes:
+        return f"{notes}\n\n{structured_block}"
+    return structured_block
 
 
 def generate_sample_id(filename: str) -> str:
@@ -1255,6 +1289,11 @@ async def upload_fcs_file(
 async def upload_nta_file(
     file: UploadFile = File(...),
     treatment: Optional[str] = Form(None),
+    marker: Optional[str] = Form(None),
+    dye: Optional[str] = Form(None),
+    marker_concentration: Optional[float] = Form(None),
+    marker_concentration_unit: Optional[str] = Form(None),
+    preparation_method: Optional[str] = Form(None),
     temperature_celsius: Optional[float] = Form(None),
     operator: Optional[str] = Form(None),
     notes: Optional[str] = Form(None),
@@ -1267,7 +1306,12 @@ async def upload_nta_file(
     
     **Request:**
     - file: NTA file (.txt or .csv)
-    - treatment: Treatment name
+    - treatment: Backward-compatible marker alias
+    - marker: Marker name
+    - dye: Dye name
+    - marker_concentration: Marker concentration value
+    - marker_concentration_unit: Marker concentration unit
+    - preparation_method: Purification method
     - temperature_celsius: Measurement temperature
     - operator: Operator name
     - notes: Additional notes
@@ -1303,6 +1347,22 @@ async def upload_nta_file(
         
         # Generate sample ID
         sample_id = generate_sample_id(file.filename or "unknown.txt")
+
+        # Backward compatibility: marker is the primary field, treatment is fallback alias.
+        resolved_marker = (marker or treatment or "").strip() or None
+        resolved_dye = (dye or "").strip() or None
+        resolved_method = (preparation_method or "").strip() or None
+        resolved_unit = (marker_concentration_unit or "").strip() or None
+        merged_notes = _merge_nta_notes(
+            notes,
+            {
+                "marker": resolved_marker,
+                "dye": resolved_dye,
+                "marker_concentration": str(marker_concentration) if marker_concentration is not None else None,
+                "marker_concentration_unit": resolved_unit,
+                "preparation_method": resolved_method,
+            },
+        )
         
         # Save uploaded file
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1447,10 +1507,18 @@ async def upload_nta_file(
                 db_sample = await update_sample(
                     db=db,
                     sample_id=sample_id,
-                    file_path_nta=str(file_path.relative_to(Path.cwd())),
-                    treatment=treatment,
+                    file_path_nta=_serialize_file_path(file_path),
+                    treatment=resolved_marker,
+                    concentration_ug=marker_concentration,
+                    preparation_method=resolved_method,
                     operator=operator,
-                    notes=notes,
+                    notes=_merge_nta_notes(existing_sample.notes, {
+                        "marker": resolved_marker,
+                        "dye": resolved_dye,
+                        "marker_concentration": str(marker_concentration) if marker_concentration is not None else None,
+                        "marker_concentration_unit": resolved_unit,
+                        "preparation_method": resolved_method,
+                    }),
                 )
                 logger.info(f"📝 Updated existing sample with NTA: {sample_id}")
             else:
@@ -1458,10 +1526,12 @@ async def upload_nta_file(
                 db_sample = await create_sample(
                     db=db,
                     sample_id=sample_id,
-                    file_path_nta=str(file_path.relative_to(Path.cwd())),
-                    treatment=treatment,
+                    file_path_nta=_serialize_file_path(file_path),
+                    treatment=resolved_marker,
+                    concentration_ug=marker_concentration,
+                    preparation_method=resolved_method,
                     operator=operator,
-                    notes=notes,
+                    notes=merged_notes,
                     user_id=user_id,
                 )
                 logger.info(f"✨ Created new sample: {sample_id} (user_id: {user_id})")
@@ -1526,10 +1596,12 @@ async def upload_nta_file(
                 retry_sample = SampleModel(
                     sample_id=sample_id,
                     biological_sample_id=sample_id,
-                    treatment=treatment or "Unknown",
-                    file_path_nta=str(file_path.relative_to(Path.cwd())),
+                    treatment=resolved_marker or "Unknown",
+                    concentration_ug=marker_concentration,
+                    preparation_method=resolved_method,
+                    file_path_nta=_serialize_file_path(file_path),
                     operator=operator,
-                    notes=notes,
+                    notes=merged_notes,
                     user_id=user_id if user_id else None,
                     processing_status="completed" if nta_results else "pending",
                     qc_status="pending",
@@ -1566,10 +1638,15 @@ async def upload_nta_file(
             "success": True,
             "id": db_id,  # Database ID (real if DB connected, temp otherwise)
             "sample_id": sample_id,  # String display name
-            "treatment": treatment,
+            "treatment": resolved_marker,
+            "marker": resolved_marker,
+            "dye": resolved_dye,
+            "marker_concentration": marker_concentration,
+            "marker_concentration_unit": resolved_unit,
+            "preparation_method": resolved_method,
             "temperature_celsius": temperature_celsius,
             "operator": operator,
-            "notes": notes,
+            "notes": merged_notes,
             "job_id": job_id,
             "status": "uploaded",
             "processing_status": "completed" if nta_results else "pending",

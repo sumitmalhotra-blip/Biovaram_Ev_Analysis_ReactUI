@@ -47,6 +47,10 @@ export function useApi() {
     setNTAAnalyzing,
     setNTAError,
     setNTAFileMetadata,
+    setNTACompareSelectedSampleIds,
+    setNTACompareSampleLoading,
+    setNTACompareSampleError,
+    setNTACompareSampleResult,
     addProcessingJob,
     updateProcessingJob,
     apiConnected,
@@ -591,6 +595,11 @@ export function useApi() {
       file: File,
       metadata?: {
         treatment?: string
+        marker?: string
+        dye?: string
+        marker_concentration?: number
+        marker_concentration_unit?: string
+        preparation_method?: string
         temperature_celsius?: number
         operator?: string
         notes?: string
@@ -768,6 +777,90 @@ export function useApi() {
     [toast]
   )
 
+  const loadNTACompareSamples = useCallback(
+    async (
+      sampleIds: string[],
+      options?: { concurrency?: number }
+    ): Promise<{ total: number; loaded: number; failed: number }> => {
+      const normalizedSampleIds = Array.from(new Set(sampleIds)).slice(0, 20)
+      setNTACompareSelectedSampleIds(normalizedSampleIds)
+
+      if (normalizedSampleIds.length === 0) {
+        return { total: 0, loaded: 0, failed: 0 }
+      }
+
+      if (apiClient.offline) {
+        normalizedSampleIds.forEach((sampleId) => {
+          setNTACompareSampleLoading(sampleId, false)
+          setNTACompareSampleError(sampleId, "Backend offline")
+        })
+        return { total: normalizedSampleIds.length, loaded: 0, failed: normalizedSampleIds.length }
+      }
+
+      normalizedSampleIds.forEach((sampleId) => {
+        setNTACompareSampleLoading(sampleId, true)
+        setNTACompareSampleError(sampleId, null)
+      })
+
+      let cursor = 0
+      let loaded = 0
+      let failed = 0
+      const concurrency = Math.max(1, Math.min(5, options?.concurrency ?? 3))
+
+      const worker = async () => {
+        while (true) {
+          const currentIndex = cursor
+          cursor += 1
+
+          const sampleId = normalizedSampleIds[currentIndex]
+          if (!sampleId) {
+            return
+          }
+
+          try {
+            const response = await apiClient.getNTAResults(sampleId)
+            const latestResult = response.results?.[0] || null
+
+            if (latestResult) {
+              setNTACompareSampleResult(sampleId, latestResult)
+              setNTACompareSampleError(sampleId, null)
+              loaded += 1
+            } else {
+              setNTACompareSampleResult(sampleId, null)
+              setNTACompareSampleError(sampleId, "No NTA results found")
+              failed += 1
+            }
+          } catch (error) {
+            setNTACompareSampleResult(sampleId, null)
+            setNTACompareSampleError(sampleId, getUserFriendlyErrorMessage(error))
+            failed += 1
+          } finally {
+            setNTACompareSampleLoading(sampleId, false)
+          }
+        }
+      }
+
+      await Promise.all(
+        Array.from(
+          { length: Math.min(concurrency, normalizedSampleIds.length) },
+          () => worker()
+        )
+      )
+
+      return {
+        total: normalizedSampleIds.length,
+        loaded,
+        failed,
+      }
+    },
+    [
+      setNTACompareSelectedSampleIds,
+      setNTACompareSampleLoading,
+      setNTACompareSampleError,
+      setNTACompareSampleResult,
+    ]
+  )
+
   return {
     // Health
     checkHealth,
@@ -788,6 +881,7 @@ export function useApi() {
     uploadNTA,
     uploadNtaPdf,  // TASK-007: PDF parsing for concentration/dilution
     getNTAResults,
+    loadNTACompareSamples,
 
     // Experimental Conditions (TASK-009)
     // Parvesh (Dec 5): "We'd also want a way to be able to log conditions for the experiment"

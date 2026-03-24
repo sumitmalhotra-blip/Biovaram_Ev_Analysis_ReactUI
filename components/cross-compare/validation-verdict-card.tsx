@@ -201,6 +201,56 @@ export function ValidationVerdictCard({ result, className }: ValidationVerdictCa
           </div>
         </div>
 
+        {result.concentration && (
+          <div className="border-t p-4 md:px-6">
+            <div className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-3">
+              Concentration Comparison (Dilution-Corrected)
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="p-3 rounded-lg bg-secondary/30">
+                <div className="text-xs text-muted-foreground">NTA corrected (/mL)</div>
+                <div className="font-mono text-sm font-medium mt-1">
+                  {result.concentration.nta.corrected_per_ml != null
+                    ? result.concentration.nta.corrected_per_ml.toExponential(3)
+                    : "N/A"}
+                </div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  dilution={result.concentration.nta.dilution_factor ?? "N/A"} ({result.concentration.nta.dilution_source})
+                </div>
+              </div>
+              <div className="p-3 rounded-lg bg-secondary/30">
+                <div className="text-xs text-muted-foreground">FCS corrected (/mL)</div>
+                <div className="font-mono text-sm font-medium mt-1">
+                  {result.concentration.fcs.corrected_per_ml != null
+                    ? result.concentration.fcs.corrected_per_ml.toExponential(3)
+                    : "N/A"}
+                </div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  dilution={result.concentration.fcs.dilution_factor ?? "N/A"} ({result.concentration.fcs.dilution_source})
+                </div>
+              </div>
+            </div>
+            <div className="mt-2 flex items-center gap-2 flex-wrap">
+              <Badge variant="outline" className="font-mono text-xs">
+                Ratio NTA/FCS: {result.concentration.comparison.ratio_corrected_nta_to_fcs != null
+                  ? result.concentration.comparison.ratio_corrected_nta_to_fcs.toFixed(3)
+                  : "N/A"}
+              </Badge>
+              <Badge variant="outline" className="font-mono text-xs">
+                Diff: {result.concentration.comparison.percent_difference_corrected != null
+                  ? `${result.concentration.comparison.percent_difference_corrected.toFixed(1)}%`
+                  : "N/A"}
+              </Badge>
+              {result.flags?.missing_dilution_factor && (
+                <Badge variant="secondary" className="text-xs">Missing dilution factor</Badge>
+              )}
+              {result.flags?.missing_measured_concentration && (
+                <Badge variant="secondary" className="text-xs">Missing measured concentration</Badge>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Statistical Tests */}
         {result.statistical_tests && (
           <div className="border-t p-4 md:px-6">

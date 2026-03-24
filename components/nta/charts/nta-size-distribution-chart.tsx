@@ -9,8 +9,14 @@ import type { NTAResult } from "@/lib/api-client"
 
 interface NTASizeDistributionChartProps {
   data?: NTAResult
-  // Overlay support - secondary NTA results
-  secondaryData?: NTAResult
+  overlaySeries?: Array<{
+    sampleId: string
+    label: string
+    color: string
+    visible: boolean
+    isPrimary: boolean
+    result: NTAResult
+  }>
   showOverlayControls?: boolean
 }
 
@@ -87,15 +93,6 @@ const generateData = (results?: NTAResult, _label?: string): { data: Array<{ siz
   return { data, isReal: false }
 }
 
-// Merge primary and secondary data for overlay view
-const mergeDataForOverlay = (primaryData: any[], secondaryData: any[]) => {
-  return primaryData.map((item, index) => ({
-    size: item.size,
-    primaryCount: item.count,
-    secondaryCount: secondaryData[index]?.count || 0,
-  }))
-}
-
 // Custom tooltip for overlay mode
 function OverlayTooltip({ active, payload, label }: any) {
   if (!active || !payload || !payload.length) return null
@@ -123,31 +120,64 @@ function OverlayTooltip({ active, payload, label }: any) {
 
 export function NTASizeDistributionChart({ 
   data: results, 
-  secondaryData: secondaryResults,
+  overlaySeries = [],
   showOverlayControls = true,
 }: NTASizeDistributionChartProps) {
-  const [showPrimary, setShowPrimary] = useState(true)
-  const [showSecondary, setShowSecondary] = useState(true)
-  
-  const hasOverlay = !!secondaryResults
-  
+  const [visibilityOverrides, setVisibilityOverrides] = useState<Record<string, boolean>>({})
+
   const { data: primaryData, isReal: primaryIsReal } = useMemo(() => generateData(results), [results])
-  const { data: secondaryDataArr, isReal: secondaryIsReal } = useMemo(() => generateData(secondaryResults), [secondaryResults])
+
+  const preparedSeries = useMemo(() => {
+    const visible = overlaySeries.filter((series) => visibilityOverrides[series.sampleId] ?? series.visible)
+    const sorted = [...visible].sort((a, b) => {
+      if (a.isPrimary === b.isPrimary) return 0
+      return a.isPrimary ? -1 : 1
+    })
+
+    return sorted.map((series, index) => {
+      const generated = generateData(series.result, series.label)
+      return {
+        ...series,
+        chartKey: `series_${index}`,
+        data: generated.data,
+      }
+    })
+  }, [overlaySeries, visibilityOverrides])
+
+  const hasOverlay = preparedSeries.length > 1
+
+  const chartData = useMemo(() => {
+    if (preparedSeries.length === 0) {
+      return primaryData.map((item, idx) => ({
+        size: item.size,
+        [`series_${idx}`]: item.count,
+      }))
+    }
+
+    const bySize = new Map<number, Record<string, number>>()
+    preparedSeries.forEach((series) => {
+      series.data.forEach((point) => {
+        const existing = bySize.get(point.size) || {}
+        existing[series.chartKey] = point.count
+        bySize.set(point.size, existing)
+      })
+    })
+
+    return Array.from(bySize.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([size, values]) => ({ size, ...values }))
+  }, [preparedSeries, primaryData])
   
-  // Overlay merged data
-  const overlayData = useMemo(() => {
-    if (!hasOverlay) return primaryData.map(d => ({ ...d, primaryCount: d.count }))
-    return mergeDataForOverlay(primaryData, secondaryDataArr)
-  }, [primaryData, secondaryDataArr, hasOverlay])
-  
-  const d10 = results?.d10_nm || 90
-  const d50 = results?.d50_nm || results?.median_size_nm || 145
-  const d90 = results?.d90_nm || 200
-  
-  // Secondary percentiles
-  const secondaryD10 = secondaryResults?.d10_nm
-  const secondaryD50 = secondaryResults?.d50_nm || secondaryResults?.median_size_nm
-  const secondaryD90 = secondaryResults?.d90_nm
+  const primarySeriesResult = useMemo(() => {
+    const explicitPrimary = preparedSeries.find((series) => series.isPrimary)
+    if (explicitPrimary?.result) return explicitPrimary.result
+    if (results) return results
+    return preparedSeries[0]?.result
+  }, [preparedSeries, results])
+
+  const d10 = primarySeriesResult?.d10_nm || 90
+  const d50 = primarySeriesResult?.d50_nm || primarySeriesResult?.median_size_nm || 145
+  const d90 = primarySeriesResult?.d90_nm || 200
   
   return (
     <div className="space-y-3">
@@ -159,51 +189,45 @@ export function NTASizeDistributionChart({
       )}
 
       {/* Overlay controls */}
-      {hasOverlay && showOverlayControls && (
+      {preparedSeries.length > 0 && showOverlayControls && (
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="gap-1 bg-orange-500/20 text-orange-500 border-orange-500/50">
               <Layers className="h-3 w-3" />
-              NTA Overlay Active
+              {hasOverlay ? "NTA Multi-Overlay Active" : "Primary Sample Active"}
             </Badge>
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              variant={showPrimary ? "default" : "outline"}
-              size="sm"
-              onClick={() => setShowPrimary(!showPrimary)}
-              className="gap-1.5 h-7 text-xs"
-            >
-              {showPrimary ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
-              <span className="w-2 h-2 rounded-full bg-violet-500" />
-              Primary
-            </Button>
-            <Button
-              variant={showSecondary ? "default" : "outline"}
-              size="sm"
-              onClick={() => setShowSecondary(!showSecondary)}
-              className="gap-1.5 h-7 text-xs"
-            >
-              {showSecondary ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
-              <span className="w-2 h-2 rounded-full bg-orange-500" />
-              Secondary
-            </Button>
+            {overlaySeries.map((series) => {
+              const isVisible = visibilityOverrides[series.sampleId] ?? series.visible
+              return (
+                <Button
+                  key={series.sampleId}
+                  variant={isVisible ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setVisibilityOverrides((prev) => ({ ...prev, [series.sampleId]: !isVisible }))}
+                  className="gap-1.5 h-7 text-xs max-w-36"
+                >
+                  {isVisible ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: series.color }} />
+                  <span className="truncate">{series.label}</span>
+                </Button>
+              )
+            })}
           </div>
         </div>
       )}
       
       <div className="h-80">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={hasOverlay ? overlayData : primaryData}>
+          <ComposedChart data={chartData}>
             <defs>
-              <linearGradient id="colorCountPrimary" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8} />
-                <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.1} />
-              </linearGradient>
-              <linearGradient id="colorCountSecondary" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#f97316" stopOpacity={0.6} />
-                <stop offset="95%" stopColor="#f97316" stopOpacity={0.1} />
-              </linearGradient>
+              {preparedSeries.map((series) => (
+                <linearGradient key={series.sampleId} id={`color_${series.chartKey}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={series.color} stopOpacity={series.isPrimary ? 0.85 : 0.6} />
+                  <stop offset="95%" stopColor={series.color} stopOpacity={0.08} />
+                </linearGradient>
+              ))}
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
             <XAxis
@@ -231,83 +255,42 @@ export function NTASizeDistributionChart({
               labelFormatter={(value) => `${value} nm`}
             />
             
-            {hasOverlay && <Legend />}
-            
-            {/* Primary data area */}
-            {showPrimary && (
+            {preparedSeries.length > 1 && <Legend />}
+
+            {preparedSeries.map((series) => (
               <Area
+                key={series.sampleId}
                 type="monotone"
-                dataKey={hasOverlay ? "primaryCount" : "count"}
-                name="Primary Sample"
-                stroke="#8b5cf6"
-                strokeWidth={2}
-                fillOpacity={hasOverlay ? 0.5 : 1}
-                fill="url(#colorCountPrimary)"
+                dataKey={series.chartKey}
+                name={series.label}
+                stroke={series.color}
+                strokeWidth={series.isPrimary ? 2.5 : 2}
+                fillOpacity={series.isPrimary ? 0.55 : 0.35}
+                fill={`url(#color_${series.chartKey})`}
               />
-            )}
-            
-            {/* Secondary data area (only in overlay mode) */}
-            {hasOverlay && showSecondary && (
-              <Area
-                type="monotone"
-                dataKey="secondaryCount"
-                name="Secondary Sample"
-                stroke="#f97316"
-                strokeWidth={2}
-                fillOpacity={0.5}
-                fill="url(#colorCountSecondary)"
-              />
-            )}
+            ))}
 
             {/* Primary percentile lines */}
-            {showPrimary && (
-              <>
-                <ReferenceLine
-                  x={d10}
-                  stroke="#10b981"
-                  strokeDasharray="5 5"
-                  label={{ value: "D10", fill: "#10b981", fontSize: 10, position: "top" }}
-                />
-                <ReferenceLine
-                  x={d50}
-                  stroke="#10b981"
-                  strokeDasharray="5 5"
-                  label={{ value: "D50", fill: "#10b981", fontSize: 10, position: "top" }}
-                />
-                <ReferenceLine
-                  x={d90}
-                  stroke="#10b981"
-                  strokeDasharray="5 5"
-                  label={{ value: "D90", fill: "#10b981", fontSize: 10, position: "top" }}
-                />
-              </>
-            )}
-            
-            {/* Secondary percentile lines (dashed orange) */}
-            {hasOverlay && showSecondary && secondaryD10 && (
+            <>
               <ReferenceLine
-                x={secondaryD10}
-                stroke="#f97316"
-                strokeDasharray="3 3"
-                label={{ value: "D10'", fill: "#f97316", fontSize: 9, position: "bottom" }}
+                x={d10}
+                stroke="#10b981"
+                strokeDasharray="5 5"
+                label={{ value: "D10", fill: "#10b981", fontSize: 10, position: "top" }}
               />
-            )}
-            {hasOverlay && showSecondary && secondaryD50 && (
               <ReferenceLine
-                x={secondaryD50}
-                stroke="#f97316"
-                strokeDasharray="3 3"
-                label={{ value: "D50'", fill: "#f97316", fontSize: 9, position: "bottom" }}
+                x={d50}
+                stroke="#10b981"
+                strokeDasharray="5 5"
+                label={{ value: "D50", fill: "#10b981", fontSize: 10, position: "top" }}
               />
-            )}
-            {hasOverlay && showSecondary && secondaryD90 && (
               <ReferenceLine
-                x={secondaryD90}
-                stroke="#f97316"
-                strokeDasharray="3 3"
-                label={{ value: "D90'", fill: "#f97316", fontSize: 9, position: "bottom" }}
+                x={d90}
+                stroke="#10b981"
+                strokeDasharray="5 5"
+                label={{ value: "D90", fill: "#10b981", fontSize: 10, position: "top" }}
               />
-            )}
+            </>
           </ComposedChart>
         </ResponsiveContainer>
       </div>

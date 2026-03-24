@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
 import { 
   Pin, Maximize2, MapPin, Ruler, Microscope, BarChart3, TableIcon, 
   Upload, FileText, Loader2, AlertCircle, RotateCcw, Download, Clock, Beaker, FileType
@@ -33,9 +34,17 @@ export function NTATab() {
   const [isDragging, setIsDragging] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [selectedPdfFile, setSelectedPdfFile] = useState<File | null>(null)  // TASK-007: PDF file
-  const [treatment, setTreatment] = useState("")
+  const [marker, setMarker] = useState("")
+  const [customMarker, setCustomMarker] = useState("")
+  const [dye, setDye] = useState("")
+  const [customDye, setCustomDye] = useState("")
+  const [markerConcentration, setMarkerConcentration] = useState("")
+  const [markerConcentrationUnit, setMarkerConcentrationUnit] = useState("ug/mL")
+  const [purificationMethod, setPurificationMethod] = useState("")
+  const [customPurificationMethod, setCustomPurificationMethod] = useState("")
   const [temperature, setTemperature] = useState("")
   const [operator, setOperator] = useState("")
+  const [notes, setNotes] = useState("")
   const [pdfUploading, setPdfUploading] = useState(false)  // TASK-007: PDF upload state
   
   // Experimental conditions dialog state
@@ -90,17 +99,74 @@ export function NTATab() {
   const handleUpload = async () => {
     if (!selectedFile) return
 
+    const resolvedMarker = marker === "custom" ? customMarker.trim() : marker
+    const resolvedDye = dye === "custom" ? customDye.trim() : dye
+    const resolvedPurification = purificationMethod === "custom"
+      ? customPurificationMethod.trim()
+      : purificationMethod
+
+    if (!resolvedMarker) {
+      toast({
+        title: "Marker required",
+        description: "Select a marker or provide a custom marker name.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (dye === "custom" && !resolvedDye) {
+      toast({
+        title: "Custom dye required",
+        description: "Please enter a custom dye value or select a predefined dye.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (purificationMethod === "custom" && !resolvedPurification) {
+      toast({
+        title: "Custom purification method required",
+        description: "Please enter a custom purification method.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const markerConcValue = markerConcentration.trim() ? parseFloat(markerConcentration) : undefined
+    if (markerConcentration.trim() && (!Number.isFinite(markerConcValue) || (markerConcValue ?? 0) <= 0)) {
+      toast({
+        title: "Invalid marker concentration",
+        description: "Marker concentration must be a positive number.",
+        variant: "destructive",
+      })
+      return
+    }
+
     await uploadNTA(selectedFile, {
-      treatment: treatment || undefined,
+      treatment: resolvedMarker || undefined,
+      marker: resolvedMarker || undefined,
+      dye: resolvedDye || undefined,
+      marker_concentration: markerConcValue,
+      marker_concentration_unit: markerConcentrationUnit || undefined,
+      preparation_method: resolvedPurification || undefined,
       temperature_celsius: temperature ? parseFloat(temperature) : undefined,
       operator: operator || undefined,
+      notes: notes || undefined,
     })
 
     // Reset form
     setSelectedFile(null)
-    setTreatment("")
+    setMarker("")
+    setCustomMarker("")
+    setDye("")
+    setCustomDye("")
+    setMarkerConcentration("")
+    setMarkerConcentrationUnit("ug/mL")
+    setPurificationMethod("")
+    setCustomPurificationMethod("")
     setTemperature("")
     setOperator("")
+    setNotes("")
   }
 
   const handlePin = (chartTitle: string, chartType: "histogram" | "bar" | "line") => {
@@ -258,7 +324,7 @@ export function NTATab() {
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
                   className={cn(
-                    "border-2 border-dashed rounded-xl p-8 md:p-10 lg:p-12 text-center transition-all duration-300 cursor-pointer min-h-[180px] md:min-h-[200px] flex items-center justify-center",
+                    "border-2 border-dashed rounded-xl p-8 md:p-10 lg:p-12 text-center transition-all duration-300 cursor-pointer min-h-45 md:min-h-50 flex items-center justify-center",
                     isDragging
                       ? "border-primary bg-primary/10 scale-[1.02] shadow-lg shadow-primary/20"
                       : "border-border hover:border-primary/50 hover:bg-secondary/30 hover:shadow-md active:scale-[0.98]",
@@ -320,18 +386,103 @@ export function NTATab() {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="treatment">Treatment</Label>
-                    <Select value={treatment} onValueChange={setTreatment}>
+                    <Label htmlFor="marker">Marker</Label>
+                    <Select value={marker} onValueChange={setMarker}>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select treatment" />
+                        <SelectValue placeholder="Select marker" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="CD81">CD81</SelectItem>
                         <SelectItem value="CD9">CD9</SelectItem>
+                        <SelectItem value="CD63">CD63</SelectItem>
+                        <SelectItem value="Annexin V">Annexin V</SelectItem>
                         <SelectItem value="Unstained">Unstained</SelectItem>
                         <SelectItem value="Control">Control</SelectItem>
+                        <SelectItem value="custom">Custom</SelectItem>
                       </SelectContent>
                     </Select>
+                    {marker === "custom" && (
+                      <Input
+                        value={customMarker}
+                        onChange={(e) => setCustomMarker(e.target.value)}
+                        placeholder="Enter custom marker"
+                      />
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="dye">Dye</Label>
+                    <Select value={dye} onValueChange={setDye}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select dye" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="FITC">FITC</SelectItem>
+                        <SelectItem value="PE">PE</SelectItem>
+                        <SelectItem value="APC">APC</SelectItem>
+                        <SelectItem value="PerCP">PerCP</SelectItem>
+                        <SelectItem value="custom">Custom</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {dye === "custom" && (
+                      <Input
+                        value={customDye}
+                        onChange={(e) => setCustomDye(e.target.value)}
+                        placeholder="Enter custom dye"
+                      />
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="marker-concentration">Marker Concentration</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input
+                        id="marker-concentration"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={markerConcentration}
+                        onChange={(e) => setMarkerConcentration(e.target.value)}
+                        placeholder="e.g., 2.5"
+                      />
+                      <Select value={markerConcentrationUnit} onValueChange={setMarkerConcentrationUnit}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Unit" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ug/mL">ug/mL</SelectItem>
+                          <SelectItem value="ng/mL">ng/mL</SelectItem>
+                          <SelectItem value="uM">uM</SelectItem>
+                          <SelectItem value="nM">nM</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Marker concentration is captured separately from instrument-reported particle concentration.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="purification">Purification Method</Label>
+                    <Select value={purificationMethod} onValueChange={setPurificationMethod}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select method" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="SEC">SEC</SelectItem>
+                        <SelectItem value="Centrifugation">Centrifugation</SelectItem>
+                        <SelectItem value="Ultracentrifugation">Ultracentrifugation</SelectItem>
+                        <SelectItem value="Immunoprecipitation">Immunoprecipitation</SelectItem>
+                        <SelectItem value="custom">Custom</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {purificationMethod === "custom" && (
+                      <Input
+                        value={customPurificationMethod}
+                        onChange={(e) => setCustomPurificationMethod(e.target.value)}
+                        placeholder="Enter custom purification method"
+                      />
+                    )}
                   </div>
 
                   <div className="space-y-2">
@@ -353,6 +504,17 @@ export function NTATab() {
                       value={operator}
                       onChange={(e) => setOperator(e.target.value)}
                       placeholder="Your name"
+                    />
+                  </div>
+
+                  <div className="space-y-2 md:col-span-3">
+                    <Label htmlFor="notes">Notes</Label>
+                    <Textarea
+                      id="notes"
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      placeholder="Optional notes about sample prep, buffer, incubation, etc."
+                      rows={3}
                     />
                   </div>
                 </div>

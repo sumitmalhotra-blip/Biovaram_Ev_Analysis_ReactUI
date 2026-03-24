@@ -5,73 +5,34 @@ import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { NTAResult } from "@/lib/api-client"
+import type { NTASizeBin } from "@/lib/store"
 import { Beaker, Sparkles, Target } from "lucide-react"
+import { computeNTABinsForProfile } from "@/lib/nta-size-profiles"
 
 interface SizeDistributionBreakdownProps {
   results: NTAResult
+  bins: NTASizeBin[]
   className?: string
 }
 
-export function NTASizeDistributionBreakdown({ results, className }: SizeDistributionBreakdownProps) {
-  const totalParticles = results.total_particles || 0
+export function NTASizeDistributionBreakdown({ results, bins, className }: SizeDistributionBreakdownProps) {
+  const computed = computeNTABinsForProfile(results, bins)
 
-  // Define size bins based on NTA typical ranges
-  const sizeBins = [
-    {
-      name: "50-80 nm",
-      range: "Small EVs",
-      percentage: results.bin_50_80nm_pct || 0,
-      count: Math.round((totalParticles * (results.bin_50_80nm_pct || 0)) / 100),
-      color: "cyan" as const,
-      description: "Small extracellular vesicles, including exosomes",
-      icon: Sparkles
-    },
-    {
-      name: "80-100 nm",
-      range: "Standard EVs",
-      percentage: results.bin_80_100nm_pct || 0,
-      count: Math.round((totalParticles * (results.bin_80_100nm_pct || 0)) / 100),
-      color: "blue" as const,
-      description: "Typical exosome size range",
-      icon: Target
-    },
-    {
-      name: "100-120 nm",
-      range: "Large EVs",
-      percentage: results.bin_100_120nm_pct || 0,
-      count: Math.round((totalParticles * (results.bin_100_120nm_pct || 0)) / 100),
-      color: "indigo" as const,
-      description: "Larger extracellular vesicles",
-      icon: Beaker
-    },
-    {
-      name: "120-150 nm",
-      range: "Extended EVs",
-      percentage: results.bin_120_150nm_pct || 0,
-      count: Math.round((totalParticles * (results.bin_120_150nm_pct || 0)) / 100),
-      color: "purple" as const,
-      description: "Extended size range vesicles",
-      icon: Beaker
-    },
-    {
-      name: "150-200 nm",
-      range: "Large Vesicles",
-      percentage: results.bin_150_200nm_pct || 0,
-      count: Math.round((totalParticles * (results.bin_150_200nm_pct || 0)) / 100),
-      color: "fuchsia" as const,
-      description: "Larger microvesicles and particles",
-      icon: Beaker
-    },
-    {
-      name: "200+ nm",
-      range: "Microvesicles",
-      percentage: results.bin_200_plus_pct || 0,
-      count: Math.round((totalParticles * (results.bin_200_plus_pct || 0)) / 100),
-      color: "amber" as const,
-      description: "Large microvesicles and cellular debris",
-      icon: Beaker
+  const sizeBins = computed.map((bin, idx) => {
+    const colorOrder = ["cyan", "blue", "indigo", "purple", "fuchsia", "amber"] as const
+    const color = colorOrder[idx % colorOrder.length]
+    return {
+      name: `${bin.min}-${bin.max} nm`,
+      range: bin.name,
+      percentage: bin.percentage,
+      count: bin.count,
+      color,
+      description: `Custom bin range ${bin.min}-${bin.max} nm`,
+      icon: idx === 0 ? Sparkles : idx === 1 ? Target : Beaker,
     }
-  ]
+  })
+
+  const totalParticles = results.total_particles || 0
 
   // Find dominant population
   const dominantBin = sizeBins.reduce((max, bin) => 
@@ -95,8 +56,8 @@ export function NTASizeDistributionBreakdown({ results, className }: SizeDistrib
             </Badge>
           )}
         </div>
-        <p className="text-xs text-muted-foreground mt-1">
-          Particle distribution across size ranges • Total: {totalParticles.toLocaleString()} particles
+          <p className="text-xs text-muted-foreground mt-1">
+          Particle distribution across active profile bins • Total: {totalParticles.toLocaleString()} particles
         </p>
       </CardHeader>
       <CardContent className="space-y-4">

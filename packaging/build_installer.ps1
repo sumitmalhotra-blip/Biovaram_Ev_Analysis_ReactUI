@@ -109,7 +109,7 @@ try {
         Write-Host "============================================================" -ForegroundColor Cyan
 
         $distDir = Join-Path $ProjectRoot "dist\$($def.ExeName)"
-        $exePath = Join-Path $distDir "$($def.ExeName).exe"
+        $exePath = Join-Path $ProjectRoot "dist\$($def.ExeName).exe"
 
         # Step 1: Build if needed
         if (-not $SkipBuild) {
@@ -131,8 +131,8 @@ try {
             }
         }
 
-        # Step 2: Create version.json if missing
-        $versionJson = Join-Path $distDir "version.json"
+        # Step 2: Create version metadata if missing
+        $versionJson = Join-Path $ProjectRoot "dist\$($def.ExeName).version.json"
         if (-not (Test-Path $versionJson)) {
             Write-Host "  [2/3] Creating version.json..." -ForegroundColor Yellow
             $buildDate = Get-Date -Format "yyyy-MM-dd"
@@ -145,6 +145,7 @@ try {
                 build_date = $buildDate
                 git_commit = $gitCommit
                 platform   = "windows-x64"
+                packaging  = "onefile"
             } | ConvertTo-Json -Depth 2 | Out-File -FilePath $versionJson -Encoding utf8
         } else {
             Write-Host "  [2/3] version.json exists" -ForegroundColor DarkGray
@@ -165,7 +166,8 @@ try {
             "/DMODULE_TITLE=$($def.Title)",
             "/DEXE_NAME=$($def.ExeName)",
             "/DAPP_VERSION=$Version",
-            "/DDIST_DIR=$(Join-Path $ProjectRoot "dist\$($def.ExeName)")",
+            "/DDIST_EXE=$exePath",
+            "/DVERSION_JSON=$versionJson",
             "/DOUTPUT_DIR=$outputDir",
             "/Q",
             $issFile

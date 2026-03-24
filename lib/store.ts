@@ -6,6 +6,10 @@ import type { Sample as APISample, FCSResult, NTAResult, ProcessingJob, FileMeta
 
 export type TabType = "dashboard" | "flow-cytometry" | "nta" | "cross-compare" | "research-chat"
 
+export const DEFAULT_SIDEBAR_WIDTH = 288
+export const MIN_SIDEBAR_WIDTH = 240
+export const MAX_SIDEBAR_WIDTH = 520
+
 // Enhanced chart data structure for proper figure storage
 export interface ChartDataPoint {
   x: number
@@ -183,6 +187,16 @@ export interface SecondaryNTAAnalysisState {
   error: string | null
 }
 
+export interface NTACompareSessionState {
+  selectedSampleIds: string[]
+  visibleSampleIds: string[]
+  primarySampleId: string | null
+  resultsBySampleId: Record<string, NTAResult>
+  loadingBySampleId: Record<string, boolean>
+  errorBySampleId: Record<string, string | null>
+  maxVisibleOverlays: number
+}
+
 // FCS Analysis Settings
 export interface FCSAnalysisSettings {
   laserWavelength: number
@@ -254,8 +268,58 @@ export interface NTAAnalysisSettings {
   yAxisMode: "count" | "normalized"
 }
 
+// NTA size bin/profile configuration
+export interface NTASizeBin {
+  id: string
+  name: string
+  min: number
+  max: number
+  color?: string
+}
+
+export interface NTASizeProfile {
+  id: string
+  name: string
+  locked: boolean
+  bins: NTASizeBin[]
+  createdAt: string
+}
+
+export const NTA_LOCKED_QUALITY_PROFILE_ID = "nta-quality-default"
+
+export const defaultNTAQualityProfile: NTASizeProfile = {
+  id: NTA_LOCKED_QUALITY_PROFILE_ID,
+  name: "Quality Standard (Locked)",
+  locked: true,
+  createdAt: new Date().toISOString(),
+  bins: [
+    { id: "bin-50-80", name: "50-80 nm", min: 50, max: 80, color: "#06b6d4" },
+    { id: "bin-80-100", name: "80-100 nm", min: 80, max: 100, color: "#3b82f6" },
+    { id: "bin-100-120", name: "100-120 nm", min: 100, max: 120, color: "#6366f1" },
+    { id: "bin-120-150", name: "120-150 nm", min: 120, max: 150, color: "#8b5cf6" },
+    { id: "bin-150-200", name: "150-200 nm", min: 150, max: 200, color: "#d946ef" },
+    { id: "bin-200-plus", name: "200+ nm", min: 200, max: 1000, color: "#f59e0b" },
+  ],
+}
+
+export const defaultNTAAnalysisProfile: NTASizeProfile = {
+  id: "nta-analysis-default",
+  name: "Analysis Default",
+  locked: false,
+  createdAt: new Date().toISOString(),
+  bins: defaultNTAQualityProfile.bins.map((b) => ({ ...b })),
+}
+
+export const defaultNTAReportProfile: NTASizeProfile = {
+  id: "nta-report-default",
+  name: "Report Default",
+  locked: false,
+  createdAt: new Date().toISOString(),
+  bins: defaultNTAQualityProfile.bins.map((b) => ({ ...b })),
+}
+
 export const defaultNTAAnalysisSettings: NTAAnalysisSettings = {
-  applyTemperatureCorrection: true,
+  applyTemperatureCorrection: false,
   measurementTemp: 22,
   referenceTemp: 25,
   mediaType: "pbs",
@@ -360,6 +424,8 @@ export interface AnalysisState {
   setActiveTab: (tab: TabType) => void
   sidebarCollapsed: boolean
   toggleSidebar: () => void
+  sidebarWidth: number
+  setSidebarWidth: (width: number) => void
   isDarkMode: boolean
   toggleDarkMode: () => void
 
@@ -438,6 +504,16 @@ export interface AnalysisState {
   // NTA Overlay Configuration
   ntaOverlayEnabled: boolean
   setNtaOverlayEnabled: (enabled: boolean) => void
+  ntaCompareSession: NTACompareSessionState
+  setNTACompareSelectedSampleIds: (sampleIds: string[]) => void
+  setNTACompareVisibleSampleIds: (sampleIds: string[]) => void
+  toggleNTACompareSampleVisibility: (sampleId: string) => void
+  setNTAComparePrimarySampleId: (sampleId: string | null) => void
+  setNTACompareSampleLoading: (sampleId: string, loading: boolean) => void
+  setNTACompareSampleError: (sampleId: string, error: string | null) => void
+  setNTACompareSampleResult: (sampleId: string, result: NTAResult | null) => void
+  setNTACompareMaxVisibleOverlays: (maxVisible: number) => void
+  clearNTACompareSession: () => void
 
   // Processing Jobs
   processingJobs: ProcessingJob[]
@@ -466,6 +542,17 @@ export interface AnalysisState {
   setFcsAnalysisSettings: (settings: Partial<FCSAnalysisSettings>) => void
   ntaAnalysisSettings: NTAAnalysisSettings
   setNtaAnalysisSettings: (settings: Partial<NTAAnalysisSettings>) => void
+  ntaSizeProfiles: NTASizeProfile[]
+  selectedNTAAnalysisProfileId: string
+  selectedNTAReportProfileId: string
+  ntaLockedBuckets: NTASizeBin[] | null
+  setSelectedNTAAnalysisProfileId: (profileId: string) => void
+  setSelectedNTAReportProfileId: (profileId: string) => void
+  setNTALockedBuckets: (bins: NTASizeBin[] | null) => void
+  createNTASizeProfile: (profile: Omit<NTASizeProfile, "createdAt">) => void
+  updateNTASizeProfile: (profileId: string, updates: Partial<Omit<NTASizeProfile, "id" | "createdAt" | "locked">>) => void
+  deleteNTASizeProfile: (profileId: string) => void
+  resetNTASizeProfiles: () => void
   crossComparisonSettings: CrossComparisonSettings
   setCrossComparisonSettings: (settings: CrossComparisonSettings) => void
 
@@ -544,6 +631,16 @@ const initialSecondaryNTAAnalysis: SecondaryNTAAnalysisState = {
   error: null,
 }
 
+const initialNTACompareSession: NTACompareSessionState = {
+  selectedSampleIds: [],
+  visibleSampleIds: [],
+  primarySampleId: null,
+  resultsBySampleId: {},
+  loadingBySampleId: {},
+  errorBySampleId: {},
+  maxVisibleOverlays: 4,
+}
+
 // Hydration state tracking
 interface HydrationState {
   _hasHydrated: boolean
@@ -560,6 +657,8 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
   setActiveTab: (tab) => set({ activeTab: tab }),
   sidebarCollapsed: false,
   toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+  sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
+  setSidebarWidth: (width) => set({ sidebarWidth: Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width)) }),
   isDarkMode: true,
   toggleDarkMode: () => set((state) => ({ isDarkMode: !state.isDarkMode })),
 
@@ -740,6 +839,131 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
   // NTA Overlay
   ntaOverlayEnabled: false,
   setNtaOverlayEnabled: (enabled) => set({ ntaOverlayEnabled: enabled }),
+  ntaCompareSession: initialNTACompareSession,
+  setNTACompareSelectedSampleIds: (sampleIds) => set((state) => {
+    const selectedSampleIds = Array.from(new Set(sampleIds)).slice(0, 20)
+    const maxVisible = state.ntaCompareSession.maxVisibleOverlays
+    const visibleSampleIds = state.ntaCompareSession.visibleSampleIds
+      .filter((id) => selectedSampleIds.includes(id))
+      .slice(0, maxVisible)
+
+    const nextVisible = visibleSampleIds.length > 0
+      ? visibleSampleIds
+      : selectedSampleIds.slice(0, maxVisible)
+
+    const currentPrimary = state.ntaCompareSession.primarySampleId
+    const primarySampleId = currentPrimary && selectedSampleIds.includes(currentPrimary)
+      ? currentPrimary
+      : (selectedSampleIds[0] ?? null)
+
+    const resultsBySampleId = Object.fromEntries(
+      Object.entries(state.ntaCompareSession.resultsBySampleId).filter(([id]) => selectedSampleIds.includes(id))
+    )
+    const loadingBySampleId = Object.fromEntries(
+      Object.entries(state.ntaCompareSession.loadingBySampleId).filter(([id]) => selectedSampleIds.includes(id))
+    )
+    const errorBySampleId = Object.fromEntries(
+      Object.entries(state.ntaCompareSession.errorBySampleId).filter(([id]) => selectedSampleIds.includes(id))
+    )
+
+    return {
+      ntaCompareSession: {
+        ...state.ntaCompareSession,
+        selectedSampleIds,
+        visibleSampleIds: nextVisible,
+        primarySampleId,
+        resultsBySampleId,
+        loadingBySampleId,
+        errorBySampleId,
+      },
+    }
+  }),
+  setNTACompareVisibleSampleIds: (sampleIds) => set((state) => {
+    const allowed = new Set(state.ntaCompareSession.selectedSampleIds)
+    const visibleSampleIds = Array.from(new Set(sampleIds))
+      .filter((id) => allowed.has(id))
+      .slice(0, state.ntaCompareSession.maxVisibleOverlays)
+    return {
+      ntaCompareSession: {
+        ...state.ntaCompareSession,
+        visibleSampleIds,
+      },
+    }
+  }),
+  toggleNTACompareSampleVisibility: (sampleId) => set((state) => {
+    if (!state.ntaCompareSession.selectedSampleIds.includes(sampleId)) {
+      return {}
+    }
+
+    const current = state.ntaCompareSession.visibleSampleIds
+    const isVisible = current.includes(sampleId)
+    const maxVisible = state.ntaCompareSession.maxVisibleOverlays
+    const visibleSampleIds = isVisible
+      ? current.filter((id) => id !== sampleId)
+      : [...current, sampleId].slice(-maxVisible)
+
+    return {
+      ntaCompareSession: {
+        ...state.ntaCompareSession,
+        visibleSampleIds,
+      },
+    }
+  }),
+  setNTAComparePrimarySampleId: (sampleId) => set((state) => {
+    if (sampleId && !state.ntaCompareSession.selectedSampleIds.includes(sampleId)) {
+      return {}
+    }
+    return {
+      ntaCompareSession: {
+        ...state.ntaCompareSession,
+        primarySampleId: sampleId,
+      },
+    }
+  }),
+  setNTACompareSampleLoading: (sampleId, loading) => set((state) => ({
+    ntaCompareSession: {
+      ...state.ntaCompareSession,
+      loadingBySampleId: {
+        ...state.ntaCompareSession.loadingBySampleId,
+        [sampleId]: loading,
+      },
+    },
+  })),
+  setNTACompareSampleError: (sampleId, error) => set((state) => ({
+    ntaCompareSession: {
+      ...state.ntaCompareSession,
+      errorBySampleId: {
+        ...state.ntaCompareSession.errorBySampleId,
+        [sampleId]: error,
+      },
+    },
+  })),
+  setNTACompareSampleResult: (sampleId, result) => set((state) => {
+    const nextResults = { ...state.ntaCompareSession.resultsBySampleId }
+    if (result) {
+      nextResults[sampleId] = result
+    } else {
+      delete nextResults[sampleId]
+    }
+
+    return {
+      ntaCompareSession: {
+        ...state.ntaCompareSession,
+        resultsBySampleId: nextResults,
+      },
+    }
+  }),
+  setNTACompareMaxVisibleOverlays: (maxVisible) => set((state) => {
+    const clamped = Math.max(1, Math.min(8, maxVisible))
+    return {
+      ntaCompareSession: {
+        ...state.ntaCompareSession,
+        maxVisibleOverlays: clamped,
+        visibleSampleIds: state.ntaCompareSession.visibleSampleIds.slice(0, clamped),
+      },
+    }
+  }),
+  clearNTACompareSession: () => set({ ntaCompareSession: initialNTACompareSession }),
 
   // Processing Jobs
   processingJobs: [],
@@ -824,6 +1048,65 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
   setNtaAnalysisSettings: (settings) => set((state) => ({
     ntaAnalysisSettings: { ...state.ntaAnalysisSettings, ...settings }
   })),
+  ntaSizeProfiles: [defaultNTAQualityProfile, defaultNTAAnalysisProfile, defaultNTAReportProfile],
+  selectedNTAAnalysisProfileId: defaultNTAAnalysisProfile.id,
+  selectedNTAReportProfileId: defaultNTAReportProfile.id,
+  ntaLockedBuckets: null,
+  setSelectedNTAAnalysisProfileId: (profileId) => set((state) => {
+    const exists = state.ntaSizeProfiles.some((p) => p.id === profileId)
+    return exists ? { selectedNTAAnalysisProfileId: profileId } : {}
+  }),
+  setSelectedNTAReportProfileId: (profileId) => set((state) => {
+    const exists = state.ntaSizeProfiles.some((p) => p.id === profileId)
+    return exists ? { selectedNTAReportProfileId: profileId } : {}
+  }),
+  setNTALockedBuckets: (bins) => set({ ntaLockedBuckets: bins ? bins.map((b) => ({ ...b })) : null }),
+  createNTASizeProfile: (profile) => set((state) => ({
+    ntaSizeProfiles: [
+      ...state.ntaSizeProfiles,
+      {
+        ...profile,
+        createdAt: new Date().toISOString(),
+      },
+    ],
+  })),
+  updateNTASizeProfile: (profileId, updates) => set((state) => ({
+    // Locked profiles are immutable by design for quality safety.
+    ntaSizeProfiles: state.ntaSizeProfiles.map((profile) => {
+      if (profile.id !== profileId) return profile
+      if (profile.locked) return profile
+      return {
+        ...profile,
+        ...updates,
+        bins: updates.bins ?? profile.bins,
+      }
+    }),
+  })),
+  deleteNTASizeProfile: (profileId) => set((state) => {
+    const target = state.ntaSizeProfiles.find((p) => p.id === profileId)
+    if (!target || target.locked) {
+      return {}
+    }
+
+    const nextProfiles = state.ntaSizeProfiles.filter((p) => p.id !== profileId)
+    const nextAnalysisId = state.selectedNTAAnalysisProfileId === profileId
+      ? defaultNTAAnalysisProfile.id
+      : state.selectedNTAAnalysisProfileId
+    const nextReportId = state.selectedNTAReportProfileId === profileId
+      ? defaultNTAReportProfile.id
+      : state.selectedNTAReportProfileId
+
+    return {
+      ntaSizeProfiles: nextProfiles,
+      selectedNTAAnalysisProfileId: nextAnalysisId,
+      selectedNTAReportProfileId: nextReportId,
+    }
+  }),
+  resetNTASizeProfiles: () => set({
+    ntaSizeProfiles: [defaultNTAQualityProfile, defaultNTAAnalysisProfile, defaultNTAReportProfile],
+    selectedNTAAnalysisProfileId: defaultNTAAnalysisProfile.id,
+    selectedNTAReportProfileId: defaultNTAReportProfile.id,
+  }),
   crossComparisonSettings: {
     discrepancyThreshold: 15,
     normalizeHistograms: true,
@@ -908,6 +1191,7 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
         // UI preferences
         activeTab: state.activeTab,
         sidebarCollapsed: state.sidebarCollapsed,
+        sidebarWidth: state.sidebarWidth,
         isDarkMode: state.isDarkMode,
         // Analysis results (excluding File objects which can't be serialized)
         fcsAnalysis: {
@@ -935,6 +1219,16 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
         ntaOverlayEnabled: state.ntaOverlayEnabled,
         fcsAnalysisSettings: state.fcsAnalysisSettings,
         ntaAnalysisSettings: state.ntaAnalysisSettings,
+        ntaSizeProfiles: state.ntaSizeProfiles,
+        selectedNTAAnalysisProfileId: state.selectedNTAAnalysisProfileId,
+        selectedNTAReportProfileId: state.selectedNTAReportProfileId,
+        ntaLockedBuckets: state.ntaLockedBuckets,
+        ntaCompareSession: {
+          ...state.ntaCompareSession,
+          resultsBySampleId: {},
+          loadingBySampleId: {},
+          errorBySampleId: {},
+        },
         crossComparisonSettings: state.crossComparisonSettings,
         // Gating state (preserve gates between refreshes)
         gatingState: {

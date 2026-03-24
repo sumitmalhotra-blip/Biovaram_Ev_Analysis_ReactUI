@@ -18,7 +18,7 @@ Date: March 3, 2026
 import os
 import json
 import time
-from typing import Optional
+from typing import Optional, Tuple
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Depends
@@ -33,20 +33,99 @@ router = APIRouter()
 # Configuration
 # ============================================================================
 
-def _get_api_key() -> Optional[str]:
-    """Get AI API key from environment or config."""
-    return (
-        os.environ.get("OPENAI_API_KEY")
-        or os.environ.get("ANTHROPIC_API_KEY")
-        or os.environ.get("CRMIT_AI_API_KEY")
+VALID_ROLES = {"user", "assistant", "system"}
+DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
+DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
+
+
+def _resolve_provider_config() -> Tuple[str, str, str]:
+    """
+    Resolve provider, API key, and default model from environment.
+
+    Rules:
+    1) If AI_PROVIDER is set, enforce that provider.
+    2) Otherwise prefer Anthropic only when ANTHROPIC_API_KEY is present.
+    3) Fallback to OpenAI when OPENAI_API_KEY or CRMIT_AI_API_KEY is present.
+    """
+    provider_env = (os.environ.get("AI_PROVIDER") or "").strip().lower()
+
+    if provider_env:
+        if provider_env not in {"openai", "anthropic"}:
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "Invalid AI_PROVIDER value. Supported values are 'openai' or 'anthropic'."
+                ),
+            )
+
+        if provider_env == "anthropic":
+            key = (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("CRMIT_AI_API_KEY") or "").strip()
+            if not key:
+                raise HTTPException(
+                    status_code=503,
+                    detail=(
+                        "Anthropic provider selected, but API key is missing. "
+                        "Set ANTHROPIC_API_KEY or CRMIT_AI_API_KEY."
+                    ),
+                )
+            model = (os.environ.get("ANTHROPIC_MODEL") or os.environ.get("CRMIT_AI_MODEL") or DEFAULT_ANTHROPIC_MODEL).strip()
+            return "anthropic", key, model
+
+        key = (os.environ.get("OPENAI_API_KEY") or os.environ.get("CRMIT_AI_API_KEY") or "").strip()
+        if not key:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "OpenAI provider selected, but API key is missing. "
+                    "Set OPENAI_API_KEY or CRMIT_AI_API_KEY."
+                ),
+            )
+        model = (os.environ.get("OPENAI_MODEL") or os.environ.get("CRMIT_AI_MODEL") or DEFAULT_OPENAI_MODEL).strip()
+        return "openai", key, model
+
+    anthropic_key = (os.environ.get("ANTHROPIC_API_KEY") or "").strip()
+    if anthropic_key:
+        model = (os.environ.get("ANTHROPIC_MODEL") or os.environ.get("CRMIT_AI_MODEL") or DEFAULT_ANTHROPIC_MODEL).strip()
+        return "anthropic", anthropic_key, model
+
+    openai_key = (os.environ.get("OPENAI_API_KEY") or os.environ.get("CRMIT_AI_API_KEY") or "").strip()
+    if openai_key:
+        model = (os.environ.get("OPENAI_MODEL") or os.environ.get("CRMIT_AI_MODEL") or DEFAULT_OPENAI_MODEL).strip()
+        return "openai", openai_key, model
+
+    raise HTTPException(
+        status_code=503,
+        detail=(
+            "AI chat is not configured: no API key found. "
+            "Set OPENAI_API_KEY, ANTHROPIC_API_KEY, or CRMIT_AI_API_KEY."
+        ),
     )
 
 
-def _get_provider() -> str:
-    """Determine which AI provider to use."""
-    if os.environ.get("ANTHROPIC_API_KEY"):
-        return "anthropic"
-    return "openai"  # default
+def _validate_chat_payload(request: "ChatRequest") -> None:
+    """Validate chat payload and return explicit errors for invalid input."""
+    if not request.messages:
+        raise HTTPException(
+            status_code=422,
+            detail="Invalid request payload: 'messages' must contain at least one message.",
+        )
+
+    for idx, msg in enumerate(request.messages):
+        if msg.role not in VALID_ROLES:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Invalid request payload: messages[{idx}].role='{msg.role}' is not supported. "
+                    "Allowed roles are user, assistant, and system."
+                ),
+            )
+        if not msg.content or not msg.content.strip():
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Invalid request payload: messages[{idx}].content must be a non-empty string."
+                ),
+            )
 
 
 # ============================================================================
@@ -168,19 +247,12 @@ def _get_offline_response(messages: list[ChatMessage]) -> str:
 # OpenAI streaming
 # ============================================================================
 
-async def _stream_openai(messages: list[ChatMessage], model: str, temperature: float, max_tokens: int):
+async def _stream_openai(messages: list[ChatMessage], api_key: str, model: str, temperature: float, max_tokens: int):
     """Stream response from OpenAI API in Vercel AI SDK-compatible SSE format."""
     try:
         import httpx  # type: ignore[import-untyped]
     except ImportError:
         yield f'0:"{OFFLINE_RESPONSES["default"]}"\n'
-        yield 'e:{"finishReason":"stop","usage":{"promptTokens":0,"completionTokens":0}}\n'
-        yield 'd:{"finishReason":"stop","usage":{"promptTokens":0,"completionTokens":0}}\n'
-        return
-    
-    api_key = _get_api_key()
-    if not api_key:
-        yield f'0:"{_get_offline_response(messages)}"\n'
         yield 'e:{"finishReason":"stop","usage":{"promptTokens":0,"completionTokens":0}}\n'
         yield 'd:{"finishReason":"stop","usage":{"promptTokens":0,"completionTokens":0}}\n'
         return
@@ -210,7 +282,10 @@ async def _stream_openai(messages: list[ChatMessage], model: str, temperature: f
             if response.status_code != 200:
                 error_body = response.text
                 logger.error(f"OpenAI API error {response.status_code}: {error_body}")
-                error_msg = f"AI API error ({response.status_code}). Check your API key and try again."
+                error_msg = (
+                    f"OpenAI request failed with status {response.status_code}. "
+                    "Please verify provider/API key configuration and try again."
+                )
                 yield f'0:"{error_msg}"\n'
                 yield 'e:{"finishReason":"error"}\n'
                 yield 'd:{"finishReason":"error"}\n'
@@ -238,12 +313,12 @@ async def _stream_openai(messages: list[ChatMessage], model: str, temperature: f
             yield 'd:{"finishReason":"stop","usage":{"promptTokens":0,"completionTokens":0}}\n'
     
     except httpx.TimeoutException:
-        yield '0:"Request timed out. Please try again."\n'
+        yield '0:"Provider timeout: OpenAI did not respond in time. Please retry in a moment."\n'
         yield 'e:{"finishReason":"error"}\n'
         yield 'd:{"finishReason":"error"}\n'
     except Exception as e:
         logger.error(f"OpenAI streaming error: {e}")
-        yield f'0:"An error occurred: {str(e)}"\n'
+        yield f'0:"OpenAI request failed: {str(e)}"\n'
         yield 'e:{"finishReason":"error"}\n'
         yield 'd:{"finishReason":"error"}\n'
 
@@ -252,19 +327,12 @@ async def _stream_openai(messages: list[ChatMessage], model: str, temperature: f
 # Anthropic streaming
 # ============================================================================
 
-async def _stream_anthropic(messages: list[ChatMessage], model: str, temperature: float, max_tokens: int):
+async def _stream_anthropic(messages: list[ChatMessage], api_key: str, model: str, temperature: float, max_tokens: int):
     """Stream response from Anthropic API in Vercel AI SDK-compatible SSE format."""
     try:
         import httpx  # type: ignore[import-untyped]
     except ImportError:
         yield f'0:"{OFFLINE_RESPONSES["default"]}"\n'
-        yield 'e:{"finishReason":"stop"}\n'
-        yield 'd:{"finishReason":"stop"}\n'
-        return
-    
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        yield f'0:"{_get_offline_response(messages)}"\n'
         yield 'e:{"finishReason":"stop"}\n'
         yield 'd:{"finishReason":"stop"}\n'
         return
@@ -297,7 +365,10 @@ async def _stream_anthropic(messages: list[ChatMessage], model: str, temperature
             if response.status_code != 200:
                 error_body = response.text
                 logger.error(f"Anthropic API error {response.status_code}: {error_body}")
-                error_msg = f"AI API error ({response.status_code}). Check your API key and try again."
+                error_msg = (
+                    f"Anthropic request failed with status {response.status_code}. "
+                    "Please verify provider/API key configuration and try again."
+                )
                 yield f'0:"{error_msg}"\n'
                 yield 'e:{"finishReason":"error"}\n'
                 yield 'd:{"finishReason":"error"}\n'
@@ -325,12 +396,12 @@ async def _stream_anthropic(messages: list[ChatMessage], model: str, temperature
             yield 'd:{"finishReason":"stop","usage":{"promptTokens":0,"completionTokens":0}}\n'
     
     except httpx.TimeoutException:
-        yield '0:"Request timed out. Please try again."\n'
+        yield '0:"Provider timeout: Anthropic did not respond in time. Please retry in a moment."\n'
         yield 'e:{"finishReason":"error"}\n'
         yield 'd:{"finishReason":"error"}\n'
     except Exception as e:
         logger.error(f"Anthropic streaming error: {e}")
-        yield f'0:"An error occurred: {str(e)}"\n'
+        yield f'0:"Anthropic request failed: {str(e)}"\n'
         yield 'e:{"finishReason":"error"}\n'
         yield 'd:{"finishReason":"error"}\n'
 
@@ -350,10 +421,11 @@ async def chat(request: ChatRequest):
     
     If no API key is configured, returns a helpful offline response.
     """
+    _validate_chat_payload(request)
     logger.info(f"Chat request: {len(request.messages)} messages, stream={request.stream}")
-    
-    provider = _get_provider()
-    model = request.model
+
+    provider, api_key, default_model = _resolve_provider_config()
+    model = (request.model or default_model).strip()
     temperature = request.temperature or 0.7
     max_tokens = request.max_tokens or 2048
     
@@ -363,9 +435,9 @@ async def chat(request: ChatRequest):
     
     # Choose provider
     if provider == "anthropic":
-        generator = _stream_anthropic(request.messages, model, temperature, max_tokens)
+        generator = _stream_anthropic(request.messages, api_key, model, temperature, max_tokens)
     else:
-        generator = _stream_openai(request.messages, model, temperature, max_tokens)
+        generator = _stream_openai(request.messages, api_key, model, temperature, max_tokens)
     
     return StreamingResponse(
         generator,
@@ -384,16 +456,9 @@ async def _chat_simple(request: ChatRequest):
     Non-streaming chat endpoint — returns complete response as JSON.
     Useful for programmatic access or simpler integrations.
     """
-    api_key = _get_api_key()
-    
-    if not api_key:
-        return ChatResponse(
-            content=_get_offline_response(request.messages),
-            model="offline",
-        )
-    
-    provider = _get_provider()
-    model = request.model
+    _validate_chat_payload(request)
+    provider, api_key, default_model = _resolve_provider_config()
+    model = (request.model or default_model).strip()
     temperature = request.temperature or 0.7
     max_tokens = request.max_tokens or 2048
     
@@ -413,7 +478,7 @@ async def _chat_simple(request: ChatRequest):
                 resp = await client.post(
                     "https://api.anthropic.com/v1/messages",
                     headers={
-                        "x-api-key": os.environ.get("ANTHROPIC_API_KEY", ""),
+                        "x-api-key": api_key,
                         "anthropic-version": "2023-06-01",
                         "Content-Type": "application/json",
                     },
@@ -425,9 +490,17 @@ async def _chat_simple(request: ChatRequest):
                         "max_tokens": max_tokens,
                     },
                 )
+                if resp.status_code != 200:
+                    raise HTTPException(
+                        status_code=resp.status_code,
+                        detail=(
+                            f"Anthropic request failed with status {resp.status_code}. "
+                            "Please verify provider/API key configuration and try again."
+                        ),
+                    )
                 data = resp.json()
                 content = data.get("content", [{}])[0].get("text", "No response")
-                return ChatResponse(content=content, model=model or "claude-sonnet-4-20250514")
+                return ChatResponse(content=content, model=model or DEFAULT_ANTHROPIC_MODEL)
             else:
                 resp = await client.post(
                     "https://api.openai.com/v1/chat/completions",
@@ -442,19 +515,34 @@ async def _chat_simple(request: ChatRequest):
                         "max_tokens": max_tokens,
                     },
                 )
+                if resp.status_code != 200:
+                    raise HTTPException(
+                        status_code=resp.status_code,
+                        detail=(
+                            f"OpenAI request failed with status {resp.status_code}. "
+                            "Please verify provider/API key configuration and try again."
+                        ),
+                    )
                 data = resp.json()
                 content = data.get("choices", [{}])[0].get("message", {}).get("content", "No response")
                 usage = data.get("usage")
                 return ChatResponse(
                     content=content,
-                    model=model or "gpt-4o-mini",
+                    model=model or DEFAULT_OPENAI_MODEL,
                     usage=usage,
                 )
+    except HTTPException:
+        raise
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=504,
+            detail=f"Provider timeout: {provider} did not respond in time.",
+        )
     except Exception as e:
         logger.error(f"Chat API error: {e}")
-        return ChatResponse(
-            content=f"Error communicating with AI service: {str(e)}",
-            model="error",
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error communicating with AI service: {str(e)}",
         )
 
 
@@ -464,20 +552,18 @@ async def chat_status():
     Check whether AI chat is configured and available.
     Returns the provider and model information.
     """
-    api_key = _get_api_key()
-    
-    if not api_key:
+    try:
+        provider, _api_key, default_model = _resolve_provider_config()
+        return ChatStatusResponse(
+            available=True,
+            provider=provider,
+            model=default_model,
+            message=f"AI chat is available via {provider} ({default_model})"
+        )
+    except HTTPException as e:
         return ChatStatusResponse(
             available=False,
-            message="No AI API key configured. Set OPENAI_API_KEY or ANTHROPIC_API_KEY environment variable."
+            provider=None,
+            model=None,
+            message=str(e.detail),
         )
-    
-    provider = _get_provider()
-    default_model = "claude-sonnet-4-20250514" if provider == "anthropic" else "gpt-4o-mini"
-    
-    return ChatStatusResponse(
-        available=True,
-        provider=provider,
-        model=default_model,
-        message=f"AI chat is available via {provider} ({default_model})"
-    )

@@ -17,9 +17,12 @@ import {
 import { BarChart3, Target, Info } from "lucide-react"
 import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import type { NTAResult } from "@/lib/api-client"
+import type { NTASizeBin } from "@/lib/store"
+import { computeEVCategoryPercentagesFromBins, computeNTABinsForProfile } from "@/lib/nta-size-profiles"
 
 interface EVSizeCategoryBarChartProps {
   data: NTAResult
+  bins?: NTASizeBin[]
   className?: string
 }
 
@@ -115,7 +118,7 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
 
   const d = payload[0].payload
   return (
-    <div className="bg-background/95 border rounded-lg shadow-lg p-3 min-w-[180px]">
+    <div className="bg-background/95 border rounded-lg shadow-lg p-3 min-w-45">
       <p className="font-semibold text-sm" style={{ color: d.color }}>
         {d.name}
       </p>
@@ -140,9 +143,11 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
   )
 }
 
-export function EVSizeCategoryBarChart({ data: results, className }: EVSizeCategoryBarChartProps) {
+export function EVSizeCategoryBarChart({ data: results, bins, className }: EVSizeCategoryBarChartProps) {
   const categoryData = useMemo(() => {
-    const percentages = calculateCategoryPercentages(results)
+    const percentages = bins && bins.length > 0
+      ? computeEVCategoryPercentagesFromBins(computeNTABinsForProfile(results, bins))
+      : calculateCategoryPercentages(results)
     const totalParticles = results.total_particles || 0
 
     return [

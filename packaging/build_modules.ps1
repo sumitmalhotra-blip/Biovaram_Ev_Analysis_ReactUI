@@ -94,6 +94,11 @@ Write-Host ""
 Push-Location $ProjectRoot
 
 try {
+    $releaseDir = Join-Path $ProjectRoot "installer_output"
+    if (-not (Test-Path $releaseDir)) {
+        New-Item -ItemType Directory -Path $releaseDir | Out-Null
+    }
+
     # Verify tools
     if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
         throw "pnpm not found. Install with: npm install -g pnpm"
@@ -130,6 +135,7 @@ try {
 
         $outDir = "out_$($def.Name)"
         $distDir = "dist\$($def.ExeName)"
+        $distExePath = Join-Path "dist" "$($def.ExeName).exe"
 
         # =================================================================
         # Step A: Build module-specific frontend
@@ -179,6 +185,9 @@ try {
             Write-Host "  [B] Cleaning previous $($def.ExeName) build..." -ForegroundColor Yellow
             if (Test-Path $distDir) {
                 Remove-Item -Recurse -Force $distDir
+            }
+            if (Test-Path $distExePath) {
+                Remove-Item -Force $distExePath
             }
             $buildDir = "build\$($def.ExeName)"
             if (Test-Path $buildDir) {
@@ -233,18 +242,30 @@ try {
             platform   = "windows-x64"
         } | ConvertTo-Json -Depth 2
         
-        $versionPath = Join-Path $distDir "version.json"
+        $versionPath = Join-Path "dist" "$($def.ExeName).version.json"
         $versionInfo | Out-File -FilePath $versionPath -Encoding utf8
 
         # =================================================================
         # Step E: Validate
         # =================================================================
-        $exePath = Join-Path $distDir "$($def.ExeName).exe"
+        $exePath = $distExePath
         if (Test-Path $exePath) {
             $exeSize = [math]::Round((Get-Item $exePath).Length / 1MB, 2)
-            $totalSize = [math]::Round((Get-ChildItem -Path $distDir -Recurse -File | Measure-Object -Property Length -Sum).Sum / 1MB, 2)
-            Write-Host "  [OK] $($def.ExeName).exe -- $exeSize MB (total: $totalSize MB)" -ForegroundColor Green
-            $results += @{ Module = $mod; Status = "OK"; ExeSize = "$exeSize MB"; TotalSize = "$totalSize MB"; Path = $exePath }
+            Write-Host "  [OK] $($def.ExeName).exe -- $exeSize MB (single-file)" -ForegroundColor Green
+
+            $releaseExePath = Join-Path $releaseDir "$($def.ExeName)_v$Version.exe"
+            Copy-Item -Force $exePath $releaseExePath
+
+            # Create a zip package containing only the EXE and module version metadata.
+            $zipPath = Join-Path $releaseDir ("{0}_v{1}.zip" -f $def.ExeName, $Version)
+            if (Test-Path $zipPath) {
+                Remove-Item -Force $zipPath
+            }
+            Compress-Archive -Path $releaseExePath, $versionPath -DestinationPath $zipPath -CompressionLevel Optimal
+            Write-Host "  [PKG] Created EXE: $releaseExePath" -ForegroundColor Green
+            Write-Host "  [PKG] Created ZIP: $zipPath" -ForegroundColor Green
+
+            $results += @{ Module = $mod; Status = "OK"; ExeSize = "$exeSize MB"; Path = $exePath }
         } else {
             Write-Host "  [FAIL] $($def.ExeName).exe NOT FOUND at $exePath" -ForegroundColor Red
             $results += @{ Module = $mod; Status = "FAILED"; Reason = "EXE not found" }
@@ -262,7 +283,7 @@ try {
     
     foreach ($r in $results) {
         if ($r.Status -eq "OK") {
-            Write-Host "  [OK]   $($r.Module.PadRight(16)) => dist\$($ModuleDefinitions[$r.Module].ExeName)\$($ModuleDefinitions[$r.Module].ExeName).exe ($($r.TotalSize))" -ForegroundColor Green
+            Write-Host "  [OK]   $($r.Module.PadRight(16)) => dist\$($ModuleDefinitions[$r.Module].ExeName).exe ($($r.ExeSize))" -ForegroundColor Green
         } elseif ($r.Status -eq "SKIPPED") {
             Write-Host "  [SKIP] $($r.Module.PadRight(16)) => SKIPPED: $($r.Reason)" -ForegroundColor Yellow
         } else {
@@ -276,7 +297,8 @@ try {
     $msg = "  " + $successCount + "/" + $totalModules + " modules built successfully."
     Write-Host $msg -ForegroundColor $statusColor
     Write-Host ""
-    Write-Host '  To run a module:  .\dist\<ExeName>\<ExeName>.exe'
+    Write-Host '  To run a module:  .\dist\<ExeName>.exe'
+    Write-Host '  To share with users: send installer_output\<ExeName>_v<Version>.exe (single-file build).'
     Write-Host ""
 
 } finally {

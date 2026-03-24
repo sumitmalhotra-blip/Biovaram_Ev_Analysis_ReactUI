@@ -15,7 +15,11 @@ Author: CRMIT Backend Team
 Date: November 21, 2025
 """
 
-from typing import Optional, List, Dict, Any  # noqa: F401
+from typing import Optional, List, Dict, Any, Tuple  # noqa: F401
+from pathlib import Path
+import json
+import re
+import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession  # type: ignore[import-not-found]
 from sqlalchemy import select, func  # type: ignore[import-not-found]
@@ -109,6 +113,258 @@ def detect_multi_solution_channels(channels: List[str]) -> Dict[str, Optional[st
         'vssc_channel': vssc_channel,
         'bssc_channel': bssc_channel,
         'can_use_multi_solution': can_use_multi_solution
+    }
+
+
+METADATA_OVERRIDE_BEGIN = "[[METADATA_OVERRIDE_JSON]]"
+METADATA_OVERRIDE_END = "[[/METADATA_OVERRIDE_JSON]]"
+
+
+def _extract_metadata_overrides_from_notes(notes: Optional[str]) -> Dict[str, Any]:
+    """Extract JSON metadata override block from sample notes."""
+    if not notes:
+        return {}
+
+    start = notes.find(METADATA_OVERRIDE_BEGIN)
+    end = notes.find(METADATA_OVERRIDE_END)
+    if start == -1 or end == -1 or end <= start:
+        return {}
+
+    payload = notes[start + len(METADATA_OVERRIDE_BEGIN):end].strip()
+    if not payload:
+        return {}
+
+    try:
+        decoded = json.loads(payload)
+        return decoded if isinstance(decoded, dict) else {}
+    except Exception:
+        logger.warning("Failed to parse metadata override JSON block in sample notes")
+        return {}
+
+
+def _upsert_metadata_overrides_in_notes(notes: Optional[str], overrides: Dict[str, Any]) -> str:
+    """Insert or replace metadata override JSON block inside sample notes."""
+    base_notes = notes or ""
+    block = (
+        f"{METADATA_OVERRIDE_BEGIN}\n"
+        f"{json.dumps(overrides, ensure_ascii=True, indent=2)}\n"
+        f"{METADATA_OVERRIDE_END}"
+    )
+
+    start = base_notes.find(METADATA_OVERRIDE_BEGIN)
+    end = base_notes.find(METADATA_OVERRIDE_END)
+    if start != -1 and end != -1 and end > start:
+        tail = end + len(METADATA_OVERRIDE_END)
+        return f"{base_notes[:start].rstrip()}\n\n{block}\n{base_notes[tail:].lstrip()}".strip()
+
+    if base_notes.strip():
+        return f"{base_notes.rstrip()}\n\n{block}"
+    return block
+
+
+def _find_fcs_sidecar_xml(fcs_path: str) -> Optional[Path]:
+    """Find likely XML sidecar files near the FCS file."""
+    fcs_file = Path(fcs_path)
+    parent = fcs_file.parent
+    stem = fcs_file.stem
+    candidates = [
+        parent / f"{stem}.xml",
+        parent / f"{stem}_ExpSummaryForAPI.xml",
+        parent / "ExpSummaryForAPI.xml",
+        parent / "ExpSummary.xml",
+    ]
+    for candidate in candidates:
+        if candidate.exists() and candidate.is_file():
+            return candidate
+    return None
+
+
+def _extract_sidecar_metadata(xml_path: Path) -> Dict[str, Any]:
+    """Extract instrument metadata from sidecar XML as best-effort parsing."""
+    from xml.etree import ElementTree
+
+    result: Dict[str, Any] = {
+        "laser_wavelength_nm": None,
+        "instrument_model": None,
+    }
+    try:
+        content = xml_path.read_text(encoding="utf-8", errors="ignore")
+        root = ElementTree.fromstring(content)
+        text_blob = " ".join([t.strip() for t in root.itertext() if t and t.strip()])
+
+        # Try to infer laser wavelength from full XML text.
+        laser_match = re.search(r"(405|488|561|640)\s*nm", text_blob, flags=re.IGNORECASE)
+        if laser_match:
+            result["laser_wavelength_nm"] = int(laser_match.group(1))
+
+        # Try common instrument model indicators.
+        model_match = re.search(
+            r"(CytoFLEX\s*[A-Za-z0-9\-]*|Navios\s*[A-Za-z0-9\-]*|FACS\s*[A-Za-z0-9\-]*)",
+            text_blob,
+            flags=re.IGNORECASE,
+        )
+        if model_match:
+            result["instrument_model"] = model_match.group(1).strip()
+    except Exception:
+        logger.warning(f"Could not parse sidecar XML metadata from {xml_path}")
+
+    return result
+
+
+def _extract_laser_wavelength_from_fcs(metadata: Dict[str, Any], channel_names: List[str]) -> Optional[int]:
+    """Infer laser wavelength from FCS metadata fields and channel naming conventions."""
+    # 1) Direct metadata fields
+    text_candidates = [
+        str(metadata.get("cytometer", "")),
+        str(metadata.get("specimen", "")),
+        str(metadata.get("instrument", "")),
+    ]
+    for text in text_candidates:
+        m = re.search(r"(405|488|561|640)\s*nm", text, flags=re.IGNORECASE)
+        if m:
+            return int(m.group(1))
+
+    # 2) Channel heuristics
+    upper_channels = [c.upper() for c in channel_names]
+    if any("VSSC" in c or "VFSC" in c or "VIOLET" in c for c in upper_channels):
+        return 405
+    if any("BSSC" in c or "BFSC" in c or "BLUE" in c for c in upper_channels):
+        return 488
+    return None
+
+
+def _resolve_sample_metadata(
+    fcs_metadata: Dict[str, Any],
+    channel_names: List[str],
+    sidecar_data: Dict[str, Any],
+    overrides: Dict[str, Any],
+    dilution_factor: Optional[int],
+) -> Tuple[Dict[str, Any], Dict[str, str], List[str], float]:
+    """Resolve metadata values and provenance using deterministic priority."""
+    resolved: Dict[str, Any] = {}
+    provenance: Dict[str, str] = {}
+
+    # laser_wavelength_nm: manual override > FCS extraction > sidecar > unknown
+    override_laser = overrides.get("laser_wavelength_nm")
+    if override_laser is not None:
+        resolved["laser_wavelength_nm"] = int(override_laser)
+        provenance["laser_wavelength_nm"] = "manual"
+    else:
+        fcs_laser = _extract_laser_wavelength_from_fcs(fcs_metadata, channel_names)
+        if fcs_laser is not None:
+            resolved["laser_wavelength_nm"] = fcs_laser
+            provenance["laser_wavelength_nm"] = "fcs_header"
+        elif sidecar_data.get("laser_wavelength_nm") is not None:
+            resolved["laser_wavelength_nm"] = int(sidecar_data["laser_wavelength_nm"])
+            provenance["laser_wavelength_nm"] = "sidecar_xml"
+        else:
+            resolved["laser_wavelength_nm"] = None
+            provenance["laser_wavelength_nm"] = "missing"
+
+    # instrument_model: manual override > FCS cytometer > sidecar > unknown
+    override_instrument = overrides.get("instrument_model")
+    if override_instrument:
+        resolved["instrument_model"] = str(override_instrument)
+        provenance["instrument_model"] = "manual"
+    else:
+        cytometer = fcs_metadata.get("cytometer")
+        if cytometer and cytometer != "Unknown":
+            resolved["instrument_model"] = str(cytometer)
+            provenance["instrument_model"] = "fcs_header"
+        elif sidecar_data.get("instrument_model"):
+            resolved["instrument_model"] = str(sidecar_data["instrument_model"])
+            provenance["instrument_model"] = "sidecar_xml"
+        else:
+            resolved["instrument_model"] = None
+            provenance["instrument_model"] = "missing"
+
+    # dilution_factor: manual override > experimental_conditions > unknown
+    override_dilution = overrides.get("dilution_factor")
+    if override_dilution is not None:
+        resolved["dilution_factor"] = int(override_dilution)
+        provenance["dilution_factor"] = "manual"
+    elif dilution_factor is not None and dilution_factor > 0:
+        resolved["dilution_factor"] = int(dilution_factor)
+        provenance["dilution_factor"] = "experimental_conditions"
+    else:
+        resolved["dilution_factor"] = None
+        provenance["dilution_factor"] = "missing"
+
+    required_fields = ["laser_wavelength_nm", "dilution_factor"]
+    missing_required = [field for field in required_fields if resolved.get(field) in (None, "")]
+    completeness_score = round((len(required_fields) - len(missing_required)) / len(required_fields), 2)
+
+    return resolved, provenance, missing_required, completeness_score
+
+
+def _diagnose_multi_solution_event(
+    calc: Any,
+    ssc_blue_value: float,
+    ssc_violet_value: float,
+    tolerance_pct: float,
+    use_violet_primary: bool,
+) -> Dict[str, Any]:
+    """Compute multi-solution diagnostics for a single event."""
+    sigma_violet = float(calc._au_to_sigma(np.array([ssc_violet_value], dtype=float), 405.0)[0])
+    sigma_blue = float(calc._au_to_sigma(np.array([ssc_blue_value], dtype=float), 488.0)[0])
+
+    primary_sigma = sigma_violet if use_violet_primary else sigma_blue
+    primary_wavelength = 405.0 if use_violet_primary else 488.0
+    primary_lut = calc.lut_ssc_violet if use_violet_primary else calc.lut_ssc_blue
+
+    solutions = calc.find_all_solutions(primary_sigma, wavelength_nm=primary_wavelength, tolerance_pct=tolerance_pct)
+
+    if sigma_blue > 0:
+        measured_ratio = sigma_violet / sigma_blue
+    else:
+        measured_ratio = 1.0
+
+    candidates = []
+    for size in solutions:
+        idx = int(abs(calc.lut_diameters - size).argmin())
+        ratio_theoretical = float(calc.lut_ratio[idx])
+        ratio_error = abs(ratio_theoretical - measured_ratio)
+        primary_error = abs(float(primary_lut[idx]) - primary_sigma) / max(abs(primary_sigma), 1e-9)
+        weighted_score = 0.7 * ratio_error + 0.3 * primary_error
+        candidates.append({
+            "diameter_nm": float(size),
+            "ratio_theoretical": ratio_theoretical,
+            "cross_channel_error": float(ratio_error),
+            "calibration_fit_error": float(primary_error),
+            "weighted_score": float(weighted_score),
+        })
+
+    candidates = sorted(candidates, key=lambda c: c["weighted_score"])
+    if not candidates:
+        return {
+            "num_solutions": 0,
+            "selected_solution_nm": None,
+            "candidate_solutions_nm": [],
+            "candidates": [],
+            "ambiguity_score": None,
+            "selection_reason": "no_valid_solution",
+            "measured_ratio": float(measured_ratio),
+            "sigma_violet": sigma_violet,
+            "sigma_blue": sigma_blue,
+        }
+
+    selected = candidates[0]
+    if len(candidates) > 1:
+        gap = candidates[1]["weighted_score"] - candidates[0]["weighted_score"]
+        ambiguity_score = float(max(0.0, min(1.0, 1.0 / (1.0 + (gap * 20.0)))))
+    else:
+        ambiguity_score = 0.0
+
+    return {
+        "num_solutions": len(solutions),
+        "selected_solution_nm": float(selected["diameter_nm"]),
+        "candidate_solutions_nm": [float(c["diameter_nm"]) for c in candidates],
+        "candidates": candidates,
+        "ambiguity_score": ambiguity_score,
+        "selection_reason": "best_cross_channel_consistency",
+        "measured_ratio": float(measured_ratio),
+        "sigma_violet": sigma_violet,
+        "sigma_blue": sigma_blue,
     }
 
 
@@ -3110,6 +3366,29 @@ class ExperimentalConditionsUpdate(BaseModel):
     notes: Optional[str] = None
 
 
+class ManualMetadataUpsert(BaseModel):
+    """Manual metadata fallback payload for FCS metadata resolution."""
+    laser_wavelength_nm: Optional[int] = None
+    dilution_factor: Optional[int] = None
+    instrument_model: Optional[str] = None
+    operator_notes: Optional[str] = None
+
+
+async def _get_sample_dilution_factor(db: AsyncSession, sample_db_id: int) -> Optional[int]:
+    """Get dilution factor from experimental conditions for the sample."""
+    conditions = await get_experimental_conditions_by_sample(db, sample_db_id)
+    if not conditions:
+        return None
+    dilution = getattr(conditions, "dilution_factor", None)
+    if dilution is None:
+        return None
+    try:
+        dilution_i = int(dilution)
+        return dilution_i if dilution_i > 0 else None
+    except Exception:
+        return None
+
+
 @router.post("/{sample_id}/conditions", response_model=dict)
 async def save_experimental_conditions(
     sample_id: str,
@@ -3397,6 +3676,165 @@ async def get_available_channels(
         )
 
 
+async def _build_metadata_resolution_payload(db: AsyncSession, sample: Sample) -> Dict[str, Any]:
+    """Build resolved metadata payload with provenance for a sample."""
+    if not sample.file_path_fcs:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No FCS file associated with sample {sample.sample_id}"
+        )
+
+    from src.parsers.fcs_parser import FCSParser
+
+    parser = FCSParser(sample.file_path_fcs)
+    parser.parse()
+    fcs_metadata = parser.extract_metadata()
+    channel_names = fcs_metadata.get("channel_names", []) or []
+
+    sidecar_path = _find_fcs_sidecar_xml(str(sample.file_path_fcs))
+    sidecar_data = _extract_sidecar_metadata(sidecar_path) if sidecar_path else {
+        "laser_wavelength_nm": None,
+        "instrument_model": None,
+    }
+
+    overrides = _extract_metadata_overrides_from_notes(sample.notes)
+    dilution_factor = await _get_sample_dilution_factor(db, sample.id)
+
+    resolved, provenance, missing_required, completeness_score = _resolve_sample_metadata(
+        fcs_metadata=fcs_metadata,
+        channel_names=channel_names,
+        sidecar_data=sidecar_data,
+        overrides=overrides,
+        dilution_factor=dilution_factor,
+    )
+
+    return {
+        "sample_id": sample.sample_id,
+        "resolved": resolved,
+        "provenance": provenance,
+        "completeness_score": completeness_score,
+        "missing_required": missing_required,
+        "sources": {
+            "sidecar_xml_path": str(sidecar_path) if sidecar_path else None,
+            "has_manual_overrides": bool(overrides),
+            "has_experimental_conditions": dilution_factor is not None,
+        },
+        "fcs_metadata_snapshot": {
+            "acquisition_date": fcs_metadata.get("acquisition_date"),
+            "acquisition_time": fcs_metadata.get("acquisition_time"),
+            "cytometer": fcs_metadata.get("cytometer"),
+            "operator": fcs_metadata.get("operator"),
+            "channel_count": fcs_metadata.get("channel_count"),
+            "channel_names": channel_names,
+        }
+    }
+
+
+@router.get("/{sample_id}/metadata-resolution", response_model=dict)
+async def get_metadata_resolution(
+    sample_id: str,
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    VAL-005: Resolve FCS critical metadata with explicit provenance.
+
+    Priority used:
+    manual override > FCS header/channel inference > sidecar XML > missing.
+    """
+    try:
+        result = await db.execute(select(Sample).where(Sample.sample_id == sample_id))
+        sample = result.scalar_one_or_none()
+
+        if not sample:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Sample {sample_id} not found"
+            )
+
+        return await _build_metadata_resolution_payload(db, sample)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"❌ Failed to resolve metadata for {sample_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to resolve metadata: {str(e)}"
+        )
+
+
+@router.post("/{sample_id}/metadata/manual", response_model=dict)
+async def upsert_manual_metadata(
+    sample_id: str,
+    payload: ManualMetadataUpsert,
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    VAL-005: Persist manual metadata fallback values for a sample.
+
+    - laser_wavelength_nm and instrument_model are saved as sample-level overrides in notes.
+    - dilution_factor is persisted in experimental_conditions.
+    """
+    try:
+        result = await db.execute(select(Sample).where(Sample.sample_id == sample_id))
+        sample = result.scalar_one_or_none()
+
+        if not sample:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Sample {sample_id} not found"
+            )
+
+        # 1) Persist dilution factor through experimental conditions table.
+        if payload.dilution_factor is not None:
+            existing_conditions = await get_experimental_conditions_by_sample(db, sample.id)  # type: ignore[arg-type]
+            if existing_conditions:
+                await update_conditions_db(
+                    db,
+                    existing_conditions.id,
+                    dilution_factor=int(payload.dilution_factor),
+                    notes=payload.operator_notes or existing_conditions.notes,
+                )
+            else:
+                await create_experimental_conditions(
+                    db=db,
+                    sample_id=sample.id,  # type: ignore[arg-type]
+                    operator="Manual Metadata Entry",
+                    dilution_factor=int(payload.dilution_factor),
+                    notes=payload.operator_notes,
+                )
+
+        # 2) Persist manual override JSON in sample.notes.
+        existing_overrides = _extract_metadata_overrides_from_notes(sample.notes)
+        if payload.laser_wavelength_nm is not None:
+            existing_overrides["laser_wavelength_nm"] = int(payload.laser_wavelength_nm)
+        if payload.instrument_model:
+            existing_overrides["instrument_model"] = payload.instrument_model.strip()
+        if payload.dilution_factor is not None:
+            existing_overrides["dilution_factor"] = int(payload.dilution_factor)
+
+        if existing_overrides:
+            sample.notes = _upsert_metadata_overrides_in_notes(sample.notes, existing_overrides)
+
+        await db.commit()
+
+        refreshed = await _build_metadata_resolution_payload(db, sample)
+        return {
+            "success": True,
+            "sample_id": sample_id,
+            "message": "Manual metadata saved successfully",
+            "metadata_resolution": refreshed,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logger.exception(f"❌ Failed to save manual metadata for {sample_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save manual metadata: {str(e)}"
+        )
+
+
 # ============================================================================
 # FCS Data Split - Metadata and Values (Per-Event Sizes)
 # ============================================================================
@@ -3669,6 +4107,184 @@ async def get_fcs_values(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get FCS values: {str(e)}"
+        )
+
+
+@router.get("/{sample_id}/multi-solution-events", response_model=dict)
+async def get_multi_solution_events(
+    sample_id: str,
+    max_events: int = Query(200, ge=1, le=2000, description="Max ambiguous events to return"),
+    min_solutions: int = Query(2, ge=2, le=10, description="Minimum candidate solutions per event"),
+    tolerance_pct: float = Query(15.0, ge=1.0, le=50.0, description="Solution matching tolerance"),
+    include_raw_signals: bool = Query(False, description="Include raw SSC values in response"),
+    use_violet_primary: bool = Query(True, description="Use 405nm channel as primary solver"),
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    VAL-010: Return events with multiple Mie size candidates and selection diagnostics.
+    """
+    try:
+        result = await db.execute(select(Sample).where(Sample.sample_id == sample_id))
+        sample = result.scalar_one_or_none()
+        if not sample:
+            raise HTTPException(status_code=404, detail=f"Sample {sample_id} not found")
+        if not sample.file_path_fcs:
+            raise HTTPException(status_code=404, detail=f"No FCS file associated with sample {sample_id}")
+
+        from src.utils.fcs_cache import get_cached_fcs_data
+        from src.physics.mie_scatter import MultiSolutionMieCalculator
+        from src.physics.bead_calibration import get_fcmpass_k_factor
+
+        parsed_data, channels = get_cached_fcs_data(sample.file_path_fcs)
+        multi_info = detect_multi_solution_channels(channels)
+        if not multi_info["can_use_multi_solution"]:
+            raise HTTPException(
+                status_code=400,
+                detail="Sample does not contain both VSSC and BSSC channels required for multi-solution diagnostics"
+            )
+
+        vssc_ch = multi_info["vssc_channel"]
+        bssc_ch = multi_info["bssc_channel"]
+        if vssc_ch not in parsed_data.columns or bssc_ch not in parsed_data.columns:
+            raise HTTPException(status_code=400, detail="Required VSSC/BSSC channels missing from parsed data")
+
+        _k = get_fcmpass_k_factor()
+        calc = MultiSolutionMieCalculator(n_particle=1.37, n_medium=1.33, k_violet=_k)
+
+        ssc_violet = np.asarray(parsed_data[vssc_ch].values, dtype=np.float64)
+        ssc_blue = np.asarray(parsed_data[bssc_ch].values, dtype=np.float64)
+        sizes, num_solutions = calc.calculate_sizes_multi_solution(
+            ssc_blue,
+            ssc_violet,
+            tolerance_pct=tolerance_pct,
+            use_violet_primary=use_violet_primary,
+        )
+
+        # Find candidate events with ambiguity.
+        candidate_indices = np.where(num_solutions >= min_solutions)[0]
+        if len(candidate_indices) > max_events:
+            # Prioritize events with more competing solutions.
+            candidate_indices = sorted(candidate_indices, key=lambda i: num_solutions[i], reverse=True)[:max_events]
+
+        events = []
+        for idx in candidate_indices:
+            diag = _diagnose_multi_solution_event(
+                calc=calc,
+                ssc_blue_value=float(ssc_blue[idx]),
+                ssc_violet_value=float(ssc_violet[idx]),
+                tolerance_pct=tolerance_pct,
+                use_violet_primary=use_violet_primary,
+            )
+            if diag["num_solutions"] < min_solutions:
+                continue
+
+            event_data = {
+                "event_id": int(idx),
+                "candidate_solutions_nm": diag["candidate_solutions_nm"],
+                "selected_solution_nm": diag["selected_solution_nm"],
+                "selection_reason": diag["selection_reason"],
+                "scores": {
+                    "cross_channel_error": float(diag["candidates"][0]["cross_channel_error"]),
+                    "calibration_fit_error": float(diag["candidates"][0]["calibration_fit_error"]),
+                    "final_weighted_score": float(diag["candidates"][0]["weighted_score"]),
+                },
+                "ambiguity_score": diag["ambiguity_score"],
+                "num_solutions": int(diag["num_solutions"]),
+                "measured_ratio": float(diag["measured_ratio"]),
+            }
+            if include_raw_signals:
+                event_data["signals"] = {
+                    "vssc": float(ssc_violet[idx]),
+                    "bssc": float(ssc_blue[idx]),
+                }
+            events.append(event_data)
+
+        return {
+            "sample_id": sample_id,
+            "total_events_scanned": int(len(parsed_data)),
+            "ambiguous_events_found": int((num_solutions >= min_solutions).sum()),
+            "channel_mode_used": "violet_primary" if use_violet_primary else "blue_primary",
+            "vssc_channel": vssc_ch,
+            "bssc_channel": bssc_ch,
+            "events": events,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"❌ Failed to compute multi-solution events: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to compute multi-solution events: {str(e)}"
+        )
+
+
+@router.get("/{sample_id}/multi-solution-events/{event_id}", response_model=dict)
+async def get_multi_solution_event_details(
+    sample_id: str,
+    event_id: int,
+    tolerance_pct: float = Query(15.0, ge=1.0, le=50.0),
+    use_violet_primary: bool = Query(True),
+    db: AsyncSession = Depends(get_session)
+):
+    """VAL-010: Return full candidate diagnostics for a single event."""
+    try:
+        result = await db.execute(select(Sample).where(Sample.sample_id == sample_id))
+        sample = result.scalar_one_or_none()
+        if not sample:
+            raise HTTPException(status_code=404, detail=f"Sample {sample_id} not found")
+        if not sample.file_path_fcs:
+            raise HTTPException(status_code=404, detail=f"No FCS file associated with sample {sample_id}")
+
+        from src.utils.fcs_cache import get_cached_fcs_data
+        from src.physics.mie_scatter import MultiSolutionMieCalculator
+        from src.physics.bead_calibration import get_fcmpass_k_factor
+
+        parsed_data, channels = get_cached_fcs_data(sample.file_path_fcs)
+        if event_id < 0 or event_id >= len(parsed_data):
+            raise HTTPException(status_code=422, detail=f"event_id out of range: {event_id}")
+
+        multi_info = detect_multi_solution_channels(channels)
+        if not multi_info["can_use_multi_solution"]:
+            raise HTTPException(status_code=400, detail="Sample does not support multi-solution diagnostics")
+
+        vssc_ch = multi_info["vssc_channel"]
+        bssc_ch = multi_info["bssc_channel"]
+        ssc_violet_value = float(parsed_data.iloc[event_id][vssc_ch])
+        ssc_blue_value = float(parsed_data.iloc[event_id][bssc_ch])
+
+        _k = get_fcmpass_k_factor()
+        calc = MultiSolutionMieCalculator(n_particle=1.37, n_medium=1.33, k_violet=_k)
+
+        diag = _diagnose_multi_solution_event(
+            calc=calc,
+            ssc_blue_value=ssc_blue_value,
+            ssc_violet_value=ssc_violet_value,
+            tolerance_pct=tolerance_pct,
+            use_violet_primary=use_violet_primary,
+        )
+
+        return {
+            "sample_id": sample_id,
+            "event_id": event_id,
+            "signals": {
+                "vssc": ssc_violet_value,
+                "bssc": ssc_blue_value,
+                "ratio_vb": float(diag["measured_ratio"]),
+            },
+            "candidates": diag["candidates"],
+            "candidate_solutions_nm": diag["candidate_solutions_nm"],
+            "selected_diameter_nm": diag["selected_solution_nm"],
+            "selection_reason": diag["selection_reason"],
+            "ambiguity_score": diag["ambiguity_score"],
+            "num_solutions": diag["num_solutions"],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"❌ Failed to compute multi-solution event details: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to compute multi-solution event details: {str(e)}"
         )
 
 
@@ -4049,6 +4665,9 @@ async def cross_validate_fcs_nta(
         
         nta_sizes_raw = nta_data[size_col].values
         nta_concentrations = nta_data[conc_col].values if conc_col else None
+
+        # Parse NTA metadata (for dilution factor provenance).
+        nta_raw_metadata = getattr(nta_parser, "raw_metadata", {}) or {}
         
         # Filter to valid range
         nta_mask = ~np.isnan(nta_sizes_raw) & (nta_sizes_raw >= size_min) & (nta_sizes_raw <= size_max)
@@ -4059,6 +4678,56 @@ async def cross_validate_fcs_nta(
             raise HTTPException(status_code=400, detail="No valid NTA sizes in the specified range")
         
         logger.info(f"✅ NTA cross-val: {len(nta_sizes)} size bins from {len(nta_data)} total rows")
+
+        # ===== 2b. Concentration + dilution correction context (VAL-004) =====
+        fcs_dilution = await _get_sample_dilution_factor(db, fcs_sample.id)  # type: ignore[arg-type]
+        nta_dilution = await _get_sample_dilution_factor(db, nta_sample.id) if nta_sample else None  # type: ignore[arg-type]
+
+        nta_dilution_source = "experimental_conditions"
+        if nta_dilution is None:
+            nta_meta_dilution = nta_raw_metadata.get("dilution")
+            try:
+                nta_dilution_candidate = int(float(nta_meta_dilution)) if nta_meta_dilution is not None else None
+            except Exception:
+                nta_dilution_candidate = None
+            if nta_dilution_candidate and nta_dilution_candidate > 0:
+                nta_dilution = nta_dilution_candidate
+                nta_dilution_source = "metadata"
+            else:
+                nta_dilution_source = "missing"
+        else:
+            nta_dilution_source = "experimental_conditions"
+
+        fcs_dilution_source = "experimental_conditions" if fcs_dilution is not None else "missing"
+
+        # Measured concentration estimates.
+        nta_measured_conc = float(np.nansum(nta_conc)) if nta_conc is not None and len(nta_conc) > 0 else None
+
+        # FCS measured concentration: use latest stored summary if available; else None.
+        fcs_result_row = await db.execute(
+            select(FCSResult)
+            .where(FCSResult.sample_id == fcs_sample.id)  # type: ignore[arg-type]
+            .order_by(FCSResult.id.desc())
+            .limit(1)
+        )
+        fcs_latest = fcs_result_row.scalar_one_or_none()
+        fcs_measured_conc = None
+        if fcs_latest and isinstance(fcs_latest.fluorescence_stats, dict):
+            raw_conc = fcs_latest.fluorescence_stats.get("concentration_particles_ml")
+            if raw_conc is not None:
+                try:
+                    fcs_measured_conc = float(raw_conc)
+                except Exception:
+                    fcs_measured_conc = None
+
+        nta_corrected_conc = float(nta_measured_conc * nta_dilution) if nta_measured_conc is not None and nta_dilution else None
+        fcs_corrected_conc = float(fcs_measured_conc * fcs_dilution) if fcs_measured_conc is not None and fcs_dilution else None
+
+        conc_ratio = None
+        conc_pct_diff = None
+        if nta_corrected_conc is not None and fcs_corrected_conc is not None and fcs_corrected_conc > 0:
+            conc_ratio = float(nta_corrected_conc / fcs_corrected_conc)
+            conc_pct_diff = float(abs(nta_corrected_conc - fcs_corrected_conc) / ((nta_corrected_conc + fcs_corrected_conc) / 2) * 100)
         
         # ===== 3. Create aligned histograms =====
         bin_edges = np.linspace(size_min, size_max, num_bins + 1)
@@ -4240,6 +4909,28 @@ async def cross_validate_fcs_nta(
                 "mean_difference_pct": round(abs(fcs_mean - nta_mean) / ((fcs_mean + nta_mean) / 2) * 100, 2) if (fcs_mean + nta_mean) > 0 else 0,
                 "verdict": verdict,
                 "verdict_detail": verdict_detail,
+            },
+            "concentration": {
+                "nta": {
+                    "measured_per_ml": nta_measured_conc,
+                    "dilution_factor": int(nta_dilution) if nta_dilution is not None else None,
+                    "corrected_per_ml": nta_corrected_conc,
+                    "dilution_source": nta_dilution_source,
+                },
+                "fcs": {
+                    "measured_per_ml": fcs_measured_conc,
+                    "dilution_factor": int(fcs_dilution) if fcs_dilution is not None else None,
+                    "corrected_per_ml": fcs_corrected_conc,
+                    "dilution_source": fcs_dilution_source,
+                },
+                "comparison": {
+                    "ratio_corrected_nta_to_fcs": conc_ratio,
+                    "percent_difference_corrected": conc_pct_diff,
+                },
+            },
+            "flags": {
+                "missing_dilution_factor": bool(nta_dilution is None or fcs_dilution is None),
+                "missing_measured_concentration": bool(nta_measured_conc is None or fcs_measured_conc is None),
             },
             "statistical_tests": statistical_tests,
             "distribution": distribution_data,

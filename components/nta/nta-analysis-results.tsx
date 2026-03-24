@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useMemo, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -20,12 +20,18 @@ import {
   FileText,
   Layers,
   Upload,
-  X,
-  Loader2
+  Loader2,
+  RefreshCw,
+  Eye,
+  EyeOff,
+  Star,
+  MinusCircle
 } from "lucide-react"
 import { useAnalysisStore } from "@/lib/store"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Input } from "@/components/ui/input"
 import { NTASizeDistributionChart } from "./charts/nta-size-distribution-chart"
 import { ConcentrationProfileChart } from "./charts/concentration-profile-chart"
@@ -44,6 +50,8 @@ import {
 } from "@/lib/export-utils"
 import type { NTAResult } from "@/lib/api-client"
 import { useToast } from "@/hooks/use-toast"
+import { NTA_LOCKED_QUALITY_PROFILE_ID } from "@/lib/store"
+import { useApi } from "@/hooks/use-api"
 
 interface NTAAnalysisResultsProps {
   results: NTAResult
@@ -52,39 +60,187 @@ interface NTAAnalysisResultsProps {
 }
 
 export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisResultsProps) {
-  const { pinChart, resetNTAAnalysis, secondaryNtaAnalysis, ntaOverlayEnabled, setNtaOverlayEnabled, setSecondaryNTAFile, setSecondaryNTAResults, setSecondaryNTASampleId, setSecondaryNTAAnalyzing, setSecondaryNTAError, resetSecondaryNTAAnalysis } = useAnalysisStore()
+  const {
+    pinChart,
+    resetNTAAnalysis,
+    apiSamples,
+    ntaCompareSession,
+    setNTACompareSelectedSampleIds,
+    setNTACompareVisibleSampleIds,
+    toggleNTACompareSampleVisibility,
+    setNTAComparePrimarySampleId,
+    setNTACompareSampleResult,
+    clearNTACompareSession,
+    ntaAnalysisSettings,
+    ntaSizeProfiles,
+    selectedNTAAnalysisProfileId,
+    ntaLockedBuckets,
+  } = useAnalysisStore()
   const { toast } = useToast()
+  const { loadNTACompareSamples, fetchSamples } = useApi()
   const [activeTab, setActiveTab] = useState("distribution")
-  
-  // Get secondary results for overlay
-  const secondaryResults = ntaOverlayEnabled ? secondaryNtaAnalysis.results : null
+  const [compareUploadLoading, setCompareUploadLoading] = useState(false)
+  const showTemperatureCorrection = !!ntaAnalysisSettings?.applyTemperatureCorrection
+  const OVERLAY_COLORS = ["#8b5cf6", "#f97316", "#3b82f6", "#22c55e", "#ef4444", "#eab308", "#14b8a6", "#a855f7"]
 
-  // Handle secondary file upload for overlay comparison
-  const handleSecondaryUpload = useCallback(async (file: File) => {
-    setSecondaryNTAFile(file)
-    setSecondaryNTAAnalyzing(true)
-    setSecondaryNTAError(null)
-    
+  const analysisProfile = ntaSizeProfiles.find((p) => p.id === selectedNTAAnalysisProfileId) || ntaSizeProfiles[0]
+  const qualityProfile = ntaSizeProfiles.find((p) => p.id === NTA_LOCKED_QUALITY_PROFILE_ID) || analysisProfile
+
+  const availableNtaSamples = useMemo(
+    () => apiSamples.filter((s) => s.files?.nta),
+    [apiSamples]
+  )
+
+  const sampleLabelById = useMemo(() => {
+    const map: Record<string, string> = {}
+    availableNtaSamples.forEach((sample) => {
+      map[sample.sample_id] = sample.sample_id
+    })
+    if (sampleId) {
+      map[sampleId] = sampleId
+    }
+    return map
+  }, [availableNtaSamples, sampleId])
+
+  const selectedSampleIds = ntaCompareSession.selectedSampleIds
+  const visibleSampleIds = ntaCompareSession.visibleSampleIds
+  const primarySampleId = ntaCompareSession.primarySampleId || sampleId || null
+  const compareResultForCurrentSample = sampleId ? ntaCompareSession.resultsBySampleId[sampleId] : undefined
+
+  useEffect(() => {
+    if (!sampleId) return
+
+    const updates: Array<() => void> = []
+
+    if (!selectedSampleIds.includes(sampleId)) {
+      updates.push(() => setNTACompareSelectedSampleIds([...selectedSampleIds, sampleId].slice(0, 20)))
+    }
+
+    if (!visibleSampleIds.includes(sampleId)) {
+      updates.push(() => setNTACompareVisibleSampleIds([...visibleSampleIds, sampleId].slice(0, ntaCompareSession.maxVisibleOverlays)))
+    }
+
+    if (!ntaCompareSession.primarySampleId) {
+      updates.push(() => setNTAComparePrimarySampleId(sampleId))
+    }
+
+    const currentId = compareResultForCurrentSample?.id
+    const incomingId = results?.id
+    const shouldSyncResult = !compareResultForCurrentSample || currentId !== incomingId
+    if (shouldSyncResult) {
+      updates.push(() => setNTACompareSampleResult(sampleId, results))
+    }
+
+    updates.forEach((applyUpdate) => applyUpdate())
+  }, [
+    sampleId,
+    results,
+    compareResultForCurrentSample,
+    selectedSampleIds,
+    visibleSampleIds,
+    ntaCompareSession.maxVisibleOverlays,
+    ntaCompareSession.primarySampleId,
+    setNTAComparePrimarySampleId,
+    setNTACompareSampleResult,
+    setNTACompareSelectedSampleIds,
+    setNTACompareVisibleSampleIds,
+  ])
+
+  const applySelectedSamples = useCallback(async (nextSelected: string[]) => {
+    const normalized = Array.from(new Set(nextSelected)).slice(0, 20)
+    setNTACompareSelectedSampleIds(normalized)
+
+    const toFetch = normalized.filter((id) => id !== sampleId)
+    if (toFetch.length > 0) {
+      await loadNTACompareSamples(toFetch)
+    }
+  }, [loadNTACompareSamples, sampleId, setNTACompareSelectedSampleIds])
+
+  const handleSampleSelection = useCallback((sampleIdentifier: string, checked: boolean) => {
+    const nextSelected = checked
+      ? [...selectedSampleIds, sampleIdentifier]
+      : selectedSampleIds.filter((id) => id !== sampleIdentifier)
+
+    applySelectedSamples(nextSelected)
+  }, [applySelectedSamples, selectedSampleIds])
+
+  const handleRemoveSelectedSample = useCallback((sampleIdentifier: string) => {
+    const nextSelected = selectedSampleIds.filter((id) => id !== sampleIdentifier)
+    applySelectedSamples(nextSelected)
+  }, [applySelectedSamples, selectedSampleIds])
+
+  const handleComparisonUpload = useCallback(async (file: File) => {
+    setCompareUploadLoading(true)
     try {
       const { apiClient } = await import("@/lib/api-client")
       const response = await apiClient.uploadNTA(file)
-      if (response?.success && response.nta_results) {
-        setSecondaryNTAResults(response.nta_results)
-        setSecondaryNTASampleId(response.sample_id || file.name)
-        setNtaOverlayEnabled(true)
-        toast({
-          title: "Overlay loaded",
-          description: `Secondary NTA file "${file.name}" ready for comparison`,
-        })
+
+      if (!response?.success) {
+        throw new Error("Comparison upload failed")
       }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to analyze secondary file"
-      setSecondaryNTAError(msg)
-      toast({ variant: "destructive", title: "Overlay failed", description: msg })
+
+      const uploadedSampleId = response.sample_id || file.name
+      if (response.nta_results) {
+        setNTACompareSampleResult(uploadedSampleId, response.nta_results)
+      }
+
+      const nextSelected = Array.from(new Set([...selectedSampleIds, uploadedSampleId])).slice(0, 20)
+      setNTACompareSelectedSampleIds(nextSelected)
+
+      const nextVisible = Array.from(new Set([...visibleSampleIds, uploadedSampleId]))
+        .slice(0, ntaCompareSession.maxVisibleOverlays)
+      setNTACompareVisibleSampleIds(nextVisible)
+
+      if (!response.nta_results) {
+        await loadNTACompareSamples([uploadedSampleId])
+      }
+
+      await fetchSamples()
+
+      toast({
+        title: "Comparison file uploaded",
+        description: `Added ${uploadedSampleId} to compare session.`,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to upload comparison file"
+      toast({
+        variant: "destructive",
+        title: "Comparison upload failed",
+        description: message,
+      })
     } finally {
-      setSecondaryNTAAnalyzing(false)
+      setCompareUploadLoading(false)
     }
-  }, [setSecondaryNTAFile, setSecondaryNTAAnalyzing, setSecondaryNTAError, setSecondaryNTAResults, setSecondaryNTASampleId, setNtaOverlayEnabled, toast])
+  }, [
+    fetchSamples,
+    loadNTACompareSamples,
+    ntaCompareSession.maxVisibleOverlays,
+    selectedSampleIds,
+    setNTACompareSampleResult,
+    setNTACompareSelectedSampleIds,
+    setNTACompareVisibleSampleIds,
+    toast,
+    visibleSampleIds,
+  ])
+
+  const overlaySeries = useMemo(() => {
+    const visibleSet = new Set(visibleSampleIds)
+    return selectedSampleIds
+      .map((id, index) => {
+        const resultForSample = id === sampleId ? results : ntaCompareSession.resultsBySampleId[id]
+        if (!resultForSample) return null
+
+        return {
+          sampleId: id,
+          label: sampleLabelById[id] || id,
+          color: OVERLAY_COLORS[index % OVERLAY_COLORS.length],
+          visible: visibleSet.has(id),
+          isPrimary: id === primarySampleId,
+          result: resultForSample,
+        }
+      })
+      .filter((item): item is { sampleId: string; label: string; color: string; visible: boolean; isPrimary: boolean; result: NTAResult } => !!item)
+  }, [selectedSampleIds, sampleId, results, ntaCompareSession.resultsBySampleId, visibleSampleIds, sampleLabelById, primarySampleId])
 
   const handlePin = (chartTitle: string, chartType: "histogram" | "bar" | "line") => {
     let pinData: Array<{ x: number; y: number; label?: string }> = []
@@ -444,9 +600,19 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
 
       {/* Size Distribution Breakdown and Bar Chart */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <NTASizeDistributionBreakdown results={results} />
-        <EVSizeCategoryBarChart data={results} />
+        <NTASizeDistributionBreakdown results={results} bins={analysisProfile?.bins || []} />
+        {ntaLockedBuckets ? (
+          <NTASizeDistributionBreakdown results={results} bins={ntaLockedBuckets} />
+        ) : (
+          <EVSizeCategoryBarChart data={results} bins={qualityProfile?.bins || []} />
+        )}
       </div>
+
+      {ntaLockedBuckets && (
+        <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
+          Side-by-side mode active: left panel shows current bucket ranges, right panel shows locked snapshot.
+        </div>
+      )}
 
       {/* Quick Summary & Export Options */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -559,66 +725,177 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
               <div className="p-1.5 rounded-lg bg-purple-500/10">
                 <Layers className="h-4 w-4 text-purple-500" />
               </div>
-              <CardTitle className="text-base">Comparison Overlay</CardTitle>
+              <CardTitle className="text-base">Compare Session Overlay</CardTitle>
             </div>
-            {secondaryNtaAnalysis.results && (
-              <div className="flex items-center gap-2">
-                <Label className="text-xs text-muted-foreground">Overlay</Label>
-                <Switch
-                  checked={ntaOverlayEnabled}
-                  onCheckedChange={setNtaOverlayEnabled}
-                />
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-xs">
+                Selected: {selectedSampleIds.length}
+              </Badge>
+              <Badge variant="outline" className="text-xs">
+                Visible: {visibleSampleIds.length}
+              </Badge>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
-          {secondaryNtaAnalysis.isAnalyzing ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Analyzing secondary file...
-            </div>
-          ) : secondaryNtaAnalysis.results ? (
-            <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-lg">
-              <div className="flex items-center gap-2 text-sm">
-                <FileText className="h-4 w-4 text-purple-500" />
-                <span className="font-medium">{secondaryNtaAnalysis.sampleId || secondaryNtaAnalysis.file?.name || "Secondary"}</span>
-                {secondaryNtaAnalysis.results.median_size_nm && (
-                  <Badge variant="outline" className="text-xs">
-                    D50: {secondaryNtaAnalysis.results.median_size_nm.toFixed(1)}nm
-                  </Badge>
-                )}
+          <div className="space-y-3">
+            <div className="space-y-1.5 rounded-md border border-border/60 p-2.5">
+              <Label className="text-xs text-muted-foreground">Upload Comparison File</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="file"
+                  accept=".txt,.csv"
+                  className="h-8 text-xs"
+                  disabled={compareUploadLoading}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0]
+                    if (file) {
+                      handleComparisonUpload(file)
+                    }
+                    event.currentTarget.value = ""
+                  }}
+                />
+                {compareUploadLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
               </div>
+              <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                <Upload className="h-3 w-3" />
+                Upload and auto-add file to selected overlays.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-xs text-muted-foreground">Select Samples (up to 20)</Label>
+              <div className="flex gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setNTACompareVisibleSampleIds(selectedSampleIds.slice(0, 3))}
+                  disabled={selectedSampleIds.length === 0}
+                >
+                  Show Top 3
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setNTACompareVisibleSampleIds([])}
+                  disabled={visibleSampleIds.length === 0}
+                >
+                  Hide All
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => loadNTACompareSamples(selectedSampleIds)}
+                  disabled={selectedSampleIds.length === 0}
+                >
+                  <RefreshCw className="h-3 w-3 mr-1" />
+                  Refresh
+                </Button>
+              </div>
+            </div>
+
+            <ScrollArea className="max-h-45 pr-1">
+              <div className="space-y-1">
+                {availableNtaSamples.map((sample) => {
+                  const isSelected = selectedSampleIds.includes(sample.sample_id)
+                  return (
+                    <label
+                      key={sample.id}
+                      className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-secondary/30 cursor-pointer"
+                    >
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={(checked) => handleSampleSelection(sample.sample_id, checked === true)}
+                      />
+                      <span className="text-xs truncate flex-1">{sample.sample_id}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            </ScrollArea>
+
+            {selectedSampleIds.length > 0 && (
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Selected Samples</Label>
+                <div className="space-y-1 max-h-52 overflow-y-auto pr-1">
+                  {selectedSampleIds.map((id) => {
+                    const isVisible = visibleSampleIds.includes(id)
+                    const isPrimary = id === primarySampleId
+                    const loading = ntaCompareSession.loadingBySampleId[id]
+                    const error = ntaCompareSession.errorBySampleId[id]
+                    const resultForSample = id === sampleId ? results : ntaCompareSession.resultsBySampleId[id]
+
+                    return (
+                      <div key={id} className="rounded-md border border-border/60 p-2 space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium truncate">{sampleLabelById[id] || id}</p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {loading ? "Loading..." : error ? "Failed" : resultForSample ? "Ready" : "Pending"}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant={isPrimary ? "secondary" : "outline"}
+                              size="sm"
+                              className="h-6 px-2 text-[10px]"
+                              onClick={() => setNTAComparePrimarySampleId(id)}
+                            >
+                              <Star className="h-3 w-3 mr-1" />
+                              Primary
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6"
+                              onClick={() => handleRemoveSelectedSample(id)}
+                            >
+                              <MinusCircle className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={isVisible}
+                              onCheckedChange={() => toggleNTACompareSampleVisibility(id)}
+                            />
+                            <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                              {isVisible ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+                              {isVisible ? "Visible in overlays" : "Hidden from overlays"}
+                            </span>
+                          </div>
+                          {resultForSample?.median_size_nm && (
+                            <Badge variant="outline" className="text-[10px]">
+                              D50: {resultForSample.median_size_nm.toFixed(1)}nm
+                            </Badge>
+                          )}
+                        </div>
+
+                        {error && <p className="text-[11px] text-destructive">{error}</p>}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end">
               <Button
                 variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => {
-                  resetSecondaryNTAAnalysis()
-                  setNtaOverlayEnabled(false)
-                }}
+                size="sm"
+                className="text-xs"
+                onClick={clearNTACompareSession}
+                disabled={selectedSampleIds.length === 0}
               >
-                <X className="h-3.5 w-3.5" />
+                Clear Compare Session
               </Button>
             </div>
-          ) : (
-            <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">
-                Upload a second NTA file to compare distributions side-by-side.
-              </p>
-              <Input
-                type="file"
-                accept=".txt,.csv"
-                onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  if (file) handleSecondaryUpload(file)
-                }}
-              />
-            </div>
-          )}
-          {secondaryNtaAnalysis.error && (
-            <p className="text-xs text-destructive mt-2">{secondaryNtaAnalysis.error}</p>
-          )}
+          </div>
         </CardContent>
       </Card>
 
@@ -636,9 +913,11 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
               <TabsTrigger value="concentration" className="shrink-0">
                 Concentration Profile
               </TabsTrigger>
-              <TabsTrigger value="corrected" className="shrink-0">
-                Temperature Corrected
-              </TabsTrigger>
+              {showTemperatureCorrection && (
+                <TabsTrigger value="corrected" className="shrink-0">
+                  Temperature Corrected
+                </TabsTrigger>
+              )}
               <TabsTrigger value="metadata" className="shrink-0">
                 📋 Metadata
               </TabsTrigger>
@@ -666,7 +945,7 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
               </div>
               <NTASizeDistributionChart 
                 data={results} 
-                secondaryData={secondaryResults || undefined}
+                overlaySeries={overlaySeries}
               />
             </TabsContent>
 
@@ -692,13 +971,16 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
               </div>
               <ConcentrationProfileChart 
                 data={results} 
-                secondaryData={secondaryResults || undefined}
+                overlaySeries={overlaySeries}
+                bins={analysisProfile?.bins || []}
               />
             </TabsContent>
 
-            <TabsContent value="corrected" className="space-y-4">
-              <TemperatureCorrectedComparison data={results} />
-            </TabsContent>
+            {showTemperatureCorrection && (
+              <TabsContent value="corrected" className="space-y-4">
+                <TemperatureCorrectedComparison data={results} />
+              </TabsContent>
+            )}
 
             <TabsContent value="metadata" className="space-y-4">
               <SupplementaryMetadataTable sampleId={sampleId} />

@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback } from "react"
-import { useAnalysisStore, type SizeRange } from "@/lib/store"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
+import { useAnalysisStore, DEFAULT_SIDEBAR_WIDTH, defaultNTAAnalysisProfile, type SizeRange } from "@/lib/store"
 import { useShallow } from "zustand/shallow"
 import { useApi } from "@/hooks/use-api"
 import { cn } from "@/lib/utils"
@@ -27,9 +27,11 @@ interface SidebarProps {
 }
 
 export function Sidebar({ isMobile = false }: SidebarProps) {
-  const { sidebarCollapsed, toggleSidebar, activeTab, samples, apiSamples, samplesLoading, apiConnected } = useAnalysisStore(useShallow((s) => ({
+  const { sidebarCollapsed, toggleSidebar, sidebarWidth, setSidebarWidth, activeTab, samples, apiSamples, samplesLoading, apiConnected } = useAnalysisStore(useShallow((s) => ({
     sidebarCollapsed: s.sidebarCollapsed,
     toggleSidebar: s.toggleSidebar,
+    sidebarWidth: s.sidebarWidth,
+    setSidebarWidth: s.setSidebarWidth,
     activeTab: s.activeTab,
     samples: s.samples,
     apiSamples: s.apiSamples,
@@ -37,6 +39,7 @@ export function Sidebar({ isMobile = false }: SidebarProps) {
     apiConnected: s.apiConnected,
   })))
   const { fetchSamples, openSampleInTab } = useApi()
+  const isResizingRef = useRef(false)
 
   // Fetch samples on mount only if API is connected
   // PERFORMANCE FIX: Remove fetchSamples from deps to prevent infinite loop
@@ -49,24 +52,73 @@ export function Sidebar({ isMobile = false }: SidebarProps) {
 
   const isCollapsed = isMobile ? false : sidebarCollapsed
 
+  const startResize = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (isMobile || isCollapsed) return
+    event.preventDefault()
+    isResizingRef.current = true
+    document.body.style.cursor = "col-resize"
+    document.body.style.userSelect = "none"
+  }, [isMobile, isCollapsed])
+
+  useEffect(() => {
+    const handleMouseMove = (event: MouseEvent) => {
+      if (!isResizingRef.current) return
+      setSidebarWidth(event.clientX)
+    }
+
+    const stopResize = () => {
+      if (!isResizingRef.current) return
+      isResizingRef.current = false
+      document.body.style.cursor = ""
+      document.body.style.userSelect = ""
+    }
+
+    window.addEventListener("mousemove", handleMouseMove)
+    window.addEventListener("mouseup", stopResize)
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove)
+      window.removeEventListener("mouseup", stopResize)
+      document.body.style.cursor = ""
+      document.body.style.userSelect = ""
+    }
+  }, [setSidebarWidth])
+
   return (
     <aside
       className={cn(
-        "border-r border-border bg-sidebar transition-all duration-300 flex flex-col h-full overflow-hidden",
-        isMobile ? "w-full" : isCollapsed ? "w-14" : "w-72",
+        "relative border-r border-border bg-sidebar transition-[width] duration-200 flex flex-col h-full min-h-0 min-w-0 overflow-hidden",
+        isMobile && "w-full",
       )}
+      style={isMobile ? undefined : { width: isCollapsed ? 56 : sidebarWidth }}
     >
       {!isMobile && (
-        <div className="flex items-center justify-end p-2 border-b border-border shrink-0">
-          <Button variant="ghost" size="icon" onClick={toggleSidebar} className="h-8 w-8">
+        <div className="flex items-center justify-between gap-1 p-2 border-b border-border shrink-0">
+          {!isCollapsed ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSidebarWidth(DEFAULT_SIDEBAR_WIDTH)}
+              className="h-8 w-8"
+              title="Reset sidebar width"
+              aria-label="Reset sidebar width"
+              disabled={Math.abs(sidebarWidth - DEFAULT_SIDEBAR_WIDTH) < 1}
+            >
+              <RotateCcw className="h-4 w-4" />
+            </Button>
+          ) : (
+            <div className="h-8 w-8" />
+          )}
+
+          <Button variant="ghost" size="icon" onClick={toggleSidebar} className="h-8 w-8" title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
             {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
           </Button>
         </div>
       )}
 
       {!isCollapsed && (
-        <ScrollArea className="flex-1 overflow-hidden">
-          <div className="p-4 space-y-4 overflow-hidden">
+        <ScrollArea className="flex-1 min-h-0">
+          <div className="p-4 space-y-4 min-w-0">
             {/* Previous Analyses Section - Visible in all tabs */}
             <PreviousAnalyses 
               compact={activeTab !== "dashboard"} 
@@ -88,6 +140,16 @@ export function Sidebar({ isMobile = false }: SidebarProps) {
             )}
           </div>
         </ScrollArea>
+      )}
+
+      {!isMobile && !isCollapsed && (
+        <div
+          role="separator"
+          aria-label="Resize sidebar"
+          aria-orientation="vertical"
+          className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize bg-transparent hover:bg-primary/20 active:bg-primary/30"
+          onMouseDown={startResize}
+        />
       )}
 
       {isCollapsed && !isMobile && (
@@ -255,7 +317,7 @@ function DashboardSidebar({
                 className="text-sm p-2 rounded-md hover:bg-secondary/50 cursor-pointer flex items-center justify-between group overflow-hidden"
               >
                 <div className="flex-1 min-w-0 overflow-hidden">
-                  <span className="truncate block max-w-[140px]" title={sample.sample_id}>{sample.sample_id}</span>
+                  <span className="truncate block max-w-35" title={sample.sample_id}>{sample.sample_id}</span>
                   {sample.treatment && (
                     <span className="text-[10px] text-muted-foreground truncate block">{sample.treatment}</span>
                   )}
@@ -291,7 +353,7 @@ function DashboardSidebar({
                 key={sample.id} 
                 className="text-sm p-2 rounded-md hover:bg-secondary/50 cursor-pointer flex items-center justify-between overflow-hidden"
               >
-                <span className="truncate flex-1 max-w-[140px]" title={sample.name}>{sample.name}</span>
+                <span className="truncate flex-1 max-w-35" title={sample.name}>{sample.name}</span>
                 <Badge variant="secondary" className="text-[10px] px-1 shrink-0">
                   {sample.type.toUpperCase()}
                 </Badge>
@@ -959,7 +1021,7 @@ function FlowCytometrySidebar() {
           {/* Current ranges display */}
           <div className="space-y-2 text-xs">
             <Label className="text-xs text-muted-foreground">Current Ranges</Label>
-            <div className="space-y-1 max-h-[180px] overflow-y-auto">
+            <div className="space-y-1 max-h-45 overflow-y-auto">
               {currentSizeRanges.map((range, i) => (
                 <div key={i} className="flex items-center gap-2 p-1.5 rounded bg-secondary/30 group">
                   <div 
@@ -1134,10 +1196,62 @@ function FlowCytometrySidebar() {
 }
 
 function NTASidebar() {
-  const { ntaAnalysisSettings, setNtaAnalysisSettings } = useAnalysisStore(useShallow((s) => ({
+  const {
+    ntaAnalysisSettings,
+    setNtaAnalysisSettings,
+    ntaSizeProfiles,
+    selectedNTAAnalysisProfileId,
+    setSelectedNTAAnalysisProfileId,
+    updateNTASizeProfile,
+    ntaLockedBuckets,
+    setNTALockedBuckets,
+  } = useAnalysisStore(useShallow((s) => ({
     ntaAnalysisSettings: s.ntaAnalysisSettings,
     setNtaAnalysisSettings: s.setNtaAnalysisSettings,
+    ntaSizeProfiles: s.ntaSizeProfiles,
+    selectedNTAAnalysisProfileId: s.selectedNTAAnalysisProfileId,
+    setSelectedNTAAnalysisProfileId: s.setSelectedNTAAnalysisProfileId,
+    updateNTASizeProfile: s.updateNTASizeProfile,
+    ntaLockedBuckets: s.ntaLockedBuckets,
+    setNTALockedBuckets: s.setNTALockedBuckets,
   })))
+
+  const { toast } = useToast()
+
+  const activeBucketProfile = useMemo(
+    () => ntaSizeProfiles.find((p) => p.id === selectedNTAAnalysisProfileId),
+    [ntaSizeProfiles, selectedNTAAnalysisProfileId]
+  )
+
+  const currentBuckets = activeBucketProfile?.bins || []
+  const BUCKET_COLORS = ["#22c55e", "#3b82f6", "#a855f7", "#f59e0b", "#ef4444", "#06b6d4"]
+  const NTA_QUICK_PRESETS = {
+    standard: [
+      { name: "Exomeres (0-50nm)", min: 0, max: 50, color: "#22c55e" },
+      { name: "Small EVs (51-100nm)", min: 51, max: 100, color: "#3b82f6" },
+      { name: "Medium EVs (101-150nm)", min: 101, max: 150, color: "#a855f7" },
+      { name: "Large EVs (151-200nm)", min: 151, max: 200, color: "#f59e0b" },
+      { name: "Very Large EVs (200+nm)", min: 200, max: 1000, color: "#ef4444" },
+    ],
+    exosome: [
+      { name: "Exosomes (40-80nm)", min: 40, max: 80, color: "#22c55e" },
+      { name: "Small MVs (80-120nm)", min: 80, max: 120, color: "#3b82f6" },
+      { name: "Medium MVs (120-200nm)", min: 120, max: 200, color: "#a855f7" },
+      { name: "Large MVs (200+nm)", min: 200, max: 1000, color: "#f59e0b" },
+    ],
+    isev2023: [
+      { name: "Exomeres", min: 0, max: 50, color: "#22c55e" },
+      { name: "Small EVs", min: 50, max: 100, color: "#3b82f6" },
+      { name: "Medium EVs", min: 100, max: 200, color: "#a855f7" },
+      { name: "Large EVs", min: 200, max: 500, color: "#f59e0b" },
+      { name: "Very Large EVs", min: 500, max: 1000, color: "#ef4444" },
+    ],
+  } as const
+  const [activePreset, setActivePreset] = useState<"standard" | "exosome" | "isev2023" | "custom">("custom")
+  const [editingBucketIndex, setEditingBucketIndex] = useState<number | null>(null)
+  const [newBucketName, setNewBucketName] = useState("")
+  const [newBucketMin, setNewBucketMin] = useState(50)
+  const [newBucketMax, setNewBucketMax] = useState(100)
 
   // Compute viscosity correction factor from temperatures
   // Using Stokes-Einstein: D ∝ T/η, so size correction ≈ (η_ref/η_meas) × (T_meas/T_ref)
@@ -1166,8 +1280,155 @@ function NTASidebar() {
     setNtaAnalysisSettings({ mediaType, correctionFactor })
   }
 
+  const persistBuckets = (bins: typeof currentBuckets) => {
+    if (!activeBucketProfile || activeBucketProfile.locked) return
+
+    const sorted = [...bins].sort((a, b) => a.min - b.min)
+    for (let i = 0; i < sorted.length; i += 1) {
+      if (!Number.isFinite(sorted[i].min) || !Number.isFinite(sorted[i].max) || sorted[i].min >= sorted[i].max) {
+        toast({
+          title: "Invalid bucket",
+          description: `Check range values for '${sorted[i].name}'.`,
+          variant: "destructive",
+        })
+        return
+      }
+      if (i > 0 && sorted[i].min < sorted[i - 1].max) {
+        toast({
+          title: "Overlapping buckets",
+          description: `Buckets '${sorted[i - 1].name}' and '${sorted[i].name}' overlap.`,
+          variant: "destructive",
+        })
+        return
+      }
+    }
+
+    updateNTASizeProfile(activeBucketProfile.id, { bins: sorted })
+  }
+
+  const matchesPreset = useCallback((bins: typeof currentBuckets, preset: typeof NTA_QUICK_PRESETS.standard) => {
+    if (bins.length !== preset.length) return false
+
+    const sortedBins = [...bins].sort((a, b) => a.min - b.min)
+    const sortedPreset = [...preset].sort((a, b) => a.min - b.min)
+
+    return sortedBins.every((bin, idx) => bin.min === sortedPreset[idx].min && bin.max === sortedPreset[idx].max)
+  }, [])
+
+  useEffect(() => {
+    if (matchesPreset(currentBuckets, NTA_QUICK_PRESETS.standard)) {
+      setActivePreset("standard")
+      return
+    }
+    if (matchesPreset(currentBuckets, NTA_QUICK_PRESETS.exosome)) {
+      setActivePreset("exosome")
+      return
+    }
+    if (matchesPreset(currentBuckets, NTA_QUICK_PRESETS.isev2023)) {
+      setActivePreset("isev2023")
+      return
+    }
+    setActivePreset("custom")
+  }, [currentBuckets, matchesPreset])
+
+  const resetBucketForm = () => {
+    setEditingBucketIndex(null)
+    setNewBucketName("")
+    setNewBucketMin(50)
+    setNewBucketMax(100)
+  }
+
+  const startEditBucket = (index: number) => {
+    const bucket = currentBuckets[index]
+    if (!bucket) return
+    setEditingBucketIndex(index)
+    setNewBucketName(bucket.name)
+    setNewBucketMin(bucket.min)
+    setNewBucketMax(bucket.max)
+  }
+
+  const saveBucket = () => {
+    if (!activeBucketProfile || activeBucketProfile.locked) return
+    if (!newBucketName.trim() || newBucketMin >= newBucketMax) {
+      toast({
+        title: "Invalid bucket",
+        description: "Provide bucket name and valid min/max range.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const next = editingBucketIndex === null
+      ? [
+          ...currentBuckets,
+          {
+            id: `bucket-${crypto.randomUUID()}`,
+            name: newBucketName.trim(),
+            min: newBucketMin,
+            max: newBucketMax,
+          },
+        ]
+      : currentBuckets.map((bucket, index) =>
+          index === editingBucketIndex
+            ? { ...bucket, name: newBucketName.trim(), min: newBucketMin, max: newBucketMax }
+            : bucket,
+        )
+
+    persistBuckets(next)
+    setActivePreset("custom")
+    resetBucketForm()
+  }
+
+  const removeBucket = (index: number) => {
+    if (!activeBucketProfile || activeBucketProfile.locked) return
+    if (currentBuckets.length <= 1) return
+    const next = currentBuckets.filter((_, i) => i !== index)
+    persistBuckets(next)
+    setActivePreset("custom")
+  }
+
+  const applyPreset = (preset: "standard" | "exosome" | "isev2023") => {
+    const targetProfileId = activeBucketProfile?.locked ? defaultNTAAnalysisProfile.id : selectedNTAAnalysisProfileId
+    const bins = NTA_QUICK_PRESETS[preset].map((bin, index) => ({
+      id: `nta-${preset}-${index}`,
+      name: bin.name,
+      min: bin.min,
+      max: bin.max,
+      color: bin.color,
+    }))
+
+    if (targetProfileId !== selectedNTAAnalysisProfileId) {
+      setSelectedNTAAnalysisProfileId(targetProfileId)
+    }
+
+    updateNTASizeProfile(targetProfileId, { bins })
+    setActivePreset(preset)
+    resetBucketForm()
+
+    toast({
+      title: "Preset applied",
+      description: `NTA buckets updated to ${preset === "isev2023" ? "ISEV 2023" : preset === "exosome" ? "Exosome Focus" : "Standard EV"}.`,
+    })
+  }
+
+  const lockCurrentBuckets = () => {
+    setNTALockedBuckets(currentBuckets)
+    toast({
+      title: "Buckets locked",
+      description: "Current NTA bucket ranges are locked for side-by-side output comparison.",
+    })
+  }
+
+  const clearLockedBuckets = () => {
+    setNTALockedBuckets(null)
+    toast({
+      title: "Locked buckets cleared",
+      description: "Side-by-side bucket comparison snapshot removed.",
+    })
+  }
+
   return (
-    <Accordion type="multiple" defaultValue={["temp", "viz"]} className="space-y-2">
+    <Accordion type="multiple" defaultValue={["temp", "viz", "size-buckets"]} className="space-y-2">
       <AccordionItem value="temp" className="border rounded-lg px-3">
         <AccordionTrigger className="text-sm font-medium py-3">
           <span className="flex items-center gap-2">
@@ -1268,6 +1529,158 @@ function NTASidebar() {
               </SelectContent>
             </Select>
           </div>
+        </AccordionContent>
+      </AccordionItem>
+
+      <AccordionItem value="size-buckets" className="border rounded-lg px-3">
+        <AccordionTrigger className="text-sm font-medium py-3">
+          <span className="flex items-center gap-2">
+            <SlidersHorizontal className="h-4 w-4 text-primary" />
+            Size Bucket Ranges
+          </span>
+        </AccordionTrigger>
+        <AccordionContent className="space-y-3 pb-4">
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">Quick Presets</Label>
+            <div className="grid grid-cols-2 gap-1">
+              <Button
+                variant={activePreset === "standard" ? "secondary" : "outline"}
+                size="sm"
+                className="text-xs h-8"
+                onClick={() => applyPreset("standard")}
+              >
+                Standard EV
+              </Button>
+              <Button
+                variant={activePreset === "exosome" ? "secondary" : "outline"}
+                size="sm"
+                className="text-xs h-8"
+                onClick={() => applyPreset("exosome")}
+              >
+                Exosome Focus
+              </Button>
+              <Button
+                variant={activePreset === "isev2023" ? "secondary" : "outline"}
+                size="sm"
+                className="text-xs h-8"
+                onClick={() => applyPreset("isev2023")}
+              >
+                ISEV 2023
+              </Button>
+              <Button
+                variant={activePreset === "custom" ? "secondary" : "outline"}
+                size="sm"
+                className="text-xs h-8"
+                onClick={() => setActivePreset("custom")}
+              >
+                Custom
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-2 text-xs">
+            <Label className="text-xs text-muted-foreground">Current Buckets</Label>
+            <div className="space-y-1 max-h-45 overflow-y-auto pr-1">
+              {currentBuckets.map((bucket, idx) => (
+                <div key={bucket.id} className="flex items-center gap-2 p-1.5 rounded bg-secondary/30 group">
+                  <div
+                    className="size-3 rounded shrink-0"
+                    style={{ backgroundColor: BUCKET_COLORS[idx % BUCKET_COLORS.length] }}
+                  />
+                  <button
+                    type="button"
+                    className="flex-1 min-w-0 text-left"
+                    onClick={() => startEditBucket(idx)}
+                    title="Click to edit bucket"
+                  >
+                    <span className="truncate block text-xs">{bucket.name}</span>
+                  </button>
+                  <span className="font-mono text-muted-foreground text-[10px] max-w-20 truncate text-right">{bucket.min}-{bucket.max}nm</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={() => removeBucket(idx)}
+                    disabled={currentBuckets.length <= 1}
+                  >
+                    <Trash2 className="h-3 w-3 text-destructive" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2 pt-2 border-t">
+            <Label className="text-xs text-muted-foreground">
+              {editingBucketIndex === null ? "Add New Bucket" : "Edit Bucket"}
+            </Label>
+            <div className="space-y-2">
+              <Input
+                placeholder="Bucket name (e.g., Small EVs)"
+                value={newBucketName}
+                onChange={(e) => setNewBucketName(e.target.value)}
+                className="h-8 text-xs"
+              />
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <Label className="text-[10px] text-muted-foreground">Min (nm)</Label>
+                  <Input
+                    type="number"
+                    value={newBucketMin}
+                    onChange={(e) => setNewBucketMin(Number(e.target.value) || 0)}
+                    min={0}
+                    className="h-8 text-xs font-mono"
+                  />
+                </div>
+                <div className="flex-1">
+                  <Label className="text-[10px] text-muted-foreground">Max (nm)</Label>
+                  <Input
+                    type="number"
+                    value={newBucketMax}
+                    onChange={(e) => setNewBucketMax(Number(e.target.value) || 0)}
+                    min={0}
+                    className="h-8 text-xs font-mono"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  className="flex-1 h-8 text-xs gap-1"
+                  onClick={saveBucket}
+                  disabled={!newBucketName.trim() || newBucketMin >= newBucketMax}
+                >
+                  <Plus className="h-3 w-3" />
+                  {editingBucketIndex === null ? "Add Bucket" : "Save Bucket"}
+                </Button>
+                {editingBucketIndex !== null && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={resetBucketForm}
+                  >
+                    Cancel
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-2 pt-1">
+            <Button variant="outline" size="sm" className="text-xs flex-1" onClick={lockCurrentBuckets}>
+              Lock Current Buckets
+            </Button>
+            <Button variant="outline" size="sm" className="text-xs flex-1" onClick={clearLockedBuckets} disabled={!ntaLockedBuckets}>
+              Clear Locked
+            </Button>
+          </div>
+
+          <p className="text-[11px] text-muted-foreground">
+            {ntaLockedBuckets
+              ? `Locked snapshot active (${ntaLockedBuckets.length} bucket${ntaLockedBuckets.length > 1 ? "s" : ""}).`
+              : "No locked snapshot active."}
+          </p>
         </AccordionContent>
       </AccordionItem>
     </Accordion>

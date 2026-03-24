@@ -1,6 +1,6 @@
 # BioVaram EV Analysis Platform - Master Task Tracker
 ## Created: January 21, 2026
-## Last Updated: February 10, 2026
+## Last Updated: March 17, 2026
 
 ---
 
@@ -20,6 +20,44 @@
 | **Statistics (STAT-xxx)** | 1 | 0 | 0 | 1 |
 
 **Overall Progress: ~66% Complete**
+
+> Note: The category table above is a historical baseline snapshot from February. The current reconciled task status is captured in the "March 2026 Deep Reconciliation Update" and "Recommended Next Actions (Current)" sections below.
+
+---
+
+## ✅ MARCH 2026 DEEP RECONCILIATION UPDATE (ALL TASK FILES REVIEWED)
+
+### Sources Reviewed for Reconciliation
+- `TASK_TRACKER.md` (all open status rows)
+- `COMPREHENSIVE_AUDIT_REPORT_MARCH_2026.md` (Phase 1-5 roadmap)
+- `CHANGES_SINCE_LAST_PUSH.md`
+- `WEEKLY_UPDATE_JAN28_2026.md`
+- Packaging/build scripts and generated installer artifacts
+
+### Newly Confirmed Completed Since Feb 2026
+
+1. **Audit Phase 1 (Security fixes) — ✅ Completed**
+   - Backup/auth/cors/jwt hardening sweep implemented and committed.
+
+2. **Audit Phase 2 (Fake data elimination) — ✅ Completed**
+   - Cross-compare/dashboard fake-data cleanup sweep completed and committed.
+
+3. **Audit Phase 3 (Code quality cleanup) — ✅ Completed**
+   - Sidebar wiring, dead API/store cleanup, parser caching improvements, script/archive cleanup completed and committed.
+
+4. **Desktop Packaging Delivery — ✅ Completed (March 16, 2026)**
+   - One-file module EXE packaging implemented.
+   - Inno Setup installer packaging updated for one-file payload.
+   - Fresh client installers generated:
+     - `installer_output/BioVaram_nanofacs_Setup_v1.0.0.exe`
+     - `installer_output/BioVaram_nta_Setup_v1.0.0.exe`
+
+### Open Backlog Summary After Reconciliation
+- **Critical/Broken:** P-001 (AI chat backend), compliance/security governance backlog
+- **Validation Pending:** VAL-003, VAL-004, VAL-005, VAL-009, VAL-010
+- **TEM Pending:** TEM-001 through TEM-006 (TEM-001 in progress)
+- **Enterprise Pending:** ENT-001, ENT-002, ENT-003
+- **Audit Phase 4-5 Pending:** Testing and dependency/config hardening tasks
 
 ---
 
@@ -1307,8 +1345,9 @@ NTA: 1.3E+7 × 500 = 6.6E+9 particles/mL
 | Field | Value |
 |-------|-------|
 | **Priority** | 🟢 MEDIUM |
-| **Status** | 🔴 Not Started - Pending MD Decision |
-| **Options** | Electron, Tauri, PWA |
+| **Status** | ✅ COMPLETED (March 16, 2026) |
+| **Implementation** | PyInstaller one-file module builds + Inno Setup installers |
+| **Installer Artifacts** | `installer_output/BioVaram_nanofacs_Setup_v1.0.0.exe`, `installer_output/BioVaram_nta_Setup_v1.0.0.exe` |
 
 ---
 
@@ -1387,50 +1426,55 @@ NTA: 1.3E+7 × 500 = 6.6E+9 particles/mL
 
 ---
 
-## 📅 RECOMMENDED NEXT ACTIONS
+## 📅 RECOMMENDED NEXT ACTIONS (CURRENT - MARCH 17, 2026)
 
-### 🔥 IMMEDIATE (Feb 2-3, 2026) - CRITICAL BUGS:
+### 🔥 Immediate (This Week)
 | Priority | Task | Effort | Status |
 |----------|------|--------|--------|
-| 1 | **BUG-001**: Fix miepython 3-arg API | 5 min | 🔴 BLOCKING |
-| 2 | **BUG-002**: Display endpoints use MultiSolutionMie | 2 hrs | 🔴 BLOCKING |
-| 3 | **T-011**: Verify Mie lookup table implementation | 2 hrs | 🟡 |
+| 1 | **P-001**: Fix AI Chat backend integration (provider + API key + endpoint wiring) | 2-4 hrs | 🔴 BROKEN |
+| 2 | **VAL-003**: Simplify Mie user inputs to calibration beads only | 3 hrs | 🔴 Not Started |
+| 3 | **VAL-009**: Error bar estimation for particle sizing | 4 hrs | 🔴 Not Started |
+| 4 | **VAL-010**: Plot multi-solution events for normalization decisions | 3 hrs | 🔴 Not Started |
+| 5 | **VAL-004**: Dilution factor correction for concentration comparison | 2 hrs | 🔴 Not Started |
+| 6 | **VAL-005**: FCS metadata source investigation + fallback plan | 2 hrs | 🔴 Not Started |
 
-### Week 1 (Feb 3-7, 2026) - Validation:
+### 🔐 Compliance and Access Control (Critical Program Work)
 | Priority | Task | Effort | Status |
 |----------|------|--------|--------|
-| 1 | VAL-008: Gaussian distribution analysis | 4 hrs | 🔴 Surya requested |
-| 2 | VAL-001: NTA vs FCS Cross-Validation Overlay | 4 hrs | 🟡 In Progress |
-| 3 | VAL-010: Plot multi-solution events | 3 hrs | 🔴 Parvesh requested |
-| 4 | ~~UI-001: Scatter plot dot size fix~~ | ~~1 hr~~ | ✅ DONE (Feb 4) |
+| 1 | **COMP-001**: MISEV compliance implementation | Multi-day | 🔴 Not Started |
+| 2 | **COMP-002**: 21 CFR Part 11 compliance foundation | Multi-day | 🔴 Not Started |
+| 3 | **COMP-003**: Comprehensive audit trail system | Multi-day | 🔴 Not Started |
+| 4 | **COMP-004**: Data integrity and metadata verification | Multi-day | 🔴 Not Started |
+| 5 | **COMP-007**: Mandatory authentication enforcement completion | 2 hrs | 🟡 Partially Complete |
+| 6 | **COMP-005/006**: AI anonymization and chatbot guardrails | 1-2 days | 🔴 Not Started |
 
-### Week 2 (Feb 10-14, 2026) - Features:
+### 🔬 TEM Workstream (Scientific Backlog)
 | Priority | Task | Effort | Status |
 |----------|------|--------|--------|
-| 1 | VAL-002: Supplementary Table Generation | 4 hrs | 🔴 |
-| 2 | VAL-009: Error bar estimation | 4 hrs | 🟡 Surya suggested |
-| 3 | ~~INFRA-001: Remove Streamlit code~~ | ~~2 hrs~~ | ✅ DONE (Feb 3) |
-| 4 | P-001: Fix AI Chat Backend | 4 hrs | 🔴 BROKEN |
+| 1 | **TEM-001**: Scale bar detection fix | Active | 🔄 IN PROGRESS |
+| 2 | **TEM-002**: Membrane integrity detection | 3-5 days | 🔴 Not Started |
+| 3 | **TEM-003**: Background vs out-of-focus discrimination | 2-3 days | 🔴 Not Started |
+| 4 | **TEM-004**: Attached particles vs debris classification | Depends on expert input | 🔴 Not Started |
+| 5 | **TEM-005**: Random area sampling statistics | 1-2 days | 🔴 Not Started |
+| 6 | **TEM-006**: Voronoi tessellation implementation | ~1 week | 🔴 Not Started |
 
-### Week 3 (Feb 17-21, 2026) - Polish:
+### 🧪 Audit Phase 4-5 Remaining (From March Audit Roadmap)
 | Priority | Task | Effort | Status |
 |----------|------|--------|--------|
-| 1 | VAL-003: Simplify Mie User Inputs | 3 hrs | 🔴 |
-| 2 | COMP-007: Enforce Authentication | 2 hrs | 🟡 |
-| 3 | TEM-006: Voronoi tessellation (Charmi) | 1 week | 🔴 |
+| 1 | Add frontend chart rendering tests | 4 hrs | 🔴 Not Started |
+| 2 | Complete backend parser test stubs | 2 hrs | 🔴 Not Started |
+| 3 | Add auth endpoint tests | 2 hrs | 🔴 Not Started |
+| 4 | Add backup endpoint tests | 1 hr | 🔴 Not Started |
+| 5 | Set `ignoreBuildErrors: false` and fix resulting issues | 1 hr | 🔴 Not Started |
+| 6 | Add upper version bounds to requirements | 30 min | 🔴 Not Started |
+| 7 | Update README with current setup and routes | 30 min | 🔴 Not Started |
+| 8 | Purge archived calibration configs before packaging | 15 min | 🔴 Not Started |
+| 9 | Move in-memory password reset tokens to DB | 2 hrs | 🔴 Not Started |
 
-### Waiting For:
-- **Surya:** Calibrated FCS data (Beckman Coulter visit complete)
-- **Surya:** Error estimation methodology guidance
-- **Charmi:** Voronoi tessellation implementation
-- **MD:** Desktop app packaging decision
-| 2 | COMP-007: Enforce Authentication | 2 hours |
-| 3 | VAL-005: FCS Metadata Investigation | 2 hours |
-
-### Waiting For:
-- **Surya:** Calibrated FCS data (end of January after Beckman visit)
-- **Surya:** TEM image interpretation guidelines
-- **MD:** Desktop app packaging decision
+### Dependencies / Waiting Inputs
+- **Surya:** Error estimation methodology guidance for VAL-009
+- **Surya + experiment team:** TEM interpretation rules for TEM-004
+- **Charmi:** TEM-001 progress handoff and TEM-006 implementation timeline
 
 ---
 
@@ -1500,5 +1544,5 @@ NTA: 1.3E+7 × 500 = 6.6E+9 particles/mL
 
 *Document Version: 3.0*
 *Consolidated from: CONSOLIDATED_TASK_TRACKER.md, TASK_TRACKER_DEC22_MEETING.md, TASK_TRACKER_PC3_VALIDATION_JAN20.md, EXECUTION_PLAN_JAN7_2025.md*
-*Last Updated: February 2, 2026*
-*Next Review: February 5, 2026*
+*Last Updated: March 17, 2026*
+*Next Review: March 24, 2026*

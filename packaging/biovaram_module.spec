@@ -229,8 +229,10 @@ pyz = PYZ(a.pure, a.zipped_data, cipher=None)
 exe = EXE(
     pyz,
     a.scripts,
+    a.binaries,
+    a.datas,
     [],
-    exclude_binaries=True,
+    exclude_binaries=False,
     name=EXE_NAME,
     debug=False,
     bootloader_ignore_signals=False,
@@ -247,14 +249,4 @@ exe = EXE(
          else None,
 )
 
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name=EXE_NAME,
-)
-
-print(f"\n[Module Build] Spec processed — output: dist/{EXE_NAME}/")
+print(f"\n[Module Build] Spec processed — output: dist/{EXE_NAME}.exe")

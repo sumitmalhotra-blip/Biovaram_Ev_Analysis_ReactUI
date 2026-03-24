@@ -7,10 +7,21 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Pin, Maximize2, CheckCircle, GitCompare, Loader2, AlertCircle, RefreshCw, Download, RotateCcw } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { useAnalysisStore } from "@/lib/store"
 import { useToast } from "@/hooks/use-toast"
 import { useApi } from "@/hooks/use-api"
-import { apiClient, type Sample, type FCSResult, type NTAResult, type CrossValidationResult } from "@/lib/api-client"
+import {
+  apiClient,
+  type Sample,
+  type FCSResult,
+  type NTAResult,
+  type CrossValidationResult,
+  type MetadataResolutionResponse,
+  type MultiSolutionEventsResponse,
+} from "@/lib/api-client"
 import { OverlayHistogramChart } from "./charts/overlay-histogram-chart"
 import { DiscrepancyChart } from "./charts/discrepancy-chart"
 import { KDEComparisonChart } from "./charts/kde-comparison-chart"
@@ -34,6 +45,15 @@ export function CrossCompareTab() {
   const [error, setError] = useState<string | null>(null)
   const [crossValidation, setCrossValidation] = useState<CrossValidationResult | null>(null)
   const [crossValidating, setCrossValidating] = useState(false)
+  const [metadataResolution, setMetadataResolution] = useState<MetadataResolutionResponse | null>(null)
+  const [multiSolutionEvents, setMultiSolutionEvents] = useState<MultiSolutionEventsResponse | null>(null)
+  const [loadingDiagnostics, setLoadingDiagnostics] = useState(false)
+  const [showMetadataEditor, setShowMetadataEditor] = useState(false)
+  const [isSavingMetadata, setIsSavingMetadata] = useState(false)
+  const [manualLaserWavelength, setManualLaserWavelength] = useState<string>("")
+  const [manualDilutionFactor, setManualDilutionFactor] = useState<string>("")
+  const [manualInstrumentModel, setManualInstrumentModel] = useState<string>("")
+  const [manualOperatorNotes, setManualOperatorNotes] = useState<string>("")
 
   // Fetch samples on mount only if API is connected
   useEffect(() => {
@@ -150,15 +170,134 @@ export function CrossCompareTab() {
     }
   }, [crossComparisonSettings.selectedNtaSampleId])
 
-  // Run cross-validation when both API samples are selected (not current analysis)
-  const runCrossValidation = useCallback(async () => {
-    // Cross-validation requires real sample IDs (not current analysis)
-    const fcsId = selectedFcsSample && selectedFcsSample !== "-1" 
-      ? fcsSamples.find(s => String(s.id) === selectedFcsSample)?.sample_id 
+  const getResolvedSampleIds = useCallback(() => {
+    const fcsId = selectedFcsSample && selectedFcsSample !== "-1"
+      ? fcsSamples.find(s => String(s.id) === selectedFcsSample)?.sample_id
       : fcsAnalysis.sampleId
     const ntaId = selectedNtaSample && selectedNtaSample !== "-2"
       ? ntaSamples.find(s => String(s.id) === selectedNtaSample)?.sample_id
       : ntaAnalysis.sampleId
+
+    return { fcsId, ntaId }
+  }, [selectedFcsSample, selectedNtaSample, fcsSamples, ntaSamples, fcsAnalysis.sampleId, ntaAnalysis.sampleId])
+
+  const loadFcsDiagnostics = useCallback(async (fcsId: string) => {
+    const [metadata, multi] = await Promise.all([
+      apiClient.getSampleMetadataResolution(fcsId),
+      apiClient.getMultiSolutionEvents(fcsId, { max_events: 5000, max_results: 10 }),
+    ])
+    setMetadataResolution(metadata)
+    setMultiSolutionEvents(multi)
+
+    setManualLaserWavelength(metadata.resolved.laser_wavelength_nm != null ? String(metadata.resolved.laser_wavelength_nm) : "")
+    setManualDilutionFactor(metadata.resolved.dilution_factor != null ? String(metadata.resolved.dilution_factor) : "")
+    setManualInstrumentModel(metadata.resolved.instrument_model ?? "")
+  }, [])
+
+  useEffect(() => {
+    const { fcsId } = getResolvedSampleIds()
+    if (!fcsId) {
+      setMetadataResolution(null)
+      setMultiSolutionEvents(null)
+      return
+    }
+
+    let cancelled = false
+    setLoadingDiagnostics(true)
+
+    loadFcsDiagnostics(fcsId)
+      .then(() => {
+        if (cancelled) return
+      })
+      .catch((err) => {
+        if (cancelled) return
+        console.error("Failed to load FCS diagnostics:", err)
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingDiagnostics(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [getResolvedSampleIds, loadFcsDiagnostics])
+
+  const saveManualMetadata = useCallback(async () => {
+    const { fcsId } = getResolvedSampleIds()
+    if (!fcsId) {
+      toast({
+        title: "No FCS sample selected",
+        description: "Select an FCS sample before saving metadata overrides.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const payload: {
+      laser_wavelength_nm?: number;
+      dilution_factor?: number;
+      instrument_model?: string;
+      operator_notes?: string;
+    } = {}
+
+    const laser = manualLaserWavelength.trim()
+    const dilution = manualDilutionFactor.trim()
+    const instrument = manualInstrumentModel.trim()
+    const notes = manualOperatorNotes.trim()
+
+    if (laser) {
+      const parsed = Number(laser)
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        toast({ title: "Invalid wavelength", description: "Laser wavelength must be a positive number.", variant: "destructive" })
+        return
+      }
+      payload.laser_wavelength_nm = Math.round(parsed)
+    }
+    if (dilution) {
+      const parsed = Number(dilution)
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        toast({ title: "Invalid dilution", description: "Dilution factor must be a positive number.", variant: "destructive" })
+        return
+      }
+      payload.dilution_factor = Math.round(parsed)
+    }
+    if (instrument) payload.instrument_model = instrument
+    if (notes) payload.operator_notes = notes
+
+    if (Object.keys(payload).length === 0) {
+      toast({
+        title: "Nothing to save",
+        description: "Provide at least one metadata value before saving.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsSavingMetadata(true)
+    try {
+      const response = await apiClient.upsertSampleManualMetadata(fcsId, payload)
+      setMetadataResolution(response.metadata_resolution)
+      await loadFcsDiagnostics(fcsId)
+      setManualOperatorNotes("")
+      toast({
+        title: "Metadata updated",
+        description: response.message || "Manual metadata overrides saved.",
+      })
+    } catch (err) {
+      console.error("Manual metadata save failed:", err)
+      toast({
+        title: "Save failed",
+        description: err instanceof Error ? err.message : "Could not save metadata overrides.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSavingMetadata(false)
+    }
+  }, [getResolvedSampleIds, loadFcsDiagnostics, manualDilutionFactor, manualInstrumentModel, manualLaserWavelength, manualOperatorNotes, toast])
+
+  // Run cross-validation when both API samples are selected (not current analysis)
+  const runCrossValidation = useCallback(async () => {
+    const { fcsId, ntaId } = getResolvedSampleIds()
 
     if (!fcsId || !ntaId) {
       toast({
@@ -187,7 +326,7 @@ export function CrossCompareTab() {
     } finally {
       setCrossValidating(false)
     }
-  }, [selectedFcsSample, selectedNtaSample, fcsSamples, ntaSamples, fcsAnalysis.sampleId, ntaAnalysis.sampleId, toast])
+  }, [getResolvedSampleIds, toast])
 
   const handlePin = (chartTitle: string, chartType: "histogram" | "bar" | "line") => {
     // Extract cross-validation histogram data if available
@@ -676,6 +815,176 @@ export function CrossCompareTab() {
       {/* VAL-001: Validation Verdict Card */}
       {crossValidation && (
         <ValidationVerdictCard result={crossValidation} />
+      )}
+
+      {(metadataResolution || multiSolutionEvents || loadingDiagnostics) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Card className="card-3d">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Metadata Resolution (VAL-005)</CardTitle>
+              <CardDescription>
+                Effective wavelength/instrument/dilution with source provenance
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingDiagnostics && !metadataResolution ? (
+                <div className="flex items-center text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Loading metadata diagnostics...
+                </div>
+              ) : metadataResolution ? (
+                <div className="space-y-3 text-sm">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div className="p-2 rounded border bg-secondary/20">
+                      <div className="text-xs text-muted-foreground">Laser (nm)</div>
+                      <div className="font-medium">{metadataResolution.resolved.laser_wavelength_nm ?? "Missing"}</div>
+                      <Badge variant="outline" className="mt-1 text-[10px]">{metadataResolution.provenance.laser_wavelength_nm}</Badge>
+                    </div>
+                    <div className="p-2 rounded border bg-secondary/20">
+                      <div className="text-xs text-muted-foreground">Instrument</div>
+                      <div className="font-medium truncate">{metadataResolution.resolved.instrument_model ?? "Missing"}</div>
+                      <Badge variant="outline" className="mt-1 text-[10px]">{metadataResolution.provenance.instrument_model}</Badge>
+                    </div>
+                    <div className="p-2 rounded border bg-secondary/20">
+                      <div className="text-xs text-muted-foreground">Dilution Factor</div>
+                      <div className="font-medium">{metadataResolution.resolved.dilution_factor ?? "Missing"}</div>
+                      <Badge variant="outline" className="mt-1 text-[10px]">{metadataResolution.provenance.dilution_factor}</Badge>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge variant={metadataResolution.completeness_score >= 0.8 ? "default" : "secondary"}>
+                      Completeness {(metadataResolution.completeness_score * 100).toFixed(0)}%
+                    </Badge>
+                    {metadataResolution.missing_required.map((field) => (
+                      <Badge key={field} variant="outline" className="text-xs">
+                        Missing: {field}
+                      </Badge>
+                    ))}
+                  </div>
+                  <div className="pt-2 border-t space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-muted-foreground">Manual override</p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowMetadataEditor((prev) => !prev)}
+                      >
+                        {showMetadataEditor ? "Hide Editor" : "Edit Metadata"}
+                      </Button>
+                    </div>
+
+                    {showMetadataEditor && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="manual-laser">Laser wavelength (nm)</Label>
+                          <Input
+                            id="manual-laser"
+                            type="number"
+                            min={1}
+                            value={manualLaserWavelength}
+                            onChange={(e) => setManualLaserWavelength(e.target.value)}
+                            placeholder="e.g. 405"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="manual-dilution">Dilution factor</Label>
+                          <Input
+                            id="manual-dilution"
+                            type="number"
+                            min={1}
+                            value={manualDilutionFactor}
+                            onChange={(e) => setManualDilutionFactor(e.target.value)}
+                            placeholder="e.g. 500"
+                          />
+                        </div>
+                        <div className="space-y-1.5 sm:col-span-2">
+                          <Label htmlFor="manual-instrument">Instrument model</Label>
+                          <Input
+                            id="manual-instrument"
+                            value={manualInstrumentModel}
+                            onChange={(e) => setManualInstrumentModel(e.target.value)}
+                            placeholder="e.g. CytoFLEX LX"
+                          />
+                        </div>
+                        <div className="space-y-1.5 sm:col-span-2">
+                          <Label htmlFor="manual-notes">Operator notes (optional)</Label>
+                          <Textarea
+                            id="manual-notes"
+                            value={manualOperatorNotes}
+                            onChange={(e) => setManualOperatorNotes(e.target.value)}
+                            placeholder="Reason for override"
+                            rows={3}
+                          />
+                        </div>
+                        <div className="sm:col-span-2 flex items-center justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              setManualOperatorNotes("")
+                              setShowMetadataEditor(false)
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                          <Button onClick={saveManualMetadata} disabled={isSavingMetadata}>
+                            {isSavingMetadata ? (
+                              <span className="inline-flex items-center gap-2">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Saving...
+                              </span>
+                            ) : "Save Override"}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No metadata diagnostics available.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="card-3d">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Multi-Solution Events (VAL-010)</CardTitle>
+              <CardDescription>
+                Ambiguous per-event diameter candidates and selection quality
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingDiagnostics && !multiSolutionEvents ? (
+                <div className="flex items-center text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Loading event diagnostics...
+                </div>
+              ) : multiSolutionEvents ? (
+                <div className="space-y-3 text-sm">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge>{multiSolutionEvents.ambiguous_events_found} ambiguous events</Badge>
+                    <Badge variant="outline">Scanned: {multiSolutionEvents.total_events_scanned}</Badge>
+                    <Badge variant="outline">Mode: {multiSolutionEvents.channel_mode_used}</Badge>
+                  </div>
+                  <div className="space-y-1">
+                    {multiSolutionEvents.events.slice(0, 5).map((event) => (
+                      <div key={event.event_id} className="flex items-center justify-between rounded border p-2 bg-secondary/20">
+                        <span>Event {event.event_id}</span>
+                        <span className="font-mono text-xs">
+                          {event.candidate_solutions_nm.join(", ")} nm
+                        </span>
+                      </div>
+                    ))}
+                    {multiSolutionEvents.events.length === 0 && (
+                      <p className="text-muted-foreground">No ambiguous events detected in sampled data.</p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No event diagnostics available.</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {/* Method Comparison Summary */}
