@@ -7,6 +7,8 @@ backend_dir = Path(__file__).parent.absolute()
 sys.path.insert(0, str(backend_dir))
 
 import uvicorn
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).parent / ".env")
 from src.api.main import app
 
 if __name__ == "__main__":

@@ -42,6 +42,7 @@ from src.api.routers import analysis  # type: ignore[import-not-found]
 from src.api.routers import auth  # type: ignore[import-not-found]
 from src.api.routers import alerts  # CRMIT-003: Alert System
 from src.api.routers import chat  # P-001: AI Research Chat
+from src.api.routers import nta_ai  # NTA AI Analysis
 from src.api.routers import backup  # DB Backup & Restore
 try:
     from src.api.routers import calibration as calibration_router  # CAL-001
@@ -380,6 +381,13 @@ app.include_router(
     chat.router,
     prefix=f"{settings.api_prefix}",
     tags=["AI Chat"]
+)
+
+# NTA AI Analysis
+app.include_router(
+    nta_ai.router,
+    prefix=f"{settings.api_prefix}",
+    tags=["NTA AI"]
 )
 
 # DB Backup & Restore
