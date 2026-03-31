@@ -1473,6 +1473,17 @@ async def upload_nta_file(
                             "d90_nm": d90,
                             "concentration_particles_ml": total_concentration,
                             "temperature_celsius": temperature_celsius,
+                            "ph": float(parser.measurement_params.get('ph', 0) or 0) or None,
+                            "conductivity": float(parser.measurement_params.get('conductivity', 0) or 0) or None,
+                            "viscosity": float(parser.measurement_params.get('viscosity', 0) or 0) or None,
+                            "laser_wavelength_nm": float(parser.measurement_params.get('laser_wavelength', 0) or 0) or None,
+                            "dilution_factor": float(parser.measurement_params.get('dilution', 0) or 0) or None,
+                            "instrument": parser.raw_metadata.get('instrument_serial'),
+                            "sensitivity": float(parser.measurement_params.get('sensitivity', 0) or 0) or None,
+                            "shutter": float(parser.measurement_params.get('shutter', 0) or 0) or None,
+                            "positions": int(parser.measurement_params.get('num_positions', 0) or 0) or None,
+                            "number_of_traces": int(parser.measurement_params.get('num_traces', 0) or 0) or None,
+                            "std_dev_nm": weighted_std,
                             "total_particles": int(total_particle_count),
                             "bin_50_80nm_pct": bin_50_80,
                             "bin_80_100nm_pct": bin_80_100,
@@ -1550,7 +1561,7 @@ async def upload_nta_file(
                 if nta_results:
                     await create_nta_result(
                         db=db,
-                        sample_id=db_sample.id,  # type: ignore[arg-type]
+                        sample_id=db_sample.id,
                         mean_size_nm=nta_results.get('mean_size_nm'),
                         median_size_nm=nta_results.get('median_size_nm'),
                         d10_nm=nta_results.get('d10_nm'),
@@ -1558,6 +1569,21 @@ async def upload_nta_file(
                         d90_nm=nta_results.get('d90_nm'),
                         concentration_particles_ml=nta_results.get('concentration_particles_ml'),
                         temperature_celsius=nta_results.get('temperature_celsius'),
+                        ph=nta_results.get('ph'),
+                        conductivity=nta_results.get('conductivity'),
+                        viscosity=nta_results.get('viscosity'),
+                        laser_wavelength_nm=nta_results.get('laser_wavelength_nm'),
+                        dilution_factor=nta_results.get('dilution_factor'),
+                        instrument=nta_results.get('instrument'),
+                        sensitivity=nta_results.get('sensitivity'),
+                        shutter=nta_results.get('shutter'),
+                        positions=nta_results.get('positions'),
+                        number_of_traces=nta_results.get('number_of_traces'),
+                        bin_50_80nm_pct=nta_results.get('bin_50_80nm_pct'),
+                        bin_80_100nm_pct=nta_results.get('bin_80_100nm_pct'),
+                        bin_100_120nm_pct=nta_results.get('bin_100_120nm_pct'),
+                        bin_120_150nm_pct=nta_results.get('bin_120_150nm_pct'),
+                        bin_150_200nm_pct=nta_results.get('bin_150_200nm_pct'),
                     )
                     # Mark job as completed
                     await update_job_status(
