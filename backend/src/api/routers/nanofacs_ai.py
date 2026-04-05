@@ -729,3 +729,60 @@ Keep the answer to 3-5 sentences maximum."""
                      f"{', '.join(s['file'] for s in all_stats)}",
         answered_at=datetime.utcnow().isoformat(),
     )
+
+
+@router.get("/ai/nanofacs/list-files")
+async def list_nanofacs_parquet_files():
+    """List all available NanoFACS FCS parquet files on the server."""
+    import glob
+    base_dir = Path(__file__).parent.parent.parent.parent / "data" / "nanofacs_parquet"
+    
+    files = []
+    if base_dir.exists():
+        for f in base_dir.rglob("*.fcs.parquet"):
+            files.append({
+                "path": str(f),
+                "name": f.name,
+                "folder": f.parent.name,
+                "size_kb": round(f.stat().st_size / 1024, 1)
+            })
+    
+    return {
+        "files": sorted(files, key=lambda x: x["name"]),
+        "total": len(files),
+        "base_dir": str(base_dir)
+    }
+
+
+# ============================================================================
+# Upload Parquet File Endpoint
+# ============================================================================
+
+@router.post("/upload-parquet")
+async def upload_parquet_file(
+    file: UploadFile = File(...),
+    folder: str = "uploads"
+):
+    """
+    Upload a .fcs.parquet file to the nanofacs_parquet folder.
+    It will immediately appear in the list-files endpoint.
+    """
+    filename = file.filename or ""
+    if not filename.endswith(".fcs.parquet") and not filename.endswith(".parquet"):
+        raise HTTPException(status_code=400, detail="Only .fcs.parquet files accepted.")
+
+    base_dir = Path(__file__).parent.parent.parent.parent / "data" / "nanofacs_parquet" / folder
+    base_dir.mkdir(parents=True, exist_ok=True)
+
+    dest = base_dir / filename
+    content = await file.read()
+    dest.write_bytes(content)
+
+    logger.info(f"Uploaded parquet: {dest}")
+    return {
+        "success": True,
+        "path": str(dest),
+        "name": filename,
+        "folder": folder,
+        "size_bytes": len(content)
+    }

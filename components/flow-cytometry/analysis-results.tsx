@@ -22,6 +22,7 @@ import {
 import { useAnalysisStore } from "@/lib/store"
 import { useShallow } from "zustand/shallow"
 import { useApi } from "@/hooks/use-api"
+import { useLazyCharts, LazyChart, FCSChartLoadingProgress } from "@/hooks/use-lazy-charts"
 import { SizeDistributionChart } from "./charts/size-distribution-chart"
 import { ScatterPlotChart, type ScatterDataPoint } from "./charts/scatter-plot-with-selection"
 import { InteractiveScatterChart } from "./charts/interactive-scatter-chart"
@@ -35,6 +36,7 @@ import { StatisticsCards } from "./statistics-cards"
 import { ParticleSizeVisualization } from "./particle-size-visualization"
 import { AnomalySummaryCard } from "./anomaly-summary-card"
 import { AnomalyEventsTable, type AnomalyEvent } from "./anomaly-events-table"
+import { NanoFACSAIPanel } from "./nanofacs-ai-panel"
 import { IndividualFileSummary } from "./individual-file-summary"
 import { GatedStatisticsPanel } from "./gated-statistics-panel"
 import { useToast } from "@/hooks/use-toast"
@@ -80,6 +82,7 @@ export function AnalysisResults() {
   })))
   const { getScatterData, getScatterDataWithAxes, getSizeBins, detectAnomalies } = useApi()
   const { toast } = useToast()
+  const { registerChart, isChartVisible, loadedCount, totalCount } = useLazyCharts(2)
   const [showAnomalyDetails, setShowAnomalyDetails] = useState(false)
   const [highlightAnomalies, setHighlightAnomalies] = useState(true)
   const [scatterData, setScatterData] = useState<ScatterDataPoint[]>([])
@@ -913,6 +916,7 @@ export function AnalysisResults() {
       </Card>
 
       {/* Statistics Cards */}
+      <FCSChartLoadingProgress loadedCount={loadedCount} totalCount={totalCount} />
       <StatisticsCards results={results} />
 
       {/* Individual File Summary - shown when comparing two files */}
@@ -1068,6 +1072,7 @@ export function AnalysisResults() {
                   </Button>
                 </div>
               </div>
+              <LazyChart id="size-dist" height={320} priority={0} label="Size Distribution" registerChart={registerChart} isChartVisible={isChartVisible}>
               <SizeDistributionChart 
                 sizeData={scatterDiameters}
                 secondarySizeData={secondarySizeData}
@@ -1080,6 +1085,7 @@ export function AnalysisResults() {
                 distributionAnalysis={distributionAnalysis}
                 distributionLoading={distributionLoading}
               />
+              </LazyChart>
             </TabsContent>
 
             <TabsContent value="theory" className="space-y-4">
@@ -1096,10 +1102,12 @@ export function AnalysisResults() {
                   <Pin className="h-4 w-4" />
                 </Button>
               </div>
+              <LazyChart id="theory-measured" height={320} priority={1} label="TheoryVsMeasuredChart" registerChart={registerChart} isChartVisible={isChartVisible}>
               <TheoryVsMeasuredChart 
                 primaryMeasuredData={theoryMeasuredData}
                 secondaryMeasuredData={secondaryTheoryData}
               />
+              </LazyChart>
             </TabsContent>
 
             <TabsContent value="fsc-ssc" className="space-y-4">
@@ -1249,6 +1257,7 @@ export function AnalysisResults() {
                   </Button>
                 </div>
               </div>
+              <LazyChart id="diameter-ssc" height={320} priority={1} label="DiameterVsSSCChart" registerChart={registerChart} isChartVisible={isChartVisible}>
               <DiameterVsSSCChart
                 data={diameterVsSSCData}
                 anomalousIndices={anomalyData?.anomalous_indices || []}
@@ -1259,6 +1268,7 @@ export function AnalysisResults() {
                 secondaryData={secondaryDiameterVsSSCData}
                 secondaryAnomalousIndices={secondaryAnomalyData?.anomalous_indices || []}
               />
+              </LazyChart>
             </TabsContent>
 
             <TabsContent value="event-size" className="space-y-4">
@@ -1283,11 +1293,13 @@ export function AnalysisResults() {
                 </div>
               </div>
               {sampleId ? (
+                <LazyChart id="event-size" height={320} priority={1} label="EventVsSizeChart" registerChart={registerChart} isChartVisible={isChartVisible}>
                 <EventVsSizeChart
                   sampleId={sampleId}
                   onPin={() => handlePin("Event vs Size", "scatter")}
                   title="Event Number vs Calculated Size"
                 />
+                </LazyChart>
               ) : (
                 <div className="h-[400px] flex items-center justify-center text-muted-foreground border border-dashed rounded-lg">
                   <p>Upload a sample to see per-event size analysis</p>
@@ -1419,6 +1431,16 @@ export function AnalysisResults() {
           </CardContent>
         </Card>
       </div>
+
+      {/* NanoFACS AI Panel */}
+      {fcsAnalysis.results && (
+        <NanoFACSAIPanel
+          filePaths={fcsAnalysis.results.parquet_file_path ? [fcsAnalysis.results.parquet_file_path] : []}
+          experimentDescription={fcsAnalysis.experimentalConditions?.notes || "FCS EV Analysis"}
+          parametersOfInterest={["Size", "MeanIntensity"]}
+          sameample={true}
+        />
+      )}
 
       {/* Anomaly Events Table - show when user clicks "View Details" */}
       {showAnomalyDetails && anomalyData && anomalyEvents.length > 0 && (
