@@ -20,6 +20,29 @@ Audience:
 
 ---
 
+## Implementation Status (Updated Mar 25, 2026)
+
+### Completed
+1. Milestone 1: Session foundation + selection UI is implemented.
+2. Milestone 2: Multi-series chart migration is implemented.
+3. Milestone 3 core performance items are implemented:
+	- Concurrency-limited fetch for compare samples.
+	- Computed-series cache structure (`computedSeriesCacheByKey`) with chart-level cache reads/writes.
+	- Progressive paint pipeline (primary first, staged overlay render).
+	- Debounced recompute path for rapid overlay/profile changes.
+	- Downsampling strategy for dense size distributions.
+
+### Pending
+1. Full QA matrix closure for 1/2/5/10/20 sample sessions and stress/regression signoff.
+
+### Newly Completed (Mar 25, 2026)
+1. Milestone 4 optional backend optimization is now implemented:
+	- `POST /analysis/nta/multi-compare` bulk endpoint.
+	- Compact bulk payload with metadata, warnings/errors, and pre-aggregated bins.
+2. Frontend compare loader now attempts bulk endpoint first and falls back to per-sample batching when needed.
+
+---
+
 ## Current System Baseline
 
 ### What exists today

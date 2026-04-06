@@ -39,6 +39,7 @@ import { IndividualFileSummary } from "./individual-file-summary"
 import { GatedStatisticsPanel } from "./gated-statistics-panel"
 import { useToast } from "@/hooks/use-toast"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { resolveFCSAxes } from "@/lib/fcs-axis-utils"
 import { 
   exportAnomaliesToCSV, 
   exportScatterDataToCSV, 
@@ -144,6 +145,24 @@ export function AnalysisResults() {
   const secondaryScatterData = secondaryFcsAnalysis.scatterData
   const secondaryAnomalyData = secondaryFcsAnalysis.anomalyData
 
+  const primaryAxisResolution = useMemo(
+    () => resolveFCSAxes({
+      availableChannels: results?.channels || [],
+      requestedX: xChannel || "FSC-A",
+      requestedY: yChannel || "SSC-A",
+    }),
+    [results?.channels, xChannel, yChannel]
+  )
+
+  const secondaryAxisResolution = useMemo(
+    () => resolveFCSAxes({
+      availableChannels: secondaryResults?.channels || [],
+      requestedX: primaryAxisResolution.resolvedX,
+      requestedY: primaryAxisResolution.resolvedY,
+    }),
+    [secondaryResults?.channels, primaryAxisResolution.resolvedX, primaryAxisResolution.resolvedY]
+  )
+
   // CRMIT-002: Handle axis change from selector
   const handleAxisChange = useCallback((newXChannel: string, newYChannel: string) => {
     setXChannel(newXChannel)
@@ -211,28 +230,35 @@ export function AnalysisResults() {
   // Initialize channel selection from FCS results when available
   useEffect(() => {
     if (results?.channels && results.channels.length > 0 && !channelsInitialized) {
-      const channels = results.channels
-      
-      // Try to find FSC/SSC channels, or use first two channels
-      const fscPatterns = ['FSC-A', 'VFSC-A', 'FSC-H', 'VFSC-H']
-      const sscPatterns = ['SSC-A', 'VSSC1-A', 'SSC-H', 'VSSC1-H', 'VSSC2-A']
-      
-      let detectedFsc = channels.find(ch => fscPatterns.some(p => ch.toUpperCase().includes(p.toUpperCase())))
-      let detectedSsc = channels.find(ch => sscPatterns.some(p => ch.toUpperCase().includes(p.toUpperCase())))
-      
-      // Fallback to first two channels if standard names not found
-      if (!detectedFsc && channels.length >= 1) {
-        detectedFsc = channels[0]
-      }
-      if (!detectedSsc && channels.length >= 2) {
-        detectedSsc = channels[1]
-      }
-      
-      if (detectedFsc) setXChannel(detectedFsc)
-      if (detectedSsc) setYChannel(detectedSsc)
+      const resolved = resolveFCSAxes({
+        availableChannels: results.channels,
+        requestedX: "FSC-A",
+        requestedY: "SSC-A",
+      })
+
+      setXChannel(resolved.resolvedX)
+      setYChannel(resolved.resolvedY)
       setChannelsInitialized(true)
     }
   }, [results?.channels, channelsInitialized])
+
+  useEffect(() => {
+    if (!channelsInitialized || !results?.channels?.length) return
+
+    if (xChannel !== primaryAxisResolution.resolvedX) {
+      setXChannel(primaryAxisResolution.resolvedX)
+    }
+    if (yChannel !== primaryAxisResolution.resolvedY) {
+      setYChannel(primaryAxisResolution.resolvedY)
+    }
+  }, [
+    channelsInitialized,
+    results?.channels,
+    xChannel,
+    yChannel,
+    primaryAxisResolution.resolvedX,
+    primaryAxisResolution.resolvedY,
+  ])
 
   // Reset channel initialization when sample changes
   useEffect(() => {
@@ -244,10 +270,10 @@ export function AnalysisResults() {
   useEffect(() => {
     let cancelled = false
     // Only fetch if channels are set and sample exists
-    if (sampleId && results && xChannel && yChannel) {
+    if (sampleId && results && primaryAxisResolution.resolvedX && primaryAxisResolution.resolvedY) {
       setLoadingScatter(true)
       // Use getScatterDataWithAxes for custom channel selection
-      getScatterDataWithAxes(sampleId, xChannel, yChannel, 2000)
+      getScatterDataWithAxes(sampleId, primaryAxisResolution.resolvedX, primaryAxisResolution.resolvedY, 2000)
         .then((data) => {
           if (!cancelled && data) {
             setScatterData(data.data)
@@ -266,31 +292,29 @@ export function AnalysisResults() {
     }
     return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sampleId, results, xChannel, yChannel, debouncedMieSettings.wavelength, debouncedMieSettings.particleRI, debouncedMieSettings.mediumRI])
+  }, [
+    sampleId,
+    results,
+    primaryAxisResolution.resolvedX,
+    primaryAxisResolution.resolvedY,
+    debouncedMieSettings.wavelength,
+    debouncedMieSettings.particleRI,
+    debouncedMieSettings.mediumRI,
+  ])
   
   // Load secondary scatter data when overlay is enabled
   // Uses fallback channels if primary channels don't exist in secondary file
   useEffect(() => {
     let cancelled = false
-    if (overlayConfig.enabled && secondarySampleId && secondaryResults && xChannel && yChannel) {
+    if (overlayConfig.enabled && secondarySampleId && secondaryResults && primaryAxisResolution.resolvedX && primaryAxisResolution.resolvedY) {
       setSecondaryFCSLoadingScatter(true)
-      
-      // Check if secondary file has the same channels, otherwise use its first two channels
-      const secondaryChannels = secondaryResults.channels || []
-      let secXChannel = xChannel
-      let secYChannel = yChannel
-      
-      // If primary channels don't exist in secondary file, use fallback
-      if (!secondaryChannels.includes(xChannel) || !secondaryChannels.includes(yChannel)) {
-        // Try to find FSC/SSC patterns in secondary file
-        const fscPatterns = ['FSC-A', 'VFSC-A', 'FSC-H', 'VFSC-H']
-        const sscPatterns = ['SSC-A', 'VSSC1-A', 'SSC-H', 'VSSC1-H', 'VSSC2-A']
-        
-        secXChannel = secondaryChannels.find(ch => fscPatterns.some(p => ch.toUpperCase().includes(p.toUpperCase()))) || secondaryChannels[0] || xChannel
-        secYChannel = secondaryChannels.find(ch => sscPatterns.some(p => ch.toUpperCase().includes(p.toUpperCase()))) || secondaryChannels[1] || yChannel
-      }
-      
-      getScatterDataWithAxes(secondarySampleId, secXChannel, secYChannel, 2000)
+
+      getScatterDataWithAxes(
+        secondarySampleId,
+        secondaryAxisResolution.resolvedX,
+        secondaryAxisResolution.resolvedY,
+        2000
+      )
         .then((data) => {
           if (!cancelled && data) {
             setSecondaryFCSScatterData(data.data)
@@ -305,7 +329,15 @@ export function AnalysisResults() {
     }
     return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [overlayConfig.enabled, secondarySampleId, secondaryResults, xChannel, yChannel])
+  }, [
+    overlayConfig.enabled,
+    secondarySampleId,
+    secondaryResults,
+    primaryAxisResolution.resolvedX,
+    primaryAxisResolution.resolvedY,
+    secondaryAxisResolution.resolvedX,
+    secondaryAxisResolution.resolvedY,
+  ])
 
   // Load secondary anomaly data when overlay is enabled
   useEffect(() => {
@@ -1013,6 +1045,24 @@ export function AnalysisResults() {
                     {gainMismatchWarnings.map((w, i) => (
                       <div key={i}>{w}</div>
                     ))}
+                  </AlertDescription>
+                </Alert>
+              )}
+              {primaryAxisResolution.usedFallback && (
+                <Alert className="border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
+                  <AlertCircle className="h-4 w-4 text-amber-500" />
+                  <AlertTitle className="text-sm font-semibold text-amber-700 dark:text-amber-400">Axis fallback applied</AlertTitle>
+                  <AlertDescription className="text-xs text-amber-600 dark:text-amber-300">
+                    Using {primaryAxisResolution.resolvedX} vs {primaryAxisResolution.resolvedY} for this file.
+                  </AlertDescription>
+                </Alert>
+              )}
+              {overlayConfig.enabled && secondaryResults && secondaryAxisResolution.usedFallback && (
+                <Alert className="border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
+                  <AlertCircle className="h-4 w-4 text-amber-500" />
+                  <AlertTitle className="text-sm font-semibold text-amber-700 dark:text-amber-400">Comparison axis fallback applied</AlertTitle>
+                  <AlertDescription className="text-xs text-amber-600 dark:text-amber-300">
+                    Comparison file uses {secondaryAxisResolution.resolvedX} vs {secondaryAxisResolution.resolvedY}.
                   </AlertDescription>
                 </Alert>
               )}

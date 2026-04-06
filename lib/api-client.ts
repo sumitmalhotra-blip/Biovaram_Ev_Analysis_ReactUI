@@ -210,6 +210,58 @@ export interface NTAResult {
   };
 }
 
+export interface NTAMultiCompareRequest {
+  sample_ids: string[];
+  include_size_distribution?: boolean;
+  filters?: {
+    size_min?: number;
+    size_max?: number;
+  };
+}
+
+export interface NTAMultiCompareResponse {
+  success: boolean;
+  requested_sample_ids: string[];
+  results_by_sample_id: Record<string, {
+    id: number | null;
+    mean_size_nm?: number | null;
+    median_size_nm?: number | null;
+    d10_nm?: number | null;
+    d50_nm?: number | null;
+    d90_nm?: number | null;
+    std_dev_nm?: number | null;
+    concentration_particles_ml?: number | null;
+    temperature_celsius?: number | null;
+    ph?: number | null;
+    conductivity?: number | null;
+    processed_at?: string | null;
+    preaggregated_bins?: Array<{
+      label: string;
+      min_nm: number;
+      max_nm: number;
+      percentage: number;
+    }>;
+  }>;
+  metadata_by_sample_id: Record<string, {
+    sample_id: string;
+    treatment?: string | null;
+    operator?: string | null;
+    preparation_method?: string | null;
+    upload_timestamp?: string | null;
+    processing_status?: string | null;
+    qc_status?: string | null;
+  }>;
+  warnings_by_sample_id: Record<string, string>;
+  errors_by_sample_id: Record<string, string>;
+  summary: {
+    requested: number;
+    resolved: number;
+    failed: number;
+    include_size_distribution: boolean;
+    filters: Record<string, number>;
+  };
+}
+
 /**
  * VAL-001: Cross-Validation Result (FCS vs NTA)
  */
@@ -1416,6 +1468,23 @@ class ApiClient {
         this.handleNetworkError(error);
       }
     }, CACHE_TTL.NTA_RESULTS);
+  }
+
+  async getNTAMultiCompare(
+    payload: NTAMultiCompareRequest
+  ): Promise<NTAMultiCompareResponse> {
+    try {
+      const response = await fetch(`${this.baseUrl}/analysis/nta/multi-compare`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      this.isOffline = false;
+      return this.handleResponse(response);
+    } catch (error) {
+      this.handleNetworkError(error);
+    }
   }
 
   async deleteSample(sampleId: string): Promise<{

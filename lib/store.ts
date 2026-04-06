@@ -167,6 +167,65 @@ export interface OverlayConfig {
   secondaryOpacity: number          // NEW: Opacity for secondary data
 }
 
+export interface FCSCompareTelemetry {
+  totalLoads: number
+  totalLoadMs: number
+  averageLoadMs: number
+  lastLoadMs: number
+  lastQueueDepth: number
+  maxQueueDepth: number
+  cacheHits: number
+  cacheMisses: number
+  cacheEvictions: number
+  lastUpdatedAt: number | null
+}
+
+export interface FCSSeriesCacheEntry {
+  key: string
+  task: "scatterSeries" | "overlayHistogram"
+  data: unknown
+  approxBytes: number
+  version: number
+  createdAt: number
+  lastAccessedAt: number
+}
+
+export interface FCSSeriesCacheState {
+  entriesByKey: Record<string, FCSSeriesCacheEntry>
+  lruKeys: string[]
+  totalBytes: number
+  maxEntries: number
+  maxBytes: number
+  version: number
+}
+
+export interface FCSCompareSessionState {
+  selectedSampleIds: string[]
+  visibleSampleIds: string[]
+  primarySampleId: string | null
+  resultsBySampleId: Record<string, FCSResult>
+  scatterBySampleId: Record<string, ScatterDataPoint[]>
+  loadingBySampleId: Record<string, boolean>
+  errorBySampleId: Record<string, string | null>
+  maxVisibleOverlays: number
+}
+
+export interface FCSCompareGraphAxis {
+  x: string
+  y: string
+}
+
+export interface FCSCompareGraphInstance {
+  id: string
+  title: string
+  axisMode: "unified" | "per-file"
+  unifiedAxis: FCSCompareGraphAxis
+  primaryAxis: FCSCompareGraphAxis
+  comparisonAxis: FCSCompareGraphAxis
+  isMaximized: boolean
+  createdAt: number
+}
+
 // NTA Analysis State
 export interface NTAAnalysisState {
   file: File | null
@@ -194,7 +253,17 @@ export interface NTACompareSessionState {
   resultsBySampleId: Record<string, NTAResult>
   loadingBySampleId: Record<string, boolean>
   errorBySampleId: Record<string, string | null>
+  computedSeriesCacheByKey: Record<string, NTAComputedSeriesCacheEntry>
   maxVisibleOverlays: number
+}
+
+export interface NTAComputedSeriesCacheEntry {
+  cacheKey: string
+  chartType: "distribution" | "concentration"
+  sampleId: string
+  profileId?: string
+  points: Array<{ x: number; y: number; label?: string }>
+  updatedAt: number
 }
 
 // FCS Analysis Settings
@@ -241,6 +310,20 @@ export const CHART_COLORS = {
   largeEV: "#f59e0b",        // Amber - large EVs
   microvesicles: "#ef4444",  // Red - microvesicles
 } as const
+
+const areStringArraysEqual = (left: string[], right: string[]) => {
+  if (left.length !== right.length) {
+    return false
+  }
+
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) {
+      return false
+    }
+  }
+
+  return true
+}
 
 // Cross-Comparison Settings
 export interface CrossComparisonSettings {
@@ -478,6 +561,41 @@ export interface AnalysisState {
 
   // Overlay Configuration
   overlayConfig: OverlayConfig
+  fcsCompareRequestVersion: number
+  fcsCompareTelemetry: FCSCompareTelemetry
+  fcsSeriesCache: FCSSeriesCacheState
+  fcsCompareSession: FCSCompareSessionState
+  fcsCompareGraphInstances: FCSCompareGraphInstance[]
+  activeFCSCompareGraphInstanceId: string | null
+  incrementFCSCompareRequestVersion: () => number
+  resetFCSCompareRequestVersion: () => void
+  recordFCSCompareLoadMetrics: (metrics: { durationMs: number; queueDepth: number }) => void
+  recordFCSCompareCacheStats: (stats: { hits?: number; misses?: number; evictions?: number }) => void
+  resetFCSCompareTelemetry: () => void
+  getFCSSeriesCacheEntry: (key: string) => FCSSeriesCacheEntry | null
+  setFCSSeriesCacheEntry: (entry: {
+    key: string
+    task: FCSSeriesCacheEntry["task"]
+    data: unknown
+    approxBytes?: number
+  }) => { evicted: number }
+  invalidateFCSSeriesCache: (reason?: string) => void
+  setFCSSeriesCacheLimits: (limits: { maxEntries?: number; maxBytes?: number }) => void
+  setFCSCompareSelectedSampleIds: (sampleIds: string[]) => void
+  setFCSCompareVisibleSampleIds: (sampleIds: string[]) => void
+  toggleFCSCompareSampleVisibility: (sampleId: string) => void
+  setFCSComparePrimarySampleId: (sampleId: string | null) => void
+  setFCSCompareSampleLoading: (sampleId: string, loading: boolean) => void
+  setFCSCompareSampleError: (sampleId: string, error: string | null) => void
+  setFCSCompareSampleResult: (sampleId: string, result: FCSResult | null) => void
+  setFCSCompareSampleScatter: (sampleId: string, scatter: ScatterDataPoint[] | null) => void
+  setFCSCompareMaxVisibleOverlays: (maxVisible: number) => void
+  clearFCSCompareSession: () => void
+  createFCSCompareGraphInstance: (title?: string) => string
+  duplicateFCSCompareGraphInstance: (instanceId: string) => string | null
+  removeFCSCompareGraphInstance: (instanceId: string) => void
+  setActiveFCSCompareGraphInstance: (instanceId: string) => void
+  updateFCSCompareGraphInstance: (instanceId: string, updates: Partial<Omit<FCSCompareGraphInstance, "id" | "createdAt">>) => void
   setOverlayConfig: (config: Partial<OverlayConfig>) => void
   toggleOverlay: () => void
 
@@ -512,6 +630,8 @@ export interface AnalysisState {
   setNTACompareSampleLoading: (sampleId: string, loading: boolean) => void
   setNTACompareSampleError: (sampleId: string, error: string | null) => void
   setNTACompareSampleResult: (sampleId: string, result: NTAResult | null) => void
+  setNTACompareComputedSeriesCacheEntry: (entry: NTAComputedSeriesCacheEntry) => void
+  clearNTACompareComputedSeriesCache: () => void
   setNTACompareMaxVisibleOverlays: (maxVisible: number) => void
   clearNTACompareSession: () => void
 
@@ -613,6 +733,52 @@ const initialOverlayConfig: OverlayConfig = {
   secondaryOpacity: 0.5,         // NEW
 }
 
+const initialFCSCompareTelemetry: FCSCompareTelemetry = {
+  totalLoads: 0,
+  totalLoadMs: 0,
+  averageLoadMs: 0,
+  lastLoadMs: 0,
+  lastQueueDepth: 0,
+  maxQueueDepth: 0,
+  cacheHits: 0,
+  cacheMisses: 0,
+  cacheEvictions: 0,
+  lastUpdatedAt: null,
+}
+
+const initialFCSSeriesCache: FCSSeriesCacheState = {
+  entriesByKey: {},
+  lruKeys: [],
+  totalBytes: 0,
+  maxEntries: 120,
+  maxBytes: 24 * 1024 * 1024,
+  version: 1,
+}
+
+const initialFCSCompareSession: FCSCompareSessionState = {
+  selectedSampleIds: [],
+  visibleSampleIds: [],
+  primarySampleId: null,
+  resultsBySampleId: {},
+  scatterBySampleId: {},
+  loadingBySampleId: {},
+  errorBySampleId: {},
+  maxVisibleOverlays: 8,
+}
+
+const createDefaultFCSCompareGraphInstance = (title = "Overlay Graph 1"): FCSCompareGraphInstance => ({
+  id: `compare-graph-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  title,
+  axisMode: "unified",
+  unifiedAxis: { x: "FSC-A", y: "SSC-A" },
+  primaryAxis: { x: "FSC-A", y: "SSC-A" },
+  comparisonAxis: { x: "FSC-A", y: "SSC-A" },
+  isMaximized: false,
+  createdAt: Date.now(),
+})
+
+const initialFCSCompareGraphInstance = createDefaultFCSCompareGraphInstance()
+
 const initialNTAAnalysis: NTAAnalysisState = {
   file: null,
   sampleId: null,
@@ -638,7 +804,8 @@ const initialNTACompareSession: NTACompareSessionState = {
   resultsBySampleId: {},
   loadingBySampleId: {},
   errorBySampleId: {},
-  maxVisibleOverlays: 4,
+  computedSeriesCacheByKey: {},
+  maxVisibleOverlays: 8,
 }
 
 // Hydration state tracking
@@ -771,13 +938,411 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
 
   // Overlay Configuration
   overlayConfig: initialOverlayConfig,
+  fcsCompareRequestVersion: 0,
+  fcsCompareTelemetry: initialFCSCompareTelemetry,
+  fcsSeriesCache: initialFCSSeriesCache,
+  fcsCompareSession: initialFCSCompareSession,
+  fcsCompareGraphInstances: [initialFCSCompareGraphInstance],
+  activeFCSCompareGraphInstanceId: initialFCSCompareGraphInstance.id,
+  incrementFCSCompareRequestVersion: () => {
+    const nextVersion = useAnalysisStore.getState().fcsCompareRequestVersion + 1
+    set({ fcsCompareRequestVersion: nextVersion })
+    return nextVersion
+  },
+  resetFCSCompareRequestVersion: () => set({ fcsCompareRequestVersion: 0 }),
+  recordFCSCompareLoadMetrics: ({ durationMs, queueDepth }) =>
+    set((state) => {
+      const safeDuration = Math.max(0, Math.round(durationMs))
+      const safeQueueDepth = Math.max(0, Math.round(queueDepth))
+      const totalLoads = state.fcsCompareTelemetry.totalLoads + 1
+      const totalLoadMs = state.fcsCompareTelemetry.totalLoadMs + safeDuration
+
+      return {
+        fcsCompareTelemetry: {
+          ...state.fcsCompareTelemetry,
+          totalLoads,
+          totalLoadMs,
+          averageLoadMs: totalLoads > 0 ? Math.round(totalLoadMs / totalLoads) : 0,
+          lastLoadMs: safeDuration,
+          lastQueueDepth: safeQueueDepth,
+          maxQueueDepth: Math.max(state.fcsCompareTelemetry.maxQueueDepth, safeQueueDepth),
+          lastUpdatedAt: Date.now(),
+        },
+      }
+    }),
+  recordFCSCompareCacheStats: ({ hits = 0, misses = 0, evictions = 0 }) =>
+    set((state) => ({
+      fcsCompareTelemetry: {
+        ...state.fcsCompareTelemetry,
+        cacheHits: state.fcsCompareTelemetry.cacheHits + Math.max(0, Math.round(hits)),
+        cacheMisses: state.fcsCompareTelemetry.cacheMisses + Math.max(0, Math.round(misses)),
+        cacheEvictions: state.fcsCompareTelemetry.cacheEvictions + Math.max(0, Math.round(evictions)),
+        lastUpdatedAt: Date.now(),
+      },
+    })),
+  resetFCSCompareTelemetry: () => set({ fcsCompareTelemetry: initialFCSCompareTelemetry }),
+  getFCSSeriesCacheEntry: (key) => {
+    const state = useAnalysisStore.getState()
+    const cache = state.fcsSeriesCache
+    const entry = cache.entriesByKey[key]
+
+    if (!entry || entry.version !== cache.version) {
+      return null
+    }
+
+    set((currentState) => {
+      const currentEntry = currentState.fcsSeriesCache.entriesByKey[key]
+      if (!currentEntry) {
+        return {}
+      }
+
+      return {
+        fcsSeriesCache: {
+          ...currentState.fcsSeriesCache,
+          entriesByKey: {
+            ...currentState.fcsSeriesCache.entriesByKey,
+            [key]: {
+              ...currentEntry,
+              lastAccessedAt: Date.now(),
+            },
+          },
+          lruKeys: [
+            ...currentState.fcsSeriesCache.lruKeys.filter((cachedKey) => cachedKey !== key),
+            key,
+          ],
+        },
+      }
+    })
+
+    return entry
+  },
+  setFCSSeriesCacheEntry: ({ key, task, data, approxBytes }) => {
+    let evicted = 0
+
+    set((state) => {
+      const cache = state.fcsSeriesCache
+      const now = Date.now()
+      const previous = cache.entriesByKey[key]
+      const nextApproxBytes = Math.max(1, Math.round(approxBytes ?? 1024))
+
+      const nextEntriesByKey: Record<string, FCSSeriesCacheEntry> = {
+        ...cache.entriesByKey,
+        [key]: {
+          key,
+          task,
+          data,
+          approxBytes: nextApproxBytes,
+          version: cache.version,
+          createdAt: previous?.createdAt ?? now,
+          lastAccessedAt: now,
+        },
+      }
+
+      let nextLruKeys = [...cache.lruKeys.filter((cachedKey) => cachedKey !== key), key]
+      let nextTotalBytes = cache.totalBytes - (previous?.approxBytes ?? 0) + nextApproxBytes
+
+      while (
+        nextLruKeys.length > cache.maxEntries ||
+        nextTotalBytes > cache.maxBytes
+      ) {
+        const candidateKey = nextLruKeys.shift()
+        if (!candidateKey) break
+
+        const candidate = nextEntriesByKey[candidateKey]
+        if (!candidate) continue
+
+        delete nextEntriesByKey[candidateKey]
+        nextTotalBytes = Math.max(0, nextTotalBytes - candidate.approxBytes)
+        evicted += 1
+      }
+
+      return {
+        fcsSeriesCache: {
+          ...cache,
+          entriesByKey: nextEntriesByKey,
+          lruKeys: nextLruKeys,
+          totalBytes: nextTotalBytes,
+        },
+      }
+    })
+
+    return { evicted }
+  },
+  invalidateFCSSeriesCache: () =>
+    set((state) => ({
+      fcsSeriesCache: {
+        ...initialFCSSeriesCache,
+        version: state.fcsSeriesCache.version + 1,
+        maxEntries: state.fcsSeriesCache.maxEntries,
+        maxBytes: state.fcsSeriesCache.maxBytes,
+      },
+    })),
+  setFCSSeriesCacheLimits: ({ maxEntries, maxBytes }) =>
+    set((state) => ({
+      fcsSeriesCache: {
+        ...state.fcsSeriesCache,
+        maxEntries: maxEntries ? Math.max(10, Math.min(1000, Math.round(maxEntries))) : state.fcsSeriesCache.maxEntries,
+        maxBytes: maxBytes ? Math.max(1024 * 1024, Math.min(256 * 1024 * 1024, Math.round(maxBytes))) : state.fcsSeriesCache.maxBytes,
+      },
+    })),
+  setFCSCompareSelectedSampleIds: (sampleIds) => set((state) => {
+    const selectedSampleIds = Array.from(new Set(sampleIds)).slice(0, 20)
+    const maxVisible = state.fcsCompareSession.maxVisibleOverlays
+    const existingVisible = state.fcsCompareSession.visibleSampleIds
+      .filter((id) => selectedSampleIds.includes(id))
+      .slice(0, maxVisible)
+    const autoVisible = selectedSampleIds
+      .filter((id) => !existingVisible.includes(id))
+      .slice(0, maxVisible)
+    const visibleSampleIds = Array.from(new Set([...existingVisible, ...autoVisible]))
+      .slice(0, maxVisible)
+
+    const currentPrimary = state.fcsCompareSession.primarySampleId
+    const primarySampleId = currentPrimary && selectedSampleIds.includes(currentPrimary)
+      ? currentPrimary
+      : (selectedSampleIds[0] ?? null)
+
+    const resultsBySampleId = Object.fromEntries(
+      Object.entries(state.fcsCompareSession.resultsBySampleId).filter(([id]) => selectedSampleIds.includes(id))
+    )
+    const scatterBySampleId = Object.fromEntries(
+      Object.entries(state.fcsCompareSession.scatterBySampleId).filter(([id]) => selectedSampleIds.includes(id))
+    )
+    const loadingBySampleId = Object.fromEntries(
+      Object.entries(state.fcsCompareSession.loadingBySampleId).filter(([id]) => selectedSampleIds.includes(id))
+    )
+    const errorBySampleId = Object.fromEntries(
+      Object.entries(state.fcsCompareSession.errorBySampleId).filter(([id]) => selectedSampleIds.includes(id))
+    )
+
+    const selectedUnchanged = areStringArraysEqual(state.fcsCompareSession.selectedSampleIds, selectedSampleIds)
+    const visibleUnchanged = areStringArraysEqual(state.fcsCompareSession.visibleSampleIds, visibleSampleIds)
+    const primaryUnchanged = state.fcsCompareSession.primarySampleId === primarySampleId
+    const resultsUnchanged = Object.keys(resultsBySampleId).length === Object.keys(state.fcsCompareSession.resultsBySampleId).length
+    const scatterUnchanged = Object.keys(scatterBySampleId).length === Object.keys(state.fcsCompareSession.scatterBySampleId).length
+    const loadingUnchanged = Object.keys(loadingBySampleId).length === Object.keys(state.fcsCompareSession.loadingBySampleId).length
+    const errorUnchanged = Object.keys(errorBySampleId).length === Object.keys(state.fcsCompareSession.errorBySampleId).length
+
+    if (
+      selectedUnchanged
+      && visibleUnchanged
+      && primaryUnchanged
+      && resultsUnchanged
+      && scatterUnchanged
+      && loadingUnchanged
+      && errorUnchanged
+    ) {
+      return state
+    }
+
+    return {
+      fcsCompareSession: {
+        ...state.fcsCompareSession,
+        selectedSampleIds,
+        visibleSampleIds,
+        primarySampleId,
+        resultsBySampleId,
+        scatterBySampleId,
+        loadingBySampleId,
+        errorBySampleId,
+      },
+    }
+  }),
+  setFCSCompareVisibleSampleIds: (sampleIds) => set((state) => {
+    const allowed = new Set(state.fcsCompareSession.selectedSampleIds)
+    const visibleSampleIds = Array.from(new Set(sampleIds))
+      .filter((id) => allowed.has(id))
+      .slice(0, state.fcsCompareSession.maxVisibleOverlays)
+
+    if (areStringArraysEqual(state.fcsCompareSession.visibleSampleIds, visibleSampleIds)) {
+      return state
+    }
+
+    return {
+      fcsCompareSession: {
+        ...state.fcsCompareSession,
+        visibleSampleIds,
+      },
+    }
+  }),
+  toggleFCSCompareSampleVisibility: (sampleId) => set((state) => {
+    if (!state.fcsCompareSession.selectedSampleIds.includes(sampleId)) {
+      return {}
+    }
+
+    const current = state.fcsCompareSession.visibleSampleIds
+    const isVisible = current.includes(sampleId)
+    const maxVisible = state.fcsCompareSession.maxVisibleOverlays
+    const visibleSampleIds = isVisible
+      ? current.filter((id) => id !== sampleId)
+      : [...current, sampleId].slice(-maxVisible)
+
+    return {
+      fcsCompareSession: {
+        ...state.fcsCompareSession,
+        visibleSampleIds,
+      },
+    }
+  }),
+  setFCSComparePrimarySampleId: (sampleId) => set((state) => {
+    if (sampleId && !state.fcsCompareSession.selectedSampleIds.includes(sampleId)) {
+      return {}
+    }
+    return {
+      fcsCompareSession: {
+        ...state.fcsCompareSession,
+        primarySampleId: sampleId,
+      },
+    }
+  }),
+  setFCSCompareSampleLoading: (sampleId, loading) => set((state) => ({
+    fcsCompareSession: {
+      ...state.fcsCompareSession,
+      loadingBySampleId: {
+        ...state.fcsCompareSession.loadingBySampleId,
+        [sampleId]: loading,
+      },
+    },
+  })),
+  setFCSCompareSampleError: (sampleId, error) => set((state) => ({
+    fcsCompareSession: {
+      ...state.fcsCompareSession,
+      errorBySampleId: {
+        ...state.fcsCompareSession.errorBySampleId,
+        [sampleId]: error,
+      },
+    },
+  })),
+  setFCSCompareSampleResult: (sampleId, result) => set((state) => {
+    const nextResults = { ...state.fcsCompareSession.resultsBySampleId }
+    if (result) {
+      nextResults[sampleId] = result
+    } else {
+      delete nextResults[sampleId]
+    }
+
+    return {
+      fcsCompareSession: {
+        ...state.fcsCompareSession,
+        resultsBySampleId: nextResults,
+      },
+    }
+  }),
+  setFCSCompareSampleScatter: (sampleId, scatter) => set((state) => {
+    const nextScatter = { ...state.fcsCompareSession.scatterBySampleId }
+    if (scatter) {
+      nextScatter[sampleId] = scatter
+    } else {
+      delete nextScatter[sampleId]
+    }
+
+    return {
+      fcsCompareSession: {
+        ...state.fcsCompareSession,
+        scatterBySampleId: nextScatter,
+      },
+    }
+  }),
+  setFCSCompareMaxVisibleOverlays: (maxVisible) => set((state) => {
+    const clamped = Math.max(1, Math.min(8, maxVisible))
+    return {
+      fcsCompareSession: {
+        ...state.fcsCompareSession,
+        maxVisibleOverlays: clamped,
+        visibleSampleIds: state.fcsCompareSession.visibleSampleIds.slice(0, clamped),
+      },
+    }
+  }),
+  clearFCSCompareSession: () => set({ fcsCompareSession: initialFCSCompareSession }),
+  createFCSCompareGraphInstance: (title) => {
+    const instance = createDefaultFCSCompareGraphInstance(title)
+    set((state) => ({
+      fcsCompareGraphInstances: [...state.fcsCompareGraphInstances, instance],
+      activeFCSCompareGraphInstanceId: instance.id,
+    }))
+    return instance.id
+  },
+  duplicateFCSCompareGraphInstance: (instanceId) => {
+    const state = useAnalysisStore.getState()
+    const source = state.fcsCompareGraphInstances.find((instance) => instance.id === instanceId)
+    if (!source) return null
+
+    const duplicate: FCSCompareGraphInstance = {
+      ...source,
+      id: `compare-graph-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      title: `${source.title} Copy`,
+      unifiedAxis: { ...source.unifiedAxis },
+      primaryAxis: { ...source.primaryAxis },
+      comparisonAxis: { ...source.comparisonAxis },
+      isMaximized: false,
+      createdAt: Date.now(),
+    }
+
+    set((currentState) => ({
+      fcsCompareGraphInstances: [...currentState.fcsCompareGraphInstances, duplicate],
+      activeFCSCompareGraphInstanceId: duplicate.id,
+    }))
+
+    return duplicate.id
+  },
+  removeFCSCompareGraphInstance: (instanceId) => set((state) => {
+    const remaining = state.fcsCompareGraphInstances.filter((instance) => instance.id !== instanceId)
+    if (remaining.length === 0) {
+      const replacement = createDefaultFCSCompareGraphInstance("Overlay Graph 1")
+      return {
+        fcsCompareGraphInstances: [replacement],
+        activeFCSCompareGraphInstanceId: replacement.id,
+      }
+    }
+
+    const nextActive = state.activeFCSCompareGraphInstanceId === instanceId
+      ? remaining[remaining.length - 1].id
+      : state.activeFCSCompareGraphInstanceId
+
+    return {
+      fcsCompareGraphInstances: remaining,
+      activeFCSCompareGraphInstanceId: nextActive,
+    }
+  }),
+  setActiveFCSCompareGraphInstance: (instanceId) => set((state) => ({
+    activeFCSCompareGraphInstanceId: state.fcsCompareGraphInstances.some((instance) => instance.id === instanceId)
+      ? instanceId
+      : state.activeFCSCompareGraphInstanceId,
+  })),
+  updateFCSCompareGraphInstance: (instanceId, updates) => set((state) => ({
+    fcsCompareGraphInstances: state.fcsCompareGraphInstances.map((instance) =>
+      instance.id === instanceId
+        ? {
+            ...instance,
+            ...updates,
+            unifiedAxis: updates.unifiedAxis ? { ...instance.unifiedAxis, ...updates.unifiedAxis } : instance.unifiedAxis,
+            primaryAxis: updates.primaryAxis ? { ...instance.primaryAxis, ...updates.primaryAxis } : instance.primaryAxis,
+            comparisonAxis: updates.comparisonAxis ? { ...instance.comparisonAxis, ...updates.comparisonAxis } : instance.comparisonAxis,
+          }
+        : instance
+    ),
+  })),
   setOverlayConfig: (config) =>
     set((state) => ({
       overlayConfig: { ...state.overlayConfig, ...config },
+      fcsCompareRequestVersion: state.fcsCompareRequestVersion + 1,
+      fcsSeriesCache: {
+        ...initialFCSSeriesCache,
+        version: state.fcsSeriesCache.version + 1,
+        maxEntries: state.fcsSeriesCache.maxEntries,
+        maxBytes: state.fcsSeriesCache.maxBytes,
+      },
     })),
   toggleOverlay: () =>
     set((state) => ({
       overlayConfig: { ...state.overlayConfig, enabled: !state.overlayConfig.enabled },
+      fcsCompareRequestVersion: state.fcsCompareRequestVersion + 1,
+      fcsSeriesCache: {
+        ...initialFCSSeriesCache,
+        version: state.fcsSeriesCache.version + 1,
+        maxEntries: state.fcsSeriesCache.maxEntries,
+        maxBytes: state.fcsSeriesCache.maxBytes,
+      },
     })),
 
   // NTA Analysis
@@ -843,13 +1408,16 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
   setNTACompareSelectedSampleIds: (sampleIds) => set((state) => {
     const selectedSampleIds = Array.from(new Set(sampleIds)).slice(0, 20)
     const maxVisible = state.ntaCompareSession.maxVisibleOverlays
-    const visibleSampleIds = state.ntaCompareSession.visibleSampleIds
+    const existingVisible = state.ntaCompareSession.visibleSampleIds
       .filter((id) => selectedSampleIds.includes(id))
       .slice(0, maxVisible)
 
-    const nextVisible = visibleSampleIds.length > 0
-      ? visibleSampleIds
-      : selectedSampleIds.slice(0, maxVisible)
+    const autoVisible = selectedSampleIds
+      .filter((id) => !existingVisible.includes(id))
+      .slice(0, maxVisible)
+
+    const nextVisible = Array.from(new Set([...existingVisible, ...autoVisible]))
+      .slice(0, maxVisible)
 
     const currentPrimary = state.ntaCompareSession.primarySampleId
     const primarySampleId = currentPrimary && selectedSampleIds.includes(currentPrimary)
@@ -865,6 +1433,11 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
     const errorBySampleId = Object.fromEntries(
       Object.entries(state.ntaCompareSession.errorBySampleId).filter(([id]) => selectedSampleIds.includes(id))
     )
+    const computedSeriesCacheByKey = Object.fromEntries(
+      Object.entries(state.ntaCompareSession.computedSeriesCacheByKey).filter(([, entry]) =>
+        selectedSampleIds.includes(entry.sampleId)
+      )
+    )
 
     return {
       ntaCompareSession: {
@@ -875,6 +1448,7 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
         resultsBySampleId,
         loadingBySampleId,
         errorBySampleId,
+        computedSeriesCacheByKey,
       },
     }
   }),
@@ -953,6 +1527,21 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
       },
     }
   }),
+  setNTACompareComputedSeriesCacheEntry: (entry) => set((state) => ({
+    ntaCompareSession: {
+      ...state.ntaCompareSession,
+      computedSeriesCacheByKey: {
+        ...state.ntaCompareSession.computedSeriesCacheByKey,
+        [entry.cacheKey]: entry,
+      },
+    },
+  })),
+  clearNTACompareComputedSeriesCache: () => set((state) => ({
+    ntaCompareSession: {
+      ...state.ntaCompareSession,
+      computedSeriesCacheByKey: {},
+    },
+  })),
   setNTACompareMaxVisibleOverlays: (maxVisible) => set((state) => {
     const clamped = Math.max(1, Math.min(8, maxVisible))
     return {
@@ -1183,7 +1772,7 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
     set({ gatingState: initialGatingState }),
 }),
     {
-      name: 'ev-analysis-storage', // unique name for storage key
+      name: 'ev-analysis-storage-v2', // rotated key to clear old sessionStorage cache
       // Use sessionStorage - persists on refresh, but clears when browser tab is closed
       storage: createJSONStorage(() => sessionStorage),
       // Selectively persist only important state (not File objects or transient state)
@@ -1223,11 +1812,21 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
         selectedNTAAnalysisProfileId: state.selectedNTAAnalysisProfileId,
         selectedNTAReportProfileId: state.selectedNTAReportProfileId,
         ntaLockedBuckets: state.ntaLockedBuckets,
+        fcsCompareSession: {
+          ...state.fcsCompareSession,
+          resultsBySampleId: {},
+          scatterBySampleId: {},
+          loadingBySampleId: {},
+          errorBySampleId: {},
+        },
+        fcsCompareGraphInstances: state.fcsCompareGraphInstances,
+        activeFCSCompareGraphInstanceId: state.activeFCSCompareGraphInstanceId,
         ntaCompareSession: {
           ...state.ntaCompareSession,
           resultsBySampleId: {},
           loadingBySampleId: {},
           errorBySampleId: {},
+          computedSeriesCacheByKey: {},
         },
         crossComparisonSettings: state.crossComparisonSettings,
         // Gating state (preserve gates between refreshes)
@@ -1252,6 +1851,25 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
         if (state) {
           // Mark hydration as complete
           state._hasHydrated = true
+
+          // Migrate older sessions that persisted the previous overlay limit.
+          if (state.ntaCompareSession?.maxVisibleOverlays && state.ntaCompareSession.maxVisibleOverlays < 8) {
+            state.ntaCompareSession.maxVisibleOverlays = 8
+          }
+
+          if (state.fcsCompareSession?.maxVisibleOverlays && state.fcsCompareSession.maxVisibleOverlays < 8) {
+            state.fcsCompareSession.maxVisibleOverlays = 8
+          }
+
+          if (!state.fcsCompareGraphInstances || state.fcsCompareGraphInstances.length === 0) {
+            const replacement = createDefaultFCSCompareGraphInstance("Overlay Graph 1")
+            state.fcsCompareGraphInstances = [replacement]
+            state.activeFCSCompareGraphInstanceId = replacement.id
+          }
+
+          if (!state.activeFCSCompareGraphInstanceId) {
+            state.activeFCSCompareGraphInstanceId = state.fcsCompareGraphInstances[0]?.id ?? null
+          }
           
           // Convert date strings back to Date objects
           if (state.chatMessages) {

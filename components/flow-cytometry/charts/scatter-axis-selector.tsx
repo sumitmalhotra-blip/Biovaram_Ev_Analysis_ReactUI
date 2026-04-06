@@ -168,6 +168,50 @@ export function ScatterAxisSelector({
   const isSelected = (rec: AxisRecommendation) => 
     rec.x_channel === xChannel && rec.y_channel === yChannel
 
+  const renderChannelOptions = () => (
+    <>
+      {channels.scatter.length > 0 && (
+        <>
+          <div className="px-2 py-1 text-xs font-semibold text-muted-foreground bg-muted/50">
+            Scatter
+          </div>
+          {channels.scatter.map((ch) => (
+            <SelectItem key={ch} value={ch} className="text-xs">
+              {ch}
+            </SelectItem>
+          ))}
+        </>
+      )}
+      {channels.fluorescence.length > 0 && (
+        <>
+          <div className="px-2 py-1 text-xs font-semibold text-muted-foreground bg-muted/50 mt-1">
+            Fluorescence
+          </div>
+          {channels.fluorescence.map((ch) => (
+            <SelectItem key={ch} value={ch} className="text-xs">
+              {ch}
+            </SelectItem>
+          ))}
+        </>
+      )}
+      {channels.all.filter(ch => !channels.scatter.includes(ch) && !channels.fluorescence.includes(ch)).length > 0 && (
+        <>
+          <div className="px-2 py-1 text-xs font-semibold text-muted-foreground bg-muted/50 mt-1">
+            Other
+          </div>
+          {channels.all
+            .filter(ch => !channels.scatter.includes(ch) && !channels.fluorescence.includes(ch))
+            .map((ch) => (
+              <SelectItem key={ch} value={ch} className="text-xs">
+                {ch}
+              </SelectItem>
+            ))
+          }
+        </>
+      )}
+    </>
+  )
+
   if (compact) {
     // Compact mode: Just a popover with recommendations
     return (
@@ -197,6 +241,40 @@ export function ScatterAxisSelector({
             <p className="text-xs text-muted-foreground mt-1">
               Optimal channel pairs based on variance, correlation, and cytometry best practices.
             </p>
+          </div>
+          <div className="p-3 border-b bg-muted/20 space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <label className="text-[10px] font-medium text-muted-foreground">X-Axis</label>
+                <Select
+                  value={xChannel}
+                  onValueChange={(val) => onAxisChange(val, yChannel)}
+                  disabled={disabled || loading}
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="X channel" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {renderChannelOptions()}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-medium text-muted-foreground">Y-Axis</label>
+                <Select
+                  value={yChannel}
+                  onValueChange={(val) => onAxisChange(xChannel, val)}
+                  disabled={disabled || loading}
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="Y channel" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {renderChannelOptions()}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           </div>
           <div className="max-h-[300px] overflow-auto">
             {loading ? (
@@ -341,45 +419,7 @@ export function ScatterAxisSelector({
                     <SelectValue placeholder="Select X channel" />
                   </SelectTrigger>
                   <SelectContent>
-                    {channels.scatter.length > 0 && (
-                      <>
-                        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground bg-muted/50">
-                          Scatter
-                        </div>
-                        {channels.scatter.map((ch) => (
-                          <SelectItem key={ch} value={ch} className="text-xs">
-                            {ch}
-                          </SelectItem>
-                        ))}
-                      </>
-                    )}
-                    {channels.fluorescence.length > 0 && (
-                      <>
-                        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground bg-muted/50 mt-1">
-                          Fluorescence
-                        </div>
-                        {channels.fluorescence.map((ch) => (
-                          <SelectItem key={ch} value={ch} className="text-xs">
-                            {ch}
-                          </SelectItem>
-                        ))}
-                      </>
-                    )}
-                    {channels.all.filter(ch => !channels.scatter.includes(ch) && !channels.fluorescence.includes(ch)).length > 0 && (
-                      <>
-                        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground bg-muted/50 mt-1">
-                          Other
-                        </div>
-                        {channels.all
-                          .filter(ch => !channels.scatter.includes(ch) && !channels.fluorescence.includes(ch))
-                          .map((ch) => (
-                            <SelectItem key={ch} value={ch} className="text-xs">
-                              {ch}
-                            </SelectItem>
-                          ))
-                        }
-                      </>
-                    )}
+                    {renderChannelOptions()}
                   </SelectContent>
                 </Select>
               </div>
@@ -395,45 +435,7 @@ export function ScatterAxisSelector({
                     <SelectValue placeholder="Select Y channel" />
                   </SelectTrigger>
                   <SelectContent>
-                    {channels.scatter.length > 0 && (
-                      <>
-                        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground bg-muted/50">
-                          Scatter
-                        </div>
-                        {channels.scatter.map((ch) => (
-                          <SelectItem key={ch} value={ch} className="text-xs">
-                            {ch}
-                          </SelectItem>
-                        ))}
-                      </>
-                    )}
-                    {channels.fluorescence.length > 0 && (
-                      <>
-                        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground bg-muted/50 mt-1">
-                          Fluorescence
-                        </div>
-                        {channels.fluorescence.map((ch) => (
-                          <SelectItem key={ch} value={ch} className="text-xs">
-                            {ch}
-                          </SelectItem>
-                        ))}
-                      </>
-                    )}
-                    {channels.all.filter(ch => !channels.scatter.includes(ch) && !channels.fluorescence.includes(ch)).length > 0 && (
-                      <>
-                        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground bg-muted/50 mt-1">
-                          Other
-                        </div>
-                        {channels.all
-                          .filter(ch => !channels.scatter.includes(ch) && !channels.fluorescence.includes(ch))
-                          .map((ch) => (
-                            <SelectItem key={ch} value={ch} className="text-xs">
-                              {ch}
-                            </SelectItem>
-                          ))
-                        }
-                      </>
-                    )}
+                    {renderChannelOptions()}
                   </SelectContent>
                 </Select>
               </div>

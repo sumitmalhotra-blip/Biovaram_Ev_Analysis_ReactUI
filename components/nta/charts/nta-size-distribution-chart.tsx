@@ -1,11 +1,12 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { ComposedChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend } from "recharts"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Eye, EyeOff, Layers } from "lucide-react"
 import type { NTAResult } from "@/lib/api-client"
+import { useAnalysisStore } from "@/lib/store"
 
 interface NTASizeDistributionChartProps {
   data?: NTAResult
@@ -35,6 +36,35 @@ const NTA_BINS = [
   { key: "bin_150_200nm_pct" as const, min: 150, max: 200, label: "150-200nm" },
   { key: "bin_200_plus_pct" as const, min: 200, max: 350, label: "200+nm" },
 ]
+
+const MAX_DISTRIBUTION_POINTS = 260
+
+// Downsample dense curves while preserving visible shape.
+const downsampleDistributionData = (data: Array<{ size: number; count: number }>, maxPoints = MAX_DISTRIBUTION_POINTS) => {
+  if (data.length <= maxPoints) {
+    return data
+  }
+
+  const bucketSize = Math.ceil(data.length / maxPoints)
+  const sampled: Array<{ size: number; count: number }> = []
+
+  for (let start = 0; start < data.length; start += bucketSize) {
+    const bucket = data.slice(start, start + bucketSize)
+    if (bucket.length === 0) continue
+
+    const peak = bucket.reduce((max, point) => (point.count > max.count ? point : max), bucket[0])
+    sampled.push({ size: peak.size, count: peak.count })
+  }
+
+  if (sampled[0]?.size !== data[0]?.size) {
+    sampled.unshift(data[0])
+  }
+  if (sampled[sampled.length - 1]?.size !== data[data.length - 1]?.size) {
+    sampled.push(data[data.length - 1])
+  }
+
+  return sampled.slice(0, maxPoints)
+}
 
 // Generate NTA size distribution data from results — uses REAL data when available
 const generateData = (results?: NTAResult, _label?: string): { data: Array<{ size: number; count: number }>, isReal: boolean } => {
@@ -124,25 +154,60 @@ export function NTASizeDistributionChart({
   showOverlayControls = true,
 }: NTASizeDistributionChartProps) {
   const [visibilityOverrides, setVisibilityOverrides] = useState<Record<string, boolean>>({})
+  const [debouncedOverlaySeries, setDebouncedOverlaySeries] = useState(overlaySeries)
+  const { ntaCompareSession, setNTACompareComputedSeriesCacheEntry } = useAnalysisStore()
 
-  const { data: primaryData, isReal: primaryIsReal } = useMemo(() => generateData(results), [results])
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedOverlaySeries(overlaySeries)
+    }, 120)
+    return () => window.clearTimeout(timer)
+  }, [overlaySeries])
+
+  const { data: primaryGeneratedData, isReal: primaryIsReal } = useMemo(() => generateData(results), [results])
+  const primaryData = useMemo(
+    () => downsampleDistributionData(primaryGeneratedData),
+    [primaryGeneratedData]
+  )
 
   const preparedSeries = useMemo(() => {
-    const visible = overlaySeries.filter((series) => visibilityOverrides[series.sampleId] ?? series.visible)
+    const visible = debouncedOverlaySeries.filter((series) => visibilityOverrides[series.sampleId] ?? series.visible)
     const sorted = [...visible].sort((a, b) => {
       if (a.isPrimary === b.isPrimary) return 0
       return a.isPrimary ? -1 : 1
     })
 
     return sorted.map((series, index) => {
-      const generated = generateData(series.result, series.label)
+      const cacheKey = `dist:${series.sampleId}:${series.result.id ?? "no-result-id"}`
+      const cached = ntaCompareSession.computedSeriesCacheByKey[cacheKey]
+      const cachedData = cached?.points?.map((point) => ({ size: point.x, count: point.y }))
+      const generated = cachedData && cachedData.length > 0
+        ? { data: cachedData, isReal: true }
+        : generateData(series.result, series.label)
+      const sampledData = downsampleDistributionData(generated.data)
+
       return {
         ...series,
+        cacheKey,
+        shouldCache: !cached,
         chartKey: `series_${index}`,
-        data: generated.data,
+        data: sampledData,
       }
     })
-  }, [overlaySeries, visibilityOverrides])
+  }, [debouncedOverlaySeries, visibilityOverrides, ntaCompareSession.computedSeriesCacheByKey])
+
+  useEffect(() => {
+    preparedSeries.forEach((series) => {
+      if (!series.shouldCache) return
+      setNTACompareComputedSeriesCacheEntry({
+        cacheKey: series.cacheKey,
+        chartType: "distribution",
+        sampleId: series.sampleId,
+        points: series.data.map((point) => ({ x: point.size, y: point.count })),
+        updatedAt: Date.now(),
+      })
+    })
+  }, [preparedSeries, setNTACompareComputedSeriesCacheEntry])
 
   const hasOverlay = preparedSeries.length > 1
 

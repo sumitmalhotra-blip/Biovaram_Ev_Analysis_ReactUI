@@ -11,6 +11,15 @@ import {
   isTimeoutError,
   categorizeError,
 } from "@/lib/error-utils"
+import {
+  buildScatterPriorityOrder,
+  clampCompareLoadConfig,
+  isCurrentCompareRequestVersion,
+  normalizeCompareSampleIds,
+  normalizeVisibleSampleIds,
+} from "@/lib/fcs-compare-acceptance-helpers"
+import { runScatterSeriesWorker } from "@/lib/fcs-series-worker-client"
+import { buildScatterSeriesCacheKey, estimateSeriesBytes } from "@/lib/fcs-series-cache-utils"
 
 const HEALTH_CHECK_INTERVAL = 30000 // 30 seconds when connected
 const HEALTH_CHECK_INTERVAL_DISCONNECTED = 5000 // 5 seconds when disconnected (faster recovery)
@@ -40,6 +49,17 @@ export function useApi() {
     setSecondaryFCSResults,
     setSecondaryFCSAnalyzing,
     setSecondaryFCSError,
+    setSecondaryFCSScatterData,
+    setFCSCompareSelectedSampleIds,
+    setFCSCompareVisibleSampleIds,
+    setFCSComparePrimarySampleId,
+    setFCSCompareSampleLoading,
+    setFCSCompareSampleError,
+    setFCSCompareSampleResult,
+    setFCSCompareSampleScatter,
+    incrementFCSCompareRequestVersion,
+    getFCSSeriesCacheEntry,
+    setFCSSeriesCacheEntry,
     setOverlayConfig,
     setNTAFile,
     setNTASampleId,
@@ -47,7 +67,6 @@ export function useApi() {
     setNTAAnalyzing,
     setNTAError,
     setNTAFileMetadata,
-    setNTACompareSelectedSampleIds,
     setNTACompareSampleLoading,
     setNTACompareSampleError,
     setNTACompareSampleResult,
@@ -56,6 +75,10 @@ export function useApi() {
     apiConnected,
     setActiveTab,
   } = useAnalysisStore()
+
+  const isCurrentFCSCompareRequest = useCallback((requestVersion: number) => {
+    return isCurrentCompareRequestVersion(useAnalysisStore.getState().fcsCompareRequestVersion, requestVersion)
+  }, [])
 
   // =========================================================================
   // Health Check
@@ -194,6 +217,8 @@ export function useApi() {
    */
   const openSampleInTab = useCallback(
     async (sampleId: string, type: "fcs" | "nta"): Promise<boolean> => {
+      const requestVersion = type === "fcs" ? incrementFCSCompareRequestVersion() : null
+
       if (apiClient.offline) {
         toast({
           variant: "destructive",
@@ -206,6 +231,10 @@ export function useApi() {
       try {
         // First, get sample details to verify the file exists
         const sample = await apiClient.getSample(sampleId)
+
+        if (requestVersion !== null && !isCurrentFCSCompareRequest(requestVersion)) {
+          return false
+        }
         
         if (!sample) {
           toast({
@@ -229,6 +258,10 @@ export function useApi() {
 
           // Try to load saved FCS results
           const response = await apiClient.getFCSResults(sampleId)
+
+          if (!isCurrentFCSCompareRequest(requestVersion!)) {
+            return false
+          }
           
           if (response && response.results.length > 0) {
             // Set the most recent result
@@ -298,6 +331,10 @@ export function useApi() {
         }
         return false
       } catch (error) {
+        if (requestVersion !== null && !isCurrentFCSCompareRequest(requestVersion)) {
+          return false
+        }
+
         const message = getUserFriendlyErrorMessage(error)
         toast({
           variant: "destructive",
@@ -307,7 +344,16 @@ export function useApi() {
         return false
       }
     },
-    [toast, setFCSSampleId, setFCSResults, setNTASampleId, setNTAResults, setActiveTab]
+    [
+      toast,
+      setFCSSampleId,
+      setFCSResults,
+      setNTASampleId,
+      setNTAResults,
+      setActiveTab,
+      incrementFCSCompareRequestVersion,
+      isCurrentFCSCompareRequest,
+    ]
   )
 
   const deleteSample = useCallback(
@@ -366,6 +412,8 @@ export function useApi() {
         return null
       }
 
+      const requestVersion = incrementFCSCompareRequestVersion()
+
       setFCSFile(file)
       setFCSAnalyzing(true)
       setFCSError(null)
@@ -399,6 +447,10 @@ export function useApi() {
             },
           }
         )
+
+        if (!isCurrentFCSCompareRequest(requestVersion)) {
+          return null
+        }
 
         if (response.success) {
           setFCSSampleId(response.sample_id)
@@ -435,6 +487,10 @@ export function useApi() {
           return response
         }
       } catch (error) {
+        if (!isCurrentFCSCompareRequest(requestVersion)) {
+          return null
+        }
+
         const category = categorizeError(error)
         const message = getUserFriendlyErrorMessage(error)
         setFCSError(message)
@@ -445,7 +501,9 @@ export function useApi() {
         })
         return null
       } finally {
-        setFCSAnalyzing(false)
+        if (isCurrentFCSCompareRequest(requestVersion)) {
+          setFCSAnalyzing(false)
+        }
       }
     },
     [
@@ -459,6 +517,8 @@ export function useApi() {
       fetchSamples,
       toast,
       userId,
+      incrementFCSCompareRequestVersion,
+      isCurrentFCSCompareRequest,
     ]
   )
 
@@ -482,6 +542,8 @@ export function useApi() {
         })
         return null
       }
+
+      const requestVersion = incrementFCSCompareRequestVersion()
 
       setSecondaryFCSFile(file)
       setSecondaryFCSAnalyzing(true)
@@ -508,6 +570,10 @@ export function useApi() {
             },
           }
         )
+
+        if (!isCurrentFCSCompareRequest(requestVersion)) {
+          return null
+        }
 
         if (response.success) {
           setSecondaryFCSSampleId(response.sample_id)
@@ -538,6 +604,10 @@ export function useApi() {
           return response
         }
       } catch (error) {
+        if (!isCurrentFCSCompareRequest(requestVersion)) {
+          return null
+        }
+
         const message = getUserFriendlyErrorMessage(error)
         setSecondaryFCSError(message)
         toast({
@@ -547,7 +617,9 @@ export function useApi() {
         })
         return null
       } finally {
-        setSecondaryFCSAnalyzing(false)
+        if (isCurrentFCSCompareRequest(requestVersion)) {
+          setSecondaryFCSAnalyzing(false)
+        }
       }
     },
     [
@@ -561,6 +633,188 @@ export function useApi() {
       fetchSamples,
       toast,
       userId,
+      incrementFCSCompareRequestVersion,
+      isCurrentFCSCompareRequest,
+    ]
+  )
+
+  const uploadFCSCompareBatch = useCallback(
+    async (
+      files: Array<File | { key: string; file: File }>,
+      options?: {
+        metadata?: {
+          treatment?: string
+          concentration_ug?: number
+          preparation_method?: string
+          operator?: string
+          notes?: string
+        }
+        onFileStatus?: (update: {
+          key: string
+          fileName: string
+          status: "uploading" | "success" | "error"
+          sampleId?: string
+          error?: string
+        }) => void
+      }
+    ): Promise<{
+      total: number
+      success: number
+      failed: number
+      successfulSampleIds: string[]
+      failedByFileKey: Record<string, string>
+    }> => {
+      const cappedFiles = files.slice(0, 10).map((entry, index) => {
+        if (entry instanceof File) {
+          return {
+            key: `${entry.name}-${entry.lastModified}-${index}`,
+            file: entry,
+          }
+        }
+        return entry
+      })
+
+      if (cappedFiles.length === 0) {
+        return { total: 0, success: 0, failed: 0, successfulSampleIds: [], failedByFileKey: {} }
+      }
+
+      if (apiClient.offline) {
+        const failedByFileKey: Record<string, string> = {}
+        cappedFiles.forEach(({ file, key }) => {
+          failedByFileKey[key] = "Backend offline"
+          options?.onFileStatus?.({
+            key,
+            fileName: file.name,
+            status: "error",
+            error: "Backend offline",
+          })
+        })
+        return {
+          total: cappedFiles.length,
+          success: 0,
+          failed: cappedFiles.length,
+          successfulSampleIds: [],
+          failedByFileKey,
+        }
+      }
+
+      const currentState = useAnalysisStore.getState()
+      const existingSelected = currentState.fcsCompareSession.selectedSampleIds
+      const successfulSampleIds: string[] = []
+      const failedByFileKey: Record<string, string> = {}
+
+      const fcsSettings = useAnalysisStore.getState().fcsAnalysisSettings
+
+      for (let index = 0; index < cappedFiles.length; index += 1) {
+        const { file, key } = cappedFiles[index]
+
+        options?.onFileStatus?.({ key, fileName: file.name, status: "uploading" })
+
+        try {
+          const response = await retryWithBackoff(
+            () => apiClient.uploadFCS(file, {
+              ...options?.metadata,
+              user_id: userId,
+              wavelength_nm: fcsSettings?.laserWavelength,
+              n_particle: fcsSettings?.particleRI,
+              n_medium: fcsSettings?.mediumRI,
+            }),
+            {
+              maxAttempts: 2,
+              initialDelay: 1500,
+              shouldRetry: (error) => {
+                const category = categorizeError(error)
+                return category === "server" || category === "timeout"
+              },
+            }
+          )
+
+          successfulSampleIds.push(response.sample_id)
+          setFCSCompareSampleResult(response.sample_id, response.fcs_results ?? null)
+          setFCSCompareSampleError(response.sample_id, null)
+          setFCSCompareSampleLoading(response.sample_id, false)
+
+          addProcessingJob({
+            id: `${response.job_id}_compare_${index}`,
+            job_type: "fcs_parse",
+            status: response.processing_status,
+            sample_id: response.id,
+          })
+
+          options?.onFileStatus?.({
+            key,
+            fileName: file.name,
+            status: "success",
+            sampleId: response.sample_id,
+          })
+        } catch (error) {
+          const message = getUserFriendlyErrorMessage(error)
+          failedByFileKey[key] = message
+          options?.onFileStatus?.({
+            key,
+            fileName: file.name,
+            status: "error",
+            error: message,
+          })
+        }
+      }
+
+      if (successfulSampleIds.length > 0) {
+        const mergedSelected = Array.from(new Set([...existingSelected, ...successfulSampleIds])).slice(0, 20)
+        setFCSCompareSelectedSampleIds(mergedSelected)
+        setFCSCompareVisibleSampleIds(mergedSelected)
+
+        const latestState = useAnalysisStore.getState()
+        if (!latestState.fcsCompareSession.primarySampleId) {
+          setFCSComparePrimarySampleId(successfulSampleIds[0])
+        }
+
+        // Preserve current two-file compare behavior while adding multi-file session support.
+        if (!latestState.fcsAnalysis.sampleId) {
+          const firstId = successfulSampleIds[0]
+          const firstResult = latestState.fcsCompareSession.resultsBySampleId[firstId] ?? null
+          setFCSFile(cappedFiles[0].file)
+          setFCSSampleId(firstId)
+          setFCSResults(firstResult)
+        }
+
+        if (!latestState.secondaryFcsAnalysis.sampleId && successfulSampleIds.length > 1) {
+          const secondId = successfulSampleIds[1]
+          const secondResult = latestState.fcsCompareSession.resultsBySampleId[secondId] ?? null
+          setSecondaryFCSFile(cappedFiles[1]?.file ?? null)
+          setSecondaryFCSSampleId(secondId)
+          setSecondaryFCSResults(secondResult)
+          setOverlayConfig({ enabled: true })
+        }
+
+        fetchSamples()
+      }
+
+      return {
+        total: cappedFiles.length,
+        success: successfulSampleIds.length,
+        failed: cappedFiles.length - successfulSampleIds.length,
+        successfulSampleIds,
+        failedByFileKey,
+      }
+    },
+    [
+      userId,
+      setFCSCompareSampleResult,
+      setFCSCompareSampleError,
+      setFCSCompareSampleLoading,
+      addProcessingJob,
+      setFCSCompareSelectedSampleIds,
+      setFCSCompareVisibleSampleIds,
+      setFCSComparePrimarySampleId,
+      setFCSFile,
+      setFCSSampleId,
+      setFCSResults,
+      setSecondaryFCSFile,
+      setSecondaryFCSSampleId,
+      setSecondaryFCSResults,
+      setOverlayConfig,
+      fetchSamples,
     ]
   )
 
@@ -584,6 +838,314 @@ export function useApi() {
       }
     },
     [toast]
+  )
+
+  const loadFCSCompareSamples = useCallback(
+    async (
+      sampleIds: string[],
+      options?: {
+        visibleSampleIds?: string[]
+        resultConcurrency?: number
+        scatterConcurrency?: number
+        scatterPointLimit?: number
+      }
+    ): Promise<{
+      total: number
+      loadedResults: number
+      loadedScatter: number
+      failed: number
+      resultsBySampleId: Record<string, FCSResult | null>
+      scatterBySampleId: Record<string, Array<{ x: number; y: number; index: number; diameter?: number }> | null>
+      errorsBySampleId: Record<string, string>
+      cacheStats: { hits: number; misses: number; evictions: number }
+      cancelled: boolean
+    }> => {
+      const normalizedSampleIds = normalizeCompareSampleIds(sampleIds, 10)
+
+      if (normalizedSampleIds.length === 0) {
+        return {
+          total: 0,
+          loadedResults: 0,
+          loadedScatter: 0,
+          failed: 0,
+          resultsBySampleId: {},
+          scatterBySampleId: {},
+          errorsBySampleId: {},
+          cacheStats: { hits: 0, misses: 0, evictions: 0 },
+          cancelled: false,
+        }
+      }
+
+      const requestVersion = incrementFCSCompareRequestVersion()
+      const isStale = () => !isCurrentFCSCompareRequest(requestVersion)
+
+      const { resultConcurrency, scatterConcurrency, scatterPointLimit } = clampCompareLoadConfig(options)
+      const normalizedVisible = normalizeVisibleSampleIds(options?.visibleSampleIds ?? [], normalizedSampleIds)
+      const scatterPriorityOrder = buildScatterPriorityOrder(normalizedSampleIds, normalizedVisible)
+
+      setFCSCompareSelectedSampleIds(normalizedSampleIds)
+      setFCSCompareVisibleSampleIds(normalizedVisible)
+
+      const state = useAnalysisStore.getState()
+      const primarySampleId = state.fcsAnalysis.sampleId
+      const secondarySampleId = state.secondaryFcsAnalysis.sampleId
+      const preferredPrimary = state.fcsCompareSession.primarySampleId
+      const resolvedPrimary = preferredPrimary && normalizedSampleIds.includes(preferredPrimary)
+        ? preferredPrimary
+        : (normalizedSampleIds[0] ?? null)
+
+      setFCSComparePrimarySampleId(resolvedPrimary)
+
+      normalizedSampleIds.forEach((sampleId) => {
+        setFCSCompareSampleLoading(sampleId, true)
+        setFCSCompareSampleError(sampleId, null)
+      })
+
+      if (apiClient.offline) {
+        return {
+          total: normalizedSampleIds.length,
+          loadedResults: 0,
+          loadedScatter: 0,
+          failed: normalizedSampleIds.length,
+          resultsBySampleId: Object.fromEntries(normalizedSampleIds.map((id) => [id, null])),
+          scatterBySampleId: Object.fromEntries(normalizedSampleIds.map((id) => [id, null])),
+          errorsBySampleId: Object.fromEntries(normalizedSampleIds.map((id) => [id, "Backend offline"])),
+          cacheStats: { hits: 0, misses: 0, evictions: 0 },
+          cancelled: false,
+        }
+      }
+
+      const resultsBySampleId: Record<string, FCSResult | null> = {}
+      const scatterBySampleId: Record<string, Array<{ x: number; y: number; index: number; diameter?: number }> | null> = {}
+      const errorsBySampleId: Record<string, string> = {}
+      let loadedResults = 0
+      let loadedScatter = 0
+      let failed = 0
+      let cacheHits = 0
+      let cacheMisses = 0
+      let cacheEvictions = 0
+
+      try {
+        let resultCursor = 0
+        const resultWorker = async () => {
+          while (true) {
+            const currentIndex = resultCursor
+            resultCursor += 1
+
+            const sampleId = normalizedSampleIds[currentIndex]
+            if (!sampleId) {
+              return
+            }
+
+            if (isStale()) {
+              return
+            }
+
+            try {
+              const response = await apiClient.getFCSResults(sampleId)
+
+              if (isStale()) {
+                return
+              }
+
+              const latestResult = response?.results?.[0] || null
+              resultsBySampleId[sampleId] = latestResult
+              setFCSCompareSampleResult(sampleId, latestResult)
+
+              if (latestResult) {
+                loadedResults += 1
+
+                if (sampleId === primarySampleId) {
+                  setFCSResults(latestResult)
+                }
+                if (sampleId === secondarySampleId) {
+                  setSecondaryFCSResults(latestResult)
+                }
+              } else {
+                failed += 1
+                errorsBySampleId[sampleId] = "No FCS results found"
+                setFCSCompareSampleError(sampleId, "No FCS results found")
+              }
+            } catch (error) {
+              if (isStale()) {
+                return
+              }
+
+              failed += 1
+              const message = getUserFriendlyErrorMessage(error)
+              resultsBySampleId[sampleId] = null
+              errorsBySampleId[sampleId] = message
+              setFCSCompareSampleResult(sampleId, null)
+              setFCSCompareSampleError(sampleId, message)
+            }
+          }
+        }
+
+        await Promise.all(
+          Array.from({ length: Math.min(resultConcurrency, normalizedSampleIds.length) }, () => resultWorker())
+        )
+
+        if (isStale()) {
+          return {
+            total: normalizedSampleIds.length,
+            loadedResults,
+            loadedScatter,
+            failed,
+            resultsBySampleId,
+            scatterBySampleId,
+            errorsBySampleId,
+            cacheStats: { hits: cacheHits, misses: cacheMisses, evictions: cacheEvictions },
+            cancelled: true,
+          }
+        }
+
+        let scatterCursor = 0
+        const scatterWorker = async () => {
+          while (true) {
+            const currentIndex = scatterCursor
+            scatterCursor += 1
+
+            const sampleId = scatterPriorityOrder[currentIndex]
+            if (!sampleId) {
+              return
+            }
+
+            if (isStale()) {
+              return
+            }
+
+            try {
+              const scatterResponse = await apiClient.getScatterData(sampleId, scatterPointLimit)
+
+              if (isStale()) {
+                return
+              }
+
+              const rawScatterData = (scatterResponse?.data ?? []) as Array<{ x: number; y: number; index: number; diameter?: number }>
+              let scatterData: Array<{ x: number; y: number; index: number; diameter?: number }> | null = null
+
+              if (rawScatterData.length > 0) {
+                const scatterCacheKey = buildScatterSeriesCacheKey({
+                  sampleId,
+                  pointLimit: scatterPointLimit,
+                })
+
+                const cachedEntry = getFCSSeriesCacheEntry(scatterCacheKey)
+                if (cachedEntry && cachedEntry.task === "scatterSeries") {
+                  const cachedPayload = cachedEntry.data as { points?: Array<{ x: number; y: number; index: number; diameter?: number }> }
+                  if (cachedPayload.points && cachedPayload.points.length > 0) {
+                    scatterData = cachedPayload.points
+                    cacheHits += 1
+                  }
+                }
+
+                if (!scatterData) {
+                  cacheMisses += 1
+                }
+
+                try {
+                  if (!scatterData) {
+                    const scatterWorkerPayload = await runScatterSeriesWorker(requestVersion * 1000 + currentIndex, {
+                      points: rawScatterData,
+                      maxPoints: scatterPointLimit,
+                    })
+
+                    scatterData = scatterWorkerPayload.points
+                    const cacheResult = setFCSSeriesCacheEntry({
+                      key: scatterCacheKey,
+                      task: "scatterSeries",
+                      data: scatterWorkerPayload,
+                      approxBytes: estimateSeriesBytes(scatterWorkerPayload),
+                    })
+                    cacheEvictions += cacheResult.evicted
+                  }
+
+                  if (isStale()) {
+                    return
+                  }
+                } catch {
+                  // Worker failures should not block compare rendering; fall back to local transform.
+                  if (!scatterData) {
+                    scatterData = rawScatterData
+                      .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
+                      .map((point, index) => ({
+                        x: point.x,
+                        y: point.y,
+                        index: Number.isFinite(point.index) ? point.index : index,
+                        diameter: Number.isFinite(point.diameter) ? point.diameter : undefined,
+                      }))
+                  }
+                }
+              }
+
+              scatterBySampleId[sampleId] = scatterData
+              setFCSCompareSampleScatter(sampleId, scatterData)
+
+              if (scatterData && scatterData.length > 0) {
+                loadedScatter += 1
+
+                if (sampleId === secondarySampleId) {
+                  setSecondaryFCSScatterData(scatterData)
+                }
+              } else {
+                if (!errorsBySampleId[sampleId]) {
+                  errorsBySampleId[sampleId] = "No scatter data found"
+                  setFCSCompareSampleError(sampleId, "No scatter data found")
+                }
+              }
+            } catch (error) {
+              if (isStale()) {
+                return
+              }
+
+              const message = getUserFriendlyErrorMessage(error)
+              scatterBySampleId[sampleId] = null
+              setFCSCompareSampleScatter(sampleId, null)
+              if (!errorsBySampleId[sampleId]) {
+                errorsBySampleId[sampleId] = message
+                setFCSCompareSampleError(sampleId, message)
+              }
+            }
+          }
+        }
+
+        await Promise.all(
+          Array.from({ length: Math.min(scatterConcurrency, scatterPriorityOrder.length) }, () => scatterWorker())
+        )
+
+        return {
+          total: normalizedSampleIds.length,
+          loadedResults,
+          loadedScatter,
+          failed,
+          resultsBySampleId,
+          scatterBySampleId,
+          errorsBySampleId,
+          cacheStats: { hits: cacheHits, misses: cacheMisses, evictions: cacheEvictions },
+          cancelled: isStale(),
+        }
+      } finally {
+        normalizedSampleIds.forEach((sampleId) => {
+          setFCSCompareSampleLoading(sampleId, false)
+        })
+      }
+    },
+    [
+      incrementFCSCompareRequestVersion,
+      isCurrentFCSCompareRequest,
+      setFCSCompareSelectedSampleIds,
+      setFCSCompareVisibleSampleIds,
+      setFCSComparePrimarySampleId,
+      setFCSCompareSampleLoading,
+      setFCSCompareSampleError,
+      setFCSCompareSampleResult,
+      setFCSCompareSampleScatter,
+      getFCSSeriesCacheEntry,
+      setFCSSeriesCacheEntry,
+      setFCSResults,
+      setSecondaryFCSResults,
+      setSecondaryFCSScatterData,
+    ]
   )
 
   // =========================================================================
@@ -783,7 +1345,6 @@ export function useApi() {
       options?: { concurrency?: number }
     ): Promise<{ total: number; loaded: number; failed: number }> => {
       const normalizedSampleIds = Array.from(new Set(sampleIds)).slice(0, 20)
-      setNTACompareSelectedSampleIds(normalizedSampleIds)
 
       if (normalizedSampleIds.length === 0) {
         return { total: 0, loaded: 0, failed: 0 }
@@ -801,6 +1362,46 @@ export function useApi() {
         setNTACompareSampleLoading(sampleId, true)
         setNTACompareSampleError(sampleId, null)
       })
+
+      // Phase 2 path: attempt bulk endpoint first; fallback to per-sample fetch if unavailable.
+      try {
+        const bulk = await apiClient.getNTAMultiCompare({
+          sample_ids: normalizedSampleIds,
+          include_size_distribution: true,
+        })
+
+        let loaded = 0
+        let failed = 0
+
+        normalizedSampleIds.forEach((sampleId) => {
+          const result = bulk.results_by_sample_id?.[sampleId]
+          const error = bulk.errors_by_sample_id?.[sampleId]
+
+          if (result) {
+            const normalizedResult = {
+              ...(result as Partial<NTAResult>),
+              id: Number(result.id ?? 0),
+            } as NTAResult
+            setNTACompareSampleResult(sampleId, normalizedResult)
+            setNTACompareSampleError(sampleId, bulk.warnings_by_sample_id?.[sampleId] || null)
+            loaded += 1
+          } else {
+            setNTACompareSampleResult(sampleId, null)
+            setNTACompareSampleError(sampleId, error || "No NTA results found")
+            failed += 1
+          }
+
+          setNTACompareSampleLoading(sampleId, false)
+        })
+
+        return {
+          total: normalizedSampleIds.length,
+          loaded,
+          failed,
+        }
+      } catch {
+        // Fallback handled below.
+      }
 
       let cursor = 0
       let loaded = 0
@@ -854,7 +1455,6 @@ export function useApi() {
       }
     },
     [
-      setNTACompareSelectedSampleIds,
       setNTACompareSampleLoading,
       setNTACompareSampleError,
       setNTACompareSampleResult,
@@ -873,7 +1473,11 @@ export function useApi() {
     openSampleInTab,
 
     // FCS
+    beginFCSCompareRequestVersion: incrementFCSCompareRequestVersion,
+    isFCSCompareRequestCurrent: isCurrentFCSCompareRequest,
+    loadFCSCompareSamples,
     uploadFCS,
+    uploadFCSCompareBatch,
     uploadSecondaryFCS,  // T-002: Secondary file upload for comparison/overlay
     getFCSResults,
 

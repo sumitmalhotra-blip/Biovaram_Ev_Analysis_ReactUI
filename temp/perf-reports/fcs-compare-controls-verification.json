@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-04-06T06:39:23.578Z",
+  "checks": {
+    "d1_graph_instance_created": true,
+    "d2_duplicate_isolation_axis_mode": true,
+    "d3_pin_payload_persisted": true,
+    "d4_maximize_restore": true,
+    "d4_export_download": true
+  },
+  "evidence": {
+    "graphInstanceCount": 3,
+    "pinnedCount": 1,
+    "exportedFilename": "S1_vs_S2_overlay.csv"
+  }
+}

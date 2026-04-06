@@ -1,0 +1,2355 @@
+{
+  "summary": {
+    "total_files_seen": 293,
+    "converted": 293,
+    "converted_with_fallback": 1,
+    "skipped": 0,
+    "failed": 0
+  },
+  "results": [
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\Dataset 1.xlsx",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\Dataset 1.xlsx.parquet",
+      "status": "converted_fallback",
+      "rows": 1,
+      "columns": 4,
+      "reason": "Missing optional dependency 'openpyxl'.  Use pip or conda to install openpyxl."
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_HEK_TFF_DATA_05Dec25\\20251128_0008_HEK_100kDa_BeforeTFF_scatter_size_488.pdf",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_HEK_TFF_DATA_05Dec25\\20251128_0008_HEK_100kDa_BeforeTFF_scatter_size_488.pdf.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_HEK_TFF_DATA_05Dec25\\20251128_0008_HEK_100kDa_BeforeTFF_scatter_size_488_1000-010-030-100.0-15-1-0_20251128-122204.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_HEK_TFF_DATA_05Dec25\\20251128_0008_HEK_100kDa_BeforeTFF_scatter_size_488_1000-010-030-100.0-15-1-0_20251128-122204.fcs.parquet",
+      "status": "converted",
+      "rows": 504,
+      "columns": 23,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_HEK_TFF_DATA_05Dec25\\20251128_0009_HEK_100kDa_BeforeTFF_500_size_488F500.pdf",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_HEK_TFF_DATA_05Dec25\\20251128_0009_HEK_100kDa_BeforeTFF_500_size_488F500.pdf.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_HEK_TFF_DATA_05Dec25\\20251128_0009_HEK_100kDa_BeforeTFF_500_size_488F500_1000-010-030-100.0-7-1-0_20251128-122642.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_HEK_TFF_DATA_05Dec25\\20251128_0009_HEK_100kDa_BeforeTFF_500_size_488F500_1000-010-030-100.0-7-1-0_20251128-122642.fcs.parquet",
+      "status": "converted",
+      "rows": 49,
+      "columns": 23,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_HEK_TFF_DATA_05Dec25\\20251128_0010_HEK_100kDa_Wash_scatter_size_488.pdf",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_HEK_TFF_DATA_05Dec25\\20251128_0010_HEK_100kDa_Wash_scatter_size_488.pdf.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_HEK_TFF_DATA_05Dec25\\20251128_0010_HEK_100kDa_Wash_scatter_size_488_1000-010-030-100.0-15-1-0_20251128-123139.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_HEK_TFF_DATA_05Dec25\\20251128_0010_HEK_100kDa_Wash_scatter_size_488_1000-010-030-100.0-15-1-0_20251128-123139.fcs.parquet",
+      "status": "converted",
+      "rows": 443,
+      "columns": 23,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_HEK_TFF_DATA_05Dec25\\20251128_0011_HEK_100kDa_Wash_500_size_488F500.pdf",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_HEK_TFF_DATA_05Dec25\\20251128_0011_HEK_100kDa_Wash_500_size_488F500.pdf.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_HEK_TFF_DATA_05Dec25\\20251128_0011_HEK_100kDa_Wash_500_size_488F500_1000-010-030-100.0-7-1-0_20251128-123615.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_HEK_TFF_DATA_05Dec25\\20251128_0011_HEK_100kDa_Wash_500_size_488F500_1000-010-030-100.0-7-1-0_20251128-123615.fcs.parquet",
+      "status": "converted",
+      "rows": 29,
+      "columns": 23,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_HEK_TFF_DATA_05Dec25\\20251128_0012_HEK_100kDa_Final_scatter_size_488.pdf",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_HEK_TFF_DATA_05Dec25\\20251128_0012_HEK_100kDa_Final_scatter_size_488.pdf.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_HEK_TFF_DATA_05Dec25\\20251128_0012_HEK_100kDa_Final_scatter_size_488_1000-010-030-100.0-15-1-0_20251128-124113.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_HEK_TFF_DATA_05Dec25\\20251128_0012_HEK_100kDa_Final_scatter_size_488_1000-010-030-100.0-15-1-0_20251128-124113.fcs.parquet",
+      "status": "converted",
+      "rows": 581,
+      "columns": 23,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_HEK_TFF_DATA_05Dec25\\20251128_0013_HEK_100kDa_Final_500_size_488F500.pdf",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_HEK_TFF_DATA_05Dec25\\20251128_0013_HEK_100kDa_Final_500_size_488F500.pdf.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_HEK_TFF_DATA_05Dec25\\20251128_0013_HEK_100kDa_Final_500_size_488F500_1000-010-030-100.0-7-1-0_20251128-124636.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_HEK_TFF_DATA_05Dec25\\20251128_0013_HEK_100kDa_Final_500_size_488F500_1000-010-030-100.0-7-1-0_20251128-124636.fcs.parquet",
+      "status": "converted",
+      "rows": 44,
+      "columns": 23,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_HEK_TFF_DATA_05Dec25\\20251128_0014_HEK_100kDa_Permeate_scatter_size_488.pdf",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_HEK_TFF_DATA_05Dec25\\20251128_0014_HEK_100kDa_Permeate_scatter_size_488.pdf.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_HEK_TFF_DATA_05Dec25\\20251128_0014_HEK_100kDa_Permeate_scatter_size_488_1000-010-030-100.0-15-1-0_20251128-125326.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_HEK_TFF_DATA_05Dec25\\20251128_0014_HEK_100kDa_Permeate_scatter_size_488_1000-010-030-100.0-15-1-0_20251128-125326.fcs.parquet",
+      "status": "converted",
+      "rows": 491,
+      "columns": 23,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_HEK_TFF_DATA_05Dec25\\20251128_0015_HEK_100kDa_Permeate_500_size_488F500.pdf",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_HEK_TFF_DATA_05Dec25\\20251128_0015_HEK_100kDa_Permeate_500_size_488F500.pdf.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_HEK_TFF_DATA_05Dec25\\20251128_0015_HEK_100kDa_Permeate_500_size_488F500_1000-010-030-100.0-7-1-0_20251128-125817.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_HEK_TFF_DATA_05Dec25\\20251128_0015_HEK_100kDa_Permeate_500_size_488F500_1000-010-030-100.0-7-1-0_20251128-125817.fcs.parquet",
+      "status": "converted",
+      "rows": 23,
+      "columns": 23,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P1_19_2_25_NTA\\20250219_0001_EV_ip_p1_F8-1000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P1_19_2_25_NTA\\20250219_0001_EV_ip_p1_F8-1000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 91,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P1_19_2_25_NTA\\20250219_0001_EV_ip_p1_F8-1000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P1_19_2_25_NTA\\20250219_0001_EV_ip_p1_F8-1000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P1_19_2_25_NTA\\20250219_0002_EV_ip_p1_F8-1000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P1_19_2_25_NTA\\20250219_0002_EV_ip_p1_F8-1000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P1_19_2_25_NTA\\20250219_0002_EV_ip_p1_F8-1000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P1_19_2_25_NTA\\20250219_0002_EV_ip_p1_F8-1000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P1_19_2_25_NTA\\20250219_0003_EV_ip_p1_F7-1000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P1_19_2_25_NTA\\20250219_0003_EV_ip_p1_F7-1000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 91,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P1_19_2_25_NTA\\20250219_0003_EV_ip_p1_F7-1000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P1_19_2_25_NTA\\20250219_0003_EV_ip_p1_F7-1000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P1_19_2_25_NTA\\20250219_0004_EV_ip_p1_F7-1000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P1_19_2_25_NTA\\20250219_0004_EV_ip_p1_F7-1000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P1_19_2_25_NTA\\20250219_0004_EV_ip_p1_F7-1000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P1_19_2_25_NTA\\20250219_0004_EV_ip_p1_F7-1000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P1_19_2_25_NTA\\20250219_0005_EV_ip_p1_F7-1000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P1_19_2_25_NTA\\20250219_0005_EV_ip_p1_F7-1000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P1_19_2_25_NTA\\20250219_0005_EV_ip_p1_F7-1000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P1_19_2_25_NTA\\20250219_0005_EV_ip_p1_F7-1000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P1_19_2_25_NTA\\20250219_0006_EV_ip_p1_F7-1000_prof_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P1_19_2_25_NTA\\20250219_0006_EV_ip_p1_F7-1000_prof_488.txt.parquet",
+      "status": "converted",
+      "rows": 107,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P1_19_2_25_NTA\\20250219_0007_EV_ip_p1_F7-5000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P1_19_2_25_NTA\\20250219_0007_EV_ip_p1_F7-5000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P1_19_2_25_NTA\\20250219_0007_EV_ip_p1_F7-5000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P1_19_2_25_NTA\\20250219_0007_EV_ip_p1_F7-5000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P1_19_2_25_NTA\\20250219_0008_EV_ip_p1_F7-5000_prof_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P1_19_2_25_NTA\\20250219_0008_EV_ip_p1_F7-5000_prof_488.txt.parquet",
+      "status": "converted",
+      "rows": 107,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P1_19_2_25_NTA\\20250219_0009_EV_ip_p1_F7-5000R1_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P1_19_2_25_NTA\\20250219_0009_EV_ip_p1_F7-5000R1_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P1_19_2_25_NTA\\20250219_0009_EV_ip_p1_F7-5000R1_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P1_19_2_25_NTA\\20250219_0009_EV_ip_p1_F7-5000R1_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P1_19_2_25_NTA\\20250219_0010_EV_ip_p1_F9-5000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P1_19_2_25_NTA\\20250219_0010_EV_ip_p1_F9-5000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 91,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P1_19_2_25_NTA\\20250219_0010_EV_ip_p1_F9-5000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P1_19_2_25_NTA\\20250219_0010_EV_ip_p1_F9-5000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P1_19_2_25_NTA\\20250219_0011_EV_ip_p1_F9-5000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P1_19_2_25_NTA\\20250219_0011_EV_ip_p1_F9-5000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P1_19_2_25_NTA\\20250219_0011_EV_ip_p1_F9-5000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P1_19_2_25_NTA\\20250219_0011_EV_ip_p1_F9-5000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P1_19_2_25_NTA\\20250219_0012_EV_ip_p1_F9-5000R1_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P1_19_2_25_NTA\\20250219_0012_EV_ip_p1_F9-5000R1_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P1_19_2_25_NTA\\20250219_0012_EV_ip_p1_F9-5000R1_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P1_19_2_25_NTA\\20250219_0012_EV_ip_p1_F9-5000R1_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P1_19_2_25_NTA\\20250219_0013_EV_ip_p1_F9-5000R1_prof_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P1_19_2_25_NTA\\20250219_0013_EV_ip_p1_F9-5000R1_prof_488.txt.parquet",
+      "status": "converted",
+      "rows": 107,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P1_19_2_25_NTA\\20250219_0014_EV_ip_p1_F9-5000R2_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P1_19_2_25_NTA\\20250219_0014_EV_ip_p1_F9-5000R2_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P1_19_2_25_NTA\\20250219_0014_EV_ip_p1_F9-5000R2_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P1_19_2_25_NTA\\20250219_0014_EV_ip_p1_F9-5000R2_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P1_19_2_25_NTA\\20250220_0001_EV_ip_p1_F10-1000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P1_19_2_25_NTA\\20250220_0001_EV_ip_p1_F10-1000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 91,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P1_19_2_25_NTA\\20250220_0001_EV_ip_p1_F10-1000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P1_19_2_25_NTA\\20250220_0001_EV_ip_p1_F10-1000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0001_EV_IP_P2.1_F11-1000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0001_EV_IP_P2.1_F11-1000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0001_EV_IP_P2.1_F11-1000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0001_EV_IP_P2.1_F11-1000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0002_EV_IP_P2.1_F11-1000R_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0002_EV_IP_P2.1_F11-1000R_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0002_EV_IP_P2.1_F11-1000R_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0002_EV_IP_P2.1_F11-1000R_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0005_EV_IP_P2.2_F2-1000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0005_EV_IP_P2.2_F2-1000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0005_EV_IP_P2.2_F2-1000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0005_EV_IP_P2.2_F2-1000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0006_EV_IP_P2.2_F2-1000_prof_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0006_EV_IP_P2.2_F2-1000_prof_488.txt.parquet",
+      "status": "converted",
+      "rows": 107,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0007_EV_IP_P2.1_F3-1000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0007_EV_IP_P2.1_F3-1000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0007_EV_IP_P2.1_F3-1000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0007_EV_IP_P2.1_F3-1000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0008_EV_IP_P2.1_F3-1000R_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0008_EV_IP_P2.1_F3-1000R_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0008_EV_IP_P2.1_F3-1000R_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0008_EV_IP_P2.1_F3-1000R_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0009_EV_IP_P2.1_F3-1000R_prof_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0009_EV_IP_P2.1_F3-1000R_prof_488.txt.parquet",
+      "status": "converted",
+      "rows": 107,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0010_EV_IP_P2.1_F4-1000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0010_EV_IP_P2.1_F4-1000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0010_EV_IP_P2.1_F4-1000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0010_EV_IP_P2.1_F4-1000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0011_EV_IP_P2.1_F4-1000R_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0011_EV_IP_P2.1_F4-1000R_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0011_EV_IP_P2.1_F4-1000R_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0011_EV_IP_P2.1_F4-1000R_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0012_EV_IP_P2.1_F4-1000R_prof_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0012_EV_IP_P2.1_F4-1000R_prof_488.txt.parquet",
+      "status": "converted",
+      "rows": 107,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0013_EV_IP_P2.1_F5-1000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0013_EV_IP_P2.1_F5-1000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 91,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0013_EV_IP_P2.1_F5-1000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0013_EV_IP_P2.1_F5-1000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0014_EV_IP_P2.1_F5-1000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0014_EV_IP_P2.1_F5-1000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 91,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0014_EV_IP_P2.1_F5-1000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0014_EV_IP_P2.1_F5-1000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0015_EV_IP_P2.1_F5-1000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0015_EV_IP_P2.1_F5-1000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0015_EV_IP_P2.1_F5-1000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0015_EV_IP_P2.1_F5-1000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0016_EV_IP_P2.1_F5-1000R_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0016_EV_IP_P2.1_F5-1000R_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0016_EV_IP_P2.1_F5-1000R_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0016_EV_IP_P2.1_F5-1000R_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0018_EV_IP_P2.1_F6-1000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0018_EV_IP_P2.1_F6-1000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0018_EV_IP_P2.1_F6-1000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0018_EV_IP_P2.1_F6-1000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0019_EV_IP_P2.1_F6-1000R_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0019_EV_IP_P2.1_F6-1000R_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0019_EV_IP_P2.1_F6-1000R_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0019_EV_IP_P2.1_F6-1000R_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0020_EV_IP_P2.1_F6-1000R_prof_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0020_EV_IP_P2.1_F6-1000R_prof_488.txt.parquet",
+      "status": "converted",
+      "rows": 107,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0021_EV_IP_P2.1_F7-1000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0021_EV_IP_P2.1_F7-1000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0021_EV_IP_P2.1_F7-1000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0021_EV_IP_P2.1_F7-1000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0022_EV_IP_P2.1_F7-1000_prof_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0022_EV_IP_P2.1_F7-1000_prof_488.txt.parquet",
+      "status": "converted",
+      "rows": 107,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0023_EV_IP_P2.1_F8-1000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0023_EV_IP_P2.1_F8-1000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0023_EV_IP_P2.1_F8-1000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0023_EV_IP_P2.1_F8-1000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0024_EV_IP_P2.1_F8-1000R_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0024_EV_IP_P2.1_F8-1000R_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0024_EV_IP_P2.1_F8-1000R_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0024_EV_IP_P2.1_F8-1000R_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0025_EV_IP_P2.1_F8-1000R_prof_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0025_EV_IP_P2.1_F8-1000R_prof_488.txt.parquet",
+      "status": "converted",
+      "rows": 107,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0026_EV_IP_P2.1_F9-1000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0026_EV_IP_P2.1_F9-1000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0026_EV_IP_P2.1_F9-1000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0026_EV_IP_P2.1_F9-1000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0027_EV_IP_P2.1_F9-1000R_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0027_EV_IP_P2.1_F9-1000R_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0027_EV_IP_P2.1_F9-1000R_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0027_EV_IP_P2.1_F9-1000R_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0028_EV_IP_P2.1_F9-1000R_prof_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0028_EV_IP_P2.1_F9-1000R_prof_488.txt.parquet",
+      "status": "converted",
+      "rows": 107,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0029_EV_IP_P2.1_F10-1000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0029_EV_IP_P2.1_F10-1000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0029_EV_IP_P2.1_F10-1000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0029_EV_IP_P2.1_F10-1000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0030_EV_IP_P2.1_F10-1000R_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0030_EV_IP_P2.1_F10-1000R_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0030_EV_IP_P2.1_F10-1000R_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0030_EV_IP_P2.1_F10-1000R_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0031_EV_IP_P2.1_F10-1000R_prof_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2.1_28_2_25_NTA\\20250228_0031_EV_IP_P2.1_F10-1000R_prof_488.txt.parquet",
+      "status": "converted",
+      "rows": 107,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250221_0001_EV_IP_P1.1_F6-1000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250221_0001_EV_IP_P1.1_F6-1000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250221_0001_EV_IP_P1.1_F6-1000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250221_0001_EV_IP_P1.1_F6-1000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250221_0002_EV_IP_P1.1_F6-1000_prof_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250221_0002_EV_IP_P1.1_F6-1000_prof_488.txt.parquet",
+      "status": "converted",
+      "rows": 107,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250221_0003_EV_IP_P1.1_F5-1000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250221_0003_EV_IP_P1.1_F5-1000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250221_0003_EV_IP_P1.1_F5-1000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250221_0003_EV_IP_P1.1_F5-1000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0000_EV_IP_P2_F1-1000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0000_EV_IP_P2_F1-1000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0000_EV_IP_P2_F1-1000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0000_EV_IP_P2_F1-1000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0001_EV_IP_P2_F1-1000_prof_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0001_EV_IP_P2_F1-1000_prof_488.txt.parquet",
+      "status": "converted",
+      "rows": 107,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0002_EV_IP_P2_F2-1000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0002_EV_IP_P2_F2-1000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0002_EV_IP_P2_F2-1000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0002_EV_IP_P2_F2-1000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0003_EV_IP_P2_F2-1000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0003_EV_IP_P2_F2-1000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0003_EV_IP_P2_F2-1000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0003_EV_IP_P2_F2-1000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0004_EV_IP_P2_F2-1000_prof_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0004_EV_IP_P2_F2-1000_prof_488.txt.parquet",
+      "status": "converted",
+      "rows": 107,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0005_EV_IP_P2_F3-1000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0005_EV_IP_P2_F3-1000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0005_EV_IP_P2_F3-1000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0005_EV_IP_P2_F3-1000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0006_EV_IP_P2_F3-1000R_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0006_EV_IP_P2_F3-1000R_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0006_EV_IP_P2_F3-1000R_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0006_EV_IP_P2_F3-1000R_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0007_EV_IP_P2_F3-1000R_prof_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0007_EV_IP_P2_F3-1000R_prof_488.txt.parquet",
+      "status": "converted",
+      "rows": 107,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0008_EV_IP_P2_F4-1000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0008_EV_IP_P2_F4-1000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0008_EV_IP_P2_F4-1000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0008_EV_IP_P2_F4-1000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0009_EV_IP_P2_F4-1000_prof_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0009_EV_IP_P2_F4-1000_prof_488.txt.parquet",
+      "status": "converted",
+      "rows": 107,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0010_EV_IP_P2_F5-1000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0010_EV_IP_P2_F5-1000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0010_EV_IP_P2_F5-1000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0010_EV_IP_P2_F5-1000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0011_EV_IP_P2_F5-1000R_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0011_EV_IP_P2_F5-1000R_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0011_EV_IP_P2_F5-1000R_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0011_EV_IP_P2_F5-1000R_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0012_EV_IP_P2_F5-1000R_prof_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0012_EV_IP_P2_F5-1000R_prof_488.txt.parquet",
+      "status": "converted",
+      "rows": 107,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0013_EV_IP_P2_F6-1000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0013_EV_IP_P2_F6-1000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0013_EV_IP_P2_F6-1000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0013_EV_IP_P2_F6-1000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0014_EV_IP_P2_F6-1000R_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0014_EV_IP_P2_F6-1000R_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0014_EV_IP_P2_F6-1000R_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0014_EV_IP_P2_F6-1000R_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0015_EV_IP_P2_F6-1000R_prof_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0015_EV_IP_P2_F6-1000R_prof_488.txt.parquet",
+      "status": "converted",
+      "rows": 107,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0016_EV_IP_P2_F7-1000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0016_EV_IP_P2_F7-1000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0016_EV_IP_P2_F7-1000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0016_EV_IP_P2_F7-1000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0017_EV_IP_P2_F7-1000R_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0017_EV_IP_P2_F7-1000R_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0017_EV_IP_P2_F7-1000R_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0017_EV_IP_P2_F7-1000R_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0018_EV_IP_P2_F7-1000R_prof_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0018_EV_IP_P2_F7-1000R_prof_488.txt.parquet",
+      "status": "converted",
+      "rows": 107,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0019_EV_IP_P2_F8-1000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0019_EV_IP_P2_F8-1000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0019_EV_IP_P2_F8-1000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0019_EV_IP_P2_F8-1000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0020_EV_IP_P2_F8-1000R_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0020_EV_IP_P2_F8-1000R_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0020_EV_IP_P2_F8-1000R_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0020_EV_IP_P2_F8-1000R_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0021_EV_IP_P2_F8-1000R_prof_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0021_EV_IP_P2_F8-1000R_prof_488.txt.parquet",
+      "status": "converted",
+      "rows": 107,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0022_EV_IP_P2_F9-1000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0022_EV_IP_P2_F9-1000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0022_EV_IP_P2_F9-1000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0022_EV_IP_P2_F9-1000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0023_EV_IP_P2_F9-1000R_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0023_EV_IP_P2_F9-1000R_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0023_EV_IP_P2_F9-1000R_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0023_EV_IP_P2_F9-1000R_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0024_EV_IP_P2_F9-1000R_prof_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0024_EV_IP_P2_F9-1000R_prof_488.txt.parquet",
+      "status": "converted",
+      "rows": 107,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0025_EV_IP_P2_F10-1000_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0025_EV_IP_P2_F10-1000_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0025_EV_IP_P2_F10-1000_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0025_EV_IP_P2_F10-1000_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0026_EV_IP_P2_F10-1000R_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0026_EV_IP_P2_F10-1000R_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0026_EV_IP_P2_F10-1000R_size_488_11pos.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0026_EV_IP_P2_F10-1000R_size_488_11pos.txt.parquet",
+      "status": "converted",
+      "rows": 15,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\EV_IPSC_P2_27_2_25_NTA\\20250227_0027_EV_IP_P2_F10-1000R_prof_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\EV_IPSC_P2_27_2_25_NTA\\20250227_0027_EV_IP_P2_F10-1000R_prof_488.txt.parquet",
+      "status": "converted",
+      "rows": 107,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\PC3\\20251217_0005_PC3_100kDa_F5_size_488.pdf",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\PC3\\20251217_0005_PC3_100kDa_F5_size_488.pdf.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\PC3\\20251217_0005_PC3_100kDa_F5_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\PC3\\20251217_0005_PC3_100kDa_F5_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\PC3\\20251217_0005_PC3_100kDa_F5_size_488_1000-010-030-100.0-15-1-0_20251217-102923.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\PC3\\20251217_0005_PC3_100kDa_F5_size_488_1000-010-030-100.0-15-1-0_20251217-102923.fcs.parquet",
+      "status": "converted",
+      "rows": 630,
+      "columns": 23,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\PC3\\20251217_0016_PC3_100kDa_F1_2_size_488.pdf",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\PC3\\20251217_0016_PC3_100kDa_F1_2_size_488.pdf.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\PC3\\20251217_0016_PC3_100kDa_F1_2_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\PC3\\20251217_0016_PC3_100kDa_F1_2_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\PC3\\20251217_0016_PC3_100kDa_F1_2_size_488_1000-010-030-100.0-15-1-0_20251217-140115.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\PC3\\20251217_0016_PC3_100kDa_F1_2_size_488_1000-010-030-100.0-15-1-0_20251217-140115.fcs.parquet",
+      "status": "converted",
+      "rows": 495,
+      "columns": 23,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\PC3\\20251217_0017_PC3_100kDa_F3T6_size_488.pdf",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\PC3\\20251217_0017_PC3_100kDa_F3T6_size_488.pdf.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\PC3\\20251217_0017_PC3_100kDa_F3T6_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\PC3\\20251217_0017_PC3_100kDa_F3T6_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\PC3\\20251217_0017_PC3_100kDa_F3T6_size_488_1000-010-030-100.0-15-1-0_20251217-140832.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\PC3\\20251217_0017_PC3_100kDa_F3T6_size_488_1000-010-030-100.0-15-1-0_20251217-140832.fcs.parquet",
+      "status": "converted",
+      "rows": 376,
+      "columns": 23,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\PC3\\20251217_0018_PC3_100kDa_F7_8_size_488.pdf",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\PC3\\20251217_0018_PC3_100kDa_F7_8_size_488.pdf.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\PC3\\20251217_0018_PC3_100kDa_F7_8_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\PC3\\20251217_0018_PC3_100kDa_F7_8_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\PC3\\20251217_0018_PC3_100kDa_F7_8_size_488_1000-010-030-100.0-15-1-0_20251217-141500.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\PC3\\20251217_0018_PC3_100kDa_F7_8_size_488_1000-010-030-100.0-15-1-0_20251217-141500.fcs.parquet",
+      "status": "converted",
+      "rows": 354,
+      "columns": 23,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\PC3\\20251217_0019_PC3_100kDa_F9T15_size_488.pdf",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\PC3\\20251217_0019_PC3_100kDa_F9T15_size_488.pdf.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\PC3\\20251217_0019_PC3_100kDa_F9T15_size_488.txt",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\PC3\\20251217_0019_PC3_100kDa_F9T15_size_488.txt.parquet",
+      "status": "converted",
+      "rows": 1491,
+      "columns": 2,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\PC3\\20251217_0019_PC3_100kDa_F9T15_size_488_1000-010-030-100.0-15-1-0_20251217-142057.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\PC3\\20251217_0019_PC3_100kDa_F9T15_size_488_1000-010-030-100.0-15-1-0_20251217-142057.fcs.parquet",
+      "status": "converted",
+      "rows": 152,
+      "columns": 23,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\PC3\\Analysis\\Particle_Count_20251217_0005_PC3_100kDa_F5_size_488_1000-010-030-100.0-15-1-0_20251217-102923.png",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\PC3\\Analysis\\Particle_Count_20251217_0005_PC3_100kDa_F5_size_488_1000-010-030-100.0-15-1-0_20251217-102923.png.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\PC3\\Analysis\\Particle_Count_20251217_0016_PC3_100kDa_F1_2_size_488_1000-010-030-100.0-15-1-0_20251217-140115.png",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\PC3\\Analysis\\Particle_Count_20251217_0016_PC3_100kDa_F1_2_size_488_1000-010-030-100.0-15-1-0_20251217-140115.png.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\PC3\\Analysis\\Particle_Count_20251217_0017_PC3_100kDa_F3T6_size_488_1000-010-030-100.0-15-1-0_20251217-140832.png",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\PC3\\Analysis\\Particle_Count_20251217_0017_PC3_100kDa_F3T6_size_488_1000-010-030-100.0-15-1-0_20251217-140832.png.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\PC3\\Analysis\\Particle_Count_20251217_0018_PC3_100kDa_F7_8_size_488_1000-010-030-100.0-15-1-0_20251217-141500.png",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\PC3\\Analysis\\Particle_Count_20251217_0018_PC3_100kDa_F7_8_size_488_1000-010-030-100.0-15-1-0_20251217-141500.png.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\PC3\\Analysis\\Particle_Count_20251217_0019_PC3_100kDa_F9T15_size_488_1000-010-030-100.0-15-1-0_20251217-142057.png",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\PC3\\Analysis\\Particle_Count_20251217_0019_PC3_100kDa_F9T15_size_488_1000-010-030-100.0-15-1-0_20251217-142057.png.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\PC3\\Analysis\\Particle_traces_20251217_0005_PC3_100kDa_F5_size_488_1000-010-030-100.0-15-1-0_20251217-102923.png",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\PC3\\Analysis\\Particle_traces_20251217_0005_PC3_100kDa_F5_size_488_1000-010-030-100.0-15-1-0_20251217-102923.png.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\PC3\\Analysis\\Particle_traces_20251217_0016_PC3_100kDa_F1_2_size_488_1000-010-030-100.0-15-1-0_20251217-140115.png",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\PC3\\Analysis\\Particle_traces_20251217_0016_PC3_100kDa_F1_2_size_488_1000-010-030-100.0-15-1-0_20251217-140115.png.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\PC3\\Analysis\\Particle_traces_20251217_0017_PC3_100kDa_F3T6_size_488_1000-010-030-100.0-15-1-0_20251217-140832.png",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\PC3\\Analysis\\Particle_traces_20251217_0017_PC3_100kDa_F3T6_size_488_1000-010-030-100.0-15-1-0_20251217-140832.png.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\PC3\\Analysis\\Particle_traces_20251217_0018_PC3_100kDa_F7_8_size_488_1000-010-030-100.0-15-1-0_20251217-141500.png",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\PC3\\Analysis\\Particle_traces_20251217_0018_PC3_100kDa_F7_8_size_488_1000-010-030-100.0-15-1-0_20251217-141500.png.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA\\PC3\\Analysis\\Particle_traces_20251217_0019_PC3_100kDa_F9T15_size_488_1000-010-030-100.0-15-1-0_20251217-142057.png",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\NTA_parquet\\PC3\\Analysis\\Particle_traces_20251217_0019_PC3_100kDa_F9T15_size_488_1000-010-030-100.0-15-1-0_20251217-142057.png.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\10000 exo and cd81\\0.25ug ISO SEC.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\10000 exo and cd81\\0.25ug ISO SEC.fcs.parquet",
+      "status": "converted",
+      "rows": 339392,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\10000 exo and cd81\\1 ug ISO SEC.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\10000 exo and cd81\\1 ug ISO SEC.fcs.parquet",
+      "status": "converted",
+      "rows": 195152,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\10000 exo and cd81\\Blank-SampleLine1.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\10000 exo and cd81\\Blank-SampleLine1.fcs.parquet",
+      "status": "converted",
+      "rows": 1723,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\10000 exo and cd81\\Exo + 0.25ug CD81 SEC.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\10000 exo and cd81\\Exo + 0.25ug CD81 SEC.fcs.parquet",
+      "status": "converted",
+      "rows": 301927,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\10000 exo and cd81\\Exo Control.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\10000 exo and cd81\\Exo Control.fcs.parquet",
+      "status": "converted",
+      "rows": 13008,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\10000 exo and cd81\\Exo+ 0.25ug cd81 Centri.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\10000 exo and cd81\\Exo+ 0.25ug cd81 Centri.fcs.parquet",
+      "status": "converted",
+      "rows": 128236,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\10000 exo and cd81\\Exo+ 0.25ug ISO Centri.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\10000 exo and cd81\\Exo+ 0.25ug ISO Centri.fcs.parquet",
+      "status": "converted",
+      "rows": 33443,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\10000 exo and cd81\\Exo+ 1ug CD81 Centri.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\10000 exo and cd81\\Exo+ 1ug CD81 Centri.fcs.parquet",
+      "status": "converted",
+      "rows": 124713,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\10000 exo and cd81\\Exo+ 1ug CD81 NO filter.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\10000 exo and cd81\\Exo+ 1ug CD81 NO filter.fcs.parquet",
+      "status": "converted",
+      "rows": 320671,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\10000 exo and cd81\\Exo+ 1ug ISO Centri.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\10000 exo and cd81\\Exo+ 1ug ISO Centri.fcs.parquet",
+      "status": "converted",
+      "rows": 81688,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\10000 exo and cd81\\Exo+ 1ug iso NO filter.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\10000 exo and cd81\\Exo+ 1ug iso NO filter.fcs.parquet",
+      "status": "converted",
+      "rows": 170199,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\10000 exo and cd81\\Exo+ 2ug  CD81 centri.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\10000 exo and cd81\\Exo+ 2ug  CD81 centri.fcs.parquet",
+      "status": "converted",
+      "rows": 199496,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\10000 exo and cd81\\Exo+ 2ug CD81 SEC.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\10000 exo and cd81\\Exo+ 2ug CD81 SEC.fcs.parquet",
+      "status": "converted",
+      "rows": 395386,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\10000 exo and cd81\\Exo+ 2ug ISO centri.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\10000 exo and cd81\\Exo+ 2ug ISO centri.fcs.parquet",
+      "status": "converted",
+      "rows": 185423,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\10000 exo and cd81\\Exo+ 2ug ISO.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\10000 exo and cd81\\Exo+ 2ug ISO.fcs.parquet",
+      "status": "converted",
+      "rows": 280989,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\10000 exo and cd81\\Exo+ 2ug ISO1.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\10000 exo and cd81\\Exo+ 2ug ISO1.fcs.parquet",
+      "status": "converted",
+      "rows": 0,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\10000 exo and cd81\\EXO+1ug CD8 SEC.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\10000 exo and cd81\\EXO+1ug CD8 SEC.fcs.parquet",
+      "status": "converted",
+      "rows": 350205,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\10000 exo and cd81\\HPLC Water.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\10000 exo and cd81\\HPLC Water.fcs.parquet",
+      "status": "converted",
+      "rows": 1980,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\10000 exo and cd81\\Water wash 2.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\10000 exo and cd81\\Water wash 2.fcs.parquet",
+      "status": "converted",
+      "rows": 33125,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\10000 exo and cd81\\Water wash 3.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\10000 exo and cd81\\Water wash 3.fcs.parquet",
+      "status": "converted",
+      "rows": 68052,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\10000 exo and cd81\\water wash.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\10000 exo and cd81\\water wash.fcs.parquet",
+      "status": "converted",
+      "rows": 51067,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\CD9 and exosome lots\\0.2 filtered media+cd9.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\CD9 and exosome lots\\0.2 filtered media+cd9.fcs.parquet",
+      "status": "converted",
+      "rows": 100000,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\CD9 and exosome lots\\0.2 filtered media+iso.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\CD9 and exosome lots\\0.2 filtered media+iso.fcs.parquet",
+      "status": "converted",
+      "rows": 100000,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\CD9 and exosome lots\\0.2 filtered media.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\CD9 and exosome lots\\0.2 filtered media.fcs.parquet",
+      "status": "converted",
+      "rows": 100000,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\CD9 and exosome lots\\L5+F10+CD9.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\CD9 and exosome lots\\L5+F10+CD9.fcs.parquet",
+      "status": "converted",
+      "rows": 100000,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\CD9 and exosome lots\\L5+F10+ISO.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\CD9 and exosome lots\\L5+F10+ISO.fcs.parquet",
+      "status": "converted",
+      "rows": 100000,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\CD9 and exosome lots\\L5+F10+ONLY EXO.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\CD9 and exosome lots\\L5+F10+ONLY EXO.fcs.parquet",
+      "status": "converted",
+      "rows": 100000,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\CD9 and exosome lots\\L5+F16+CD9.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\CD9 and exosome lots\\L5+F16+CD9.fcs.parquet",
+      "status": "converted",
+      "rows": 100000,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\CD9 and exosome lots\\L5+F16+ISO.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\CD9 and exosome lots\\L5+F16+ISO.fcs.parquet",
+      "status": "converted",
+      "rows": 100000,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\CD9 and exosome lots\\L5+F16+ONLY EXO.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\CD9 and exosome lots\\L5+F16+ONLY EXO.fcs.parquet",
+      "status": "converted",
+      "rows": 100000,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\CD9 and exosome lots\\lot1media+cd9.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\CD9 and exosome lots\\lot1media+cd9.fcs.parquet",
+      "status": "converted",
+      "rows": 100000,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\CD9 and exosome lots\\lot1media+iso.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\CD9 and exosome lots\\lot1media+iso.fcs.parquet",
+      "status": "converted",
+      "rows": 100000,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\CD9 and exosome lots\\lot1media.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\CD9 and exosome lots\\lot1media.fcs.parquet",
+      "status": "converted",
+      "rows": 100000,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\CD9 and exosome lots\\lot2media+cd9.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\CD9 and exosome lots\\lot2media+cd9.fcs.parquet",
+      "status": "converted",
+      "rows": 100000,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\CD9 and exosome lots\\lot2media+iso.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\CD9 and exosome lots\\lot2media+iso.fcs.parquet",
+      "status": "converted",
+      "rows": 100000,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\CD9 and exosome lots\\lot2media.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\CD9 and exosome lots\\lot2media.fcs.parquet",
+      "status": "converted",
+      "rows": 100000,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\CD9 and exosome lots\\lot4media+cd9.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\CD9 and exosome lots\\lot4media+cd9.fcs.parquet",
+      "status": "converted",
+      "rows": 100000,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\CD9 and exosome lots\\lot4media+iso.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\CD9 and exosome lots\\lot4media+iso.fcs.parquet",
+      "status": "converted",
+      "rows": 100000,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\CD9 and exosome lots\\lot4media.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\CD9 and exosome lots\\lot4media.fcs.parquet",
+      "status": "converted",
+      "rows": 100000,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\CD9 and exosome lots\\media without filter+iso.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\CD9 and exosome lots\\media without filter+iso.fcs.parquet",
+      "status": "converted",
+      "rows": 100000,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\CD9 and exosome lots\\media without Filter.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\CD9 and exosome lots\\media without Filter.fcs.parquet",
+      "status": "converted",
+      "rows": 100000,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\CD9 and exosome lots\\media witout filter +cd9.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\CD9 and exosome lots\\media witout filter +cd9.fcs.parquet",
+      "status": "converted",
+      "rows": 100000,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\CD9 and exosome lots\\water 2.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\CD9 and exosome lots\\water 2.fcs.parquet",
+      "status": "converted",
+      "rows": 37510,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\CD9 and exosome lots\\water.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\CD9 and exosome lots\\water.fcs.parquet",
+      "status": "converted",
+      "rows": 62292,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EV_HEK_TFF_DATA_05Dec25\\20251128_0008_HEK_100kDa_BeforeTFF_scatter_size_488.pdf",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EV_HEK_TFF_DATA_05Dec25\\20251128_0008_HEK_100kDa_BeforeTFF_scatter_size_488.pdf.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EV_HEK_TFF_DATA_05Dec25\\20251128_0008_HEK_100kDa_BeforeTFF_scatter_size_488_1000-010-030-100.0-15-1-0_20251128-122204.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EV_HEK_TFF_DATA_05Dec25\\20251128_0008_HEK_100kDa_BeforeTFF_scatter_size_488_1000-010-030-100.0-15-1-0_20251128-122204.fcs.parquet",
+      "status": "converted",
+      "rows": 504,
+      "columns": 23,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EV_HEK_TFF_DATA_05Dec25\\20251128_0009_HEK_100kDa_BeforeTFF_500_size_488F500.pdf",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EV_HEK_TFF_DATA_05Dec25\\20251128_0009_HEK_100kDa_BeforeTFF_500_size_488F500.pdf.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EV_HEK_TFF_DATA_05Dec25\\20251128_0009_HEK_100kDa_BeforeTFF_500_size_488F500_1000-010-030-100.0-7-1-0_20251128-122642.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EV_HEK_TFF_DATA_05Dec25\\20251128_0009_HEK_100kDa_BeforeTFF_500_size_488F500_1000-010-030-100.0-7-1-0_20251128-122642.fcs.parquet",
+      "status": "converted",
+      "rows": 49,
+      "columns": 23,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EV_HEK_TFF_DATA_05Dec25\\20251128_0010_HEK_100kDa_Wash_scatter_size_488.pdf",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EV_HEK_TFF_DATA_05Dec25\\20251128_0010_HEK_100kDa_Wash_scatter_size_488.pdf.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EV_HEK_TFF_DATA_05Dec25\\20251128_0010_HEK_100kDa_Wash_scatter_size_488_1000-010-030-100.0-15-1-0_20251128-123139.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EV_HEK_TFF_DATA_05Dec25\\20251128_0010_HEK_100kDa_Wash_scatter_size_488_1000-010-030-100.0-15-1-0_20251128-123139.fcs.parquet",
+      "status": "converted",
+      "rows": 443,
+      "columns": 23,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EV_HEK_TFF_DATA_05Dec25\\20251128_0011_HEK_100kDa_Wash_500_size_488F500.pdf",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EV_HEK_TFF_DATA_05Dec25\\20251128_0011_HEK_100kDa_Wash_500_size_488F500.pdf.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EV_HEK_TFF_DATA_05Dec25\\20251128_0011_HEK_100kDa_Wash_500_size_488F500_1000-010-030-100.0-7-1-0_20251128-123615.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EV_HEK_TFF_DATA_05Dec25\\20251128_0011_HEK_100kDa_Wash_500_size_488F500_1000-010-030-100.0-7-1-0_20251128-123615.fcs.parquet",
+      "status": "converted",
+      "rows": 29,
+      "columns": 23,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EV_HEK_TFF_DATA_05Dec25\\20251128_0012_HEK_100kDa_Final_scatter_size_488.pdf",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EV_HEK_TFF_DATA_05Dec25\\20251128_0012_HEK_100kDa_Final_scatter_size_488.pdf.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EV_HEK_TFF_DATA_05Dec25\\20251128_0012_HEK_100kDa_Final_scatter_size_488_1000-010-030-100.0-15-1-0_20251128-124113.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EV_HEK_TFF_DATA_05Dec25\\20251128_0012_HEK_100kDa_Final_scatter_size_488_1000-010-030-100.0-15-1-0_20251128-124113.fcs.parquet",
+      "status": "converted",
+      "rows": 581,
+      "columns": 23,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EV_HEK_TFF_DATA_05Dec25\\20251128_0013_HEK_100kDa_Final_500_size_488F500.pdf",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EV_HEK_TFF_DATA_05Dec25\\20251128_0013_HEK_100kDa_Final_500_size_488F500.pdf.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EV_HEK_TFF_DATA_05Dec25\\20251128_0013_HEK_100kDa_Final_500_size_488F500_1000-010-030-100.0-7-1-0_20251128-124636.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EV_HEK_TFF_DATA_05Dec25\\20251128_0013_HEK_100kDa_Final_500_size_488F500_1000-010-030-100.0-7-1-0_20251128-124636.fcs.parquet",
+      "status": "converted",
+      "rows": 44,
+      "columns": 23,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EV_HEK_TFF_DATA_05Dec25\\20251128_0014_HEK_100kDa_Permeate_scatter_size_488.pdf",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EV_HEK_TFF_DATA_05Dec25\\20251128_0014_HEK_100kDa_Permeate_scatter_size_488.pdf.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EV_HEK_TFF_DATA_05Dec25\\20251128_0014_HEK_100kDa_Permeate_scatter_size_488_1000-010-030-100.0-15-1-0_20251128-125326.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EV_HEK_TFF_DATA_05Dec25\\20251128_0014_HEK_100kDa_Permeate_scatter_size_488_1000-010-030-100.0-15-1-0_20251128-125326.fcs.parquet",
+      "status": "converted",
+      "rows": 491,
+      "columns": 23,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EV_HEK_TFF_DATA_05Dec25\\20251128_0015_HEK_100kDa_Permeate_500_size_488F500.pdf",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EV_HEK_TFF_DATA_05Dec25\\20251128_0015_HEK_100kDa_Permeate_500_size_488F500.pdf.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EV_HEK_TFF_DATA_05Dec25\\20251128_0015_HEK_100kDa_Permeate_500_size_488F500_1000-010-030-100.0-7-1-0_20251128-125817.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EV_HEK_TFF_DATA_05Dec25\\20251128_0015_HEK_100kDa_Permeate_500_size_488F500_1000-010-030-100.0-7-1-0_20251128-125817.fcs.parquet",
+      "status": "converted",
+      "rows": 23,
+      "columns": 23,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EXP 6-10-2025\\ab  1ug.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EXP 6-10-2025\\ab  1ug.fcs.parquet",
+      "status": "converted",
+      "rows": 305386,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EXP 6-10-2025\\ab  2ug.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EXP 6-10-2025\\ab  2ug.fcs.parquet",
+      "status": "converted",
+      "rows": 481156,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EXP 6-10-2025\\ab 0.25ug.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EXP 6-10-2025\\ab 0.25ug.fcs.parquet",
+      "status": "converted",
+      "rows": 345542,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EXP 6-10-2025\\ab 0.5ug.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EXP 6-10-2025\\ab 0.5ug.fcs.parquet",
+      "status": "converted",
+      "rows": 211105,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EXP 6-10-2025\\Blank-SampleLine1.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EXP 6-10-2025\\Blank-SampleLine1.fcs.parquet",
+      "status": "converted",
+      "rows": 1516,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EXP 6-10-2025\\Blank-SampleLine2.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EXP 6-10-2025\\Blank-SampleLine2.fcs.parquet",
+      "status": "converted",
+      "rows": 1630,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EXP 6-10-2025\\filtered buffer.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EXP 6-10-2025\\filtered buffer.fcs.parquet",
+      "status": "converted",
+      "rows": 46155,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EXP 6-10-2025\\filtered buffer1.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EXP 6-10-2025\\filtered buffer1.fcs.parquet",
+      "status": "converted",
+      "rows": 35802,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EXP 6-10-2025\\HPLC Water.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EXP 6-10-2025\\HPLC Water.fcs.parquet",
+      "status": "converted",
+      "rows": 1508,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EXP 6-10-2025\\HPLC Water1.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EXP 6-10-2025\\HPLC Water1.fcs.parquet",
+      "status": "converted",
+      "rows": 1917,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EXP 6-10-2025\\isotype 0.25ug.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EXP 6-10-2025\\isotype 0.25ug.fcs.parquet",
+      "status": "converted",
+      "rows": 103567,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EXP 6-10-2025\\isotype 2ug.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EXP 6-10-2025\\isotype 2ug.fcs.parquet",
+      "status": "converted",
+      "rows": 115687,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EXP 6-10-2025\\Nano Vis HIGH.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EXP 6-10-2025\\Nano Vis HIGH.fcs.parquet",
+      "status": "converted",
+      "rows": 86221,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EXP 6-10-2025\\Nano Vis LOW.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EXP 6-10-2025\\Nano Vis LOW.fcs.parquet",
+      "status": "converted",
+      "rows": 38368,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EXP 6-10-2025\\sample 1-10.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EXP 6-10-2025\\sample 1-10.fcs.parquet",
+      "status": "converted",
+      "rows": 515799,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EXP 6-10-2025\\sample 1-100.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EXP 6-10-2025\\sample 1-100.fcs.parquet",
+      "status": "converted",
+      "rows": 502314,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EXP 6-10-2025\\sample 1-1000.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EXP 6-10-2025\\sample 1-1000.fcs.parquet",
+      "status": "converted",
+      "rows": 135177,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EXP 6-10-2025\\sample 1-10000.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EXP 6-10-2025\\sample 1-10000.fcs.parquet",
+      "status": "converted",
+      "rows": 533116,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EXP 6-10-2025\\sample 1-100000.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EXP 6-10-2025\\sample 1-100000.fcs.parquet",
+      "status": "converted",
+      "rows": 449188,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EXP 6-10-2025\\sample no dil.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EXP 6-10-2025\\sample no dil.fcs.parquet",
+      "status": "converted",
+      "rows": 510881,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EXP 6-10-2025\\staining buffer.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EXP 6-10-2025\\staining buffer.fcs.parquet",
+      "status": "converted",
+      "rows": 331882,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EXP 6-10-2025\\water 1.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EXP 6-10-2025\\water 1.fcs.parquet",
+      "status": "converted",
+      "rows": 4361,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\EXP 6-10-2025\\water.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\EXP 6-10-2025\\water.fcs.parquet",
+      "status": "converted",
+      "rows": 18033,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\Blank-SampleLine1.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\Blank-SampleLine1.fcs.parquet",
+      "status": "converted",
+      "rows": 2446,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\Blank-SampleLine2.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\Blank-SampleLine2.fcs.parquet",
+      "status": "converted",
+      "rows": 2527,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\CD 81 alone.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\CD 81 alone.fcs.parquet",
+      "status": "converted",
+      "rows": 472426,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\CD 9 alone1.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\CD 9 alone1.fcs.parquet",
+      "status": "converted",
+      "rows": 428492,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\cont 2 1ug alone.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\cont 2 1ug alone.fcs.parquet",
+      "status": "converted",
+      "rows": 103253,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\cont 2 50 uM3.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\cont 2 50 uM3.fcs.parquet",
+      "status": "converted",
+      "rows": 1488655,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\cont 4 1ug Alone.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\cont 4 1ug Alone.fcs.parquet",
+      "status": "converted",
+      "rows": 100432,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\cont 4 50 uM2.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\cont 4 50 uM2.fcs.parquet",
+      "status": "converted",
+      "rows": 1459431,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\D03231 Lot 4894789.docx",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\D03231 Lot 4894789.docx.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\Exo+CD 81 +ISOTYPE1.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\Exo+CD 81 +ISOTYPE1.fcs.parquet",
+      "status": "converted",
+      "rows": 1187417,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\Exo+CD 81.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\Exo+CD 81.fcs.parquet",
+      "status": "converted",
+      "rows": 475250,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\Exo+CD 9 +ISOTYPE.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\Exo+CD 9 +ISOTYPE.fcs.parquet",
+      "status": "converted",
+      "rows": 1160753,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\Exo+CD 9.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\Exo+CD 9.fcs.parquet",
+      "status": "converted",
+      "rows": 1190557,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\Exo+cont 2 1ug.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\Exo+cont 2 1ug.fcs.parquet",
+      "status": "converted",
+      "rows": 825171,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\Exo+cont 2 50 uM1.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\Exo+cont 2 50 uM1.fcs.parquet",
+      "status": "converted",
+      "rows": 704905,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\Exo+cont 4 1ug.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\Exo+cont 4 1ug.fcs.parquet",
+      "status": "converted",
+      "rows": 1264381,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\Exo+cont 4 50 uM.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\Exo+cont 4 50 uM.fcs.parquet",
+      "status": "converted",
+      "rows": 149024,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\ExpSummaryForAPI.xml",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\ExpSummaryForAPI.xml.parquet",
+      "status": "converted",
+      "rows": 4,
+      "columns": 5,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\extracted_images\\image_0.jpeg",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\extracted_images\\image_0.jpeg.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\extracted_images\\image_1.png",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\extracted_images\\image_1.png.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\HPLC FIL Water.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\HPLC FIL Water.fcs.parquet",
+      "status": "converted",
+      "rows": 2879,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\HPLC FIL Water1.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\HPLC FIL Water1.fcs.parquet",
+      "status": "converted",
+      "rows": 12374,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\HPLC FIL Water10.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\HPLC FIL Water10.fcs.parquet",
+      "status": "converted",
+      "rows": 3063,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\HPLC FIL Water2.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\HPLC FIL Water2.fcs.parquet",
+      "status": "converted",
+      "rows": 7242,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\HPLC FIL Water3.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\HPLC FIL Water3.fcs.parquet",
+      "status": "converted",
+      "rows": 3822,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\HPLC FIL Water4.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\HPLC FIL Water4.fcs.parquet",
+      "status": "converted",
+      "rows": 3355,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\HPLC WA.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\HPLC WA.fcs.parquet",
+      "status": "converted",
+      "rows": 2817,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\HPLC WA1.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\HPLC WA1.fcs.parquet",
+      "status": "converted",
+      "rows": 2324,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\HPLC WA2.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\HPLC WA2.fcs.parquet",
+      "status": "converted",
+      "rows": 2934,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\HPLC WA3.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\HPLC WA3.fcs.parquet",
+      "status": "converted",
+      "rows": 4560,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\HPLC WA4.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\HPLC WA4.fcs.parquet",
+      "status": "converted",
+      "rows": 3140,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\mie_analysis\\PC3 EXO1_ambiguous_examples.png",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\mie_analysis\\PC3 EXO1_ambiguous_examples.png.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\mie_analysis\\PC3 EXO1_calibrated_analysis.json",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\mie_analysis\\PC3 EXO1_calibrated_analysis.json.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 13,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\mie_analysis\\PC3 EXO1_calibrated_analysis.png",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\mie_analysis\\PC3 EXO1_calibrated_analysis.png.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\mie_analysis\\PC3 EXO1_calibrated_sizes.csv",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\mie_analysis\\PC3 EXO1_calibrated_sizes.csv.parquet",
+      "status": "converted",
+      "rows": 2000,
+      "columns": 9,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\mie_analysis\\PC3 EXO1_mie_analysis.json",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\mie_analysis\\PC3 EXO1_mie_analysis.json.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\mie_analysis\\PC3 EXO1_mie_analysis.png",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\mie_analysis\\PC3 EXO1_mie_analysis.png.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\mie_analysis\\PC3 EXO1_mie_sizes.csv",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\mie_analysis\\PC3 EXO1_mie_sizes.csv.parquet",
+      "status": "converted",
+      "rows": 2000,
+      "columns": 9,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\mie_analysis\\PC3 EXO1_ratio_diagnostics.png",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\mie_analysis\\PC3 EXO1_ratio_diagnostics.png.parquet",
+      "status": "converted",
+      "rows": 1,
+      "columns": 4,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Exp_20251217_PC3\\PC3 EXO1.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Exp_20251217_PC3\\PC3 EXO1.fcs.parquet",
+      "status": "converted",
+      "rows": 914326,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Nano Vis High.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Nano Vis High.fcs.parquet",
+      "status": "converted",
+      "rows": 124189,
+      "columns": 26,
+      "reason": null
+    },
+    {
+      "source": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS\\Nano Vis Low.fcs",
+      "destination": "C:\\CRM IT Project\\ev-analysis-platform\\backend\\nanoFACS_parquet\\Nano Vis Low.fcs.parquet",
+      "status": "converted",
+      "rows": 179465,
+      "columns": 26,
+      "reason": null
+    }
+  ]
+}

@@ -1,0 +1,110 @@
+{
+  "scatterApiResponse": {
+    "sample_id": "PC3_EXO1",
+    "total_events": 921345,
+    "returned_points": 2000,
+    "data": [
+      {
+        "x": 1250.43,
+        "y": 845.11,
+        "index": 0,
+        "diameter": 113.2
+      },
+      {
+        "x": 980.17,
+        "y": 702.38,
+        "index": 1,
+        "diameter": 95.7
+      }
+    ],
+    "channels": {
+      "fsc": "FSC-A",
+      "ssc": "SSC-A",
+      "available": [
+        "FSC-A",
+        "SSC-A",
+        "VSSC1-A",
+        "VSSC2-A"
+      ]
+    },
+    "warnings": [
+      "Gain mismatch detected for selected channels"
+    ],
+    "gain_mismatch": {
+      "status": "warning"
+    }
+  },
+  "scatterUiData": [
+    {
+      "x": 1250.43,
+      "y": 845.11,
+      "index": 0,
+      "diameter": 113.2,
+      "isAnomaly": false
+    },
+    {
+      "x": 980.17,
+      "y": 702.38,
+      "index": 1,
+      "diameter": 95.7,
+      "isAnomaly": true
+    }
+  ],
+  "scatterChartReadySeries": {
+    "normalData": [
+      {
+        "x": 1250.43,
+        "y": 845.11,
+        "z": 8,
+        "index": 0
+      }
+    ],
+    "anomalyData": [
+      {
+        "x": 980.17,
+        "y": 702.38,
+        "z": 20,
+        "index": 1
+      }
+    ]
+  },
+  "overlayHistogramChartPayload": {
+    "data": [
+      {
+        "bin": "50",
+        "binValue": 50,
+        "primary": 120,
+        "secondary": 95
+      },
+      {
+        "bin": "60",
+        "binValue": 60,
+        "primary": 140,
+        "secondary": 102
+      },
+      {
+        "bin": "70",
+        "binValue": 70,
+        "primary": 132,
+        "secondary": 110
+      }
+    ],
+    "isApproximate": false
+  },
+  "sizeDistributionChartPayload": [
+    {
+      "size": 12,
+      "range0": 15,
+      "range1": 42,
+      "range2": 8,
+      "total": 65
+    },
+    {
+      "size": 37,
+      "range0": 18,
+      "range1": 55,
+      "range2": 10,
+      "total": 83
+    }
+  ]
+}

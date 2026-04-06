@@ -40,6 +40,7 @@ import { EVSizeCategoryBarChart } from "./charts/ev-size-category-bar-chart"
 import { NTAStatisticsCards } from "./statistics-cards"
 import { NTASizeDistributionBreakdown } from "./size-distribution-breakdown"
 import { SupplementaryMetadataTable } from "./supplementary-metadata-table"
+import { NTAMetadataCompareTable } from "./nta-metadata-compare-table"
 import { 
   generateMarkdownReport, 
   downloadMarkdownReport,
@@ -70,6 +71,8 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
     toggleNTACompareSampleVisibility,
     setNTAComparePrimarySampleId,
     setNTACompareSampleResult,
+    setNTACompareMaxVisibleOverlays,
+    clearNTACompareComputedSeriesCache,
     clearNTACompareSession,
     ntaAnalysisSettings,
     ntaSizeProfiles,
@@ -80,6 +83,19 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
   const { loadNTACompareSamples, fetchSamples } = useApi()
   const [activeTab, setActiveTab] = useState("distribution")
   const [compareUploadLoading, setCompareUploadLoading] = useState(false)
+  const [compareUploadProgress, setCompareUploadProgress] = useState<{ total: number; completed: number; failed: number } | null>(null)
+  const [showHistoricalSamples, setShowHistoricalSamples] = useState(false)
+  const [sessionSampleIds, setSessionSampleIds] = useState<string[]>(sampleId ? [sampleId] : [])
+  const [clearedSeedSampleId, setClearedSeedSampleId] = useState<string | null>(null)
+  const [debouncedOverlaySeries, setDebouncedOverlaySeries] = useState<Array<{
+    sampleId: string
+    label: string
+    color: string
+    visible: boolean
+    isPrimary: boolean
+    result: NTAResult
+  }>>([])
+  const [stagedVisibleSampleIds, setStagedVisibleSampleIds] = useState<string[]>([])
   const showTemperatureCorrection = !!ntaAnalysisSettings?.applyTemperatureCorrection
   const OVERLAY_COLORS = ["#8b5cf6", "#f97316", "#3b82f6", "#22c55e", "#ef4444", "#eab308", "#14b8a6", "#a855f7"]
 
@@ -90,6 +106,37 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
     () => apiSamples.filter((s) => s.files?.nta),
     [apiSamples]
   )
+
+  const sessionSelectableSampleIds = useMemo(() => {
+    const ids = [
+      ...sessionSampleIds,
+      ...ntaCompareSession.selectedSampleIds,
+      ...ntaCompareSession.visibleSampleIds,
+      ...Object.keys(ntaCompareSession.resultsBySampleId),
+      ...(sampleId ? [sampleId] : []),
+    ]
+    return Array.from(new Set(ids)).filter(Boolean).slice(0, 50)
+  }, [
+    sampleId,
+    sessionSampleIds,
+    ntaCompareSession.selectedSampleIds,
+    ntaCompareSession.visibleSampleIds,
+    ntaCompareSession.resultsBySampleId,
+  ])
+
+  const selectableSampleIds = useMemo(() => {
+    if (!showHistoricalSamples) {
+      return sessionSelectableSampleIds
+    }
+
+    const historical = availableNtaSamples.map((s) => s.sample_id)
+    return Array.from(new Set([...sessionSelectableSampleIds, ...historical])).slice(0, 200)
+  }, [availableNtaSamples, sessionSelectableSampleIds, showHistoricalSamples])
+
+  useEffect(() => {
+    if (!sampleId) return
+    setSessionSampleIds((prev) => (prev.includes(sampleId) ? prev : [sampleId, ...prev].slice(0, 50)))
+  }, [sampleId])
 
   const sampleLabelById = useMemo(() => {
     const map: Record<string, string> = {}
@@ -108,16 +155,38 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
   const compareResultForCurrentSample = sampleId ? ntaCompareSession.resultsBySampleId[sampleId] : undefined
 
   useEffect(() => {
+    if (ntaCompareSession.maxVisibleOverlays < 8) {
+      setNTACompareMaxVisibleOverlays(8)
+    }
+  }, [ntaCompareSession.maxVisibleOverlays, setNTACompareMaxVisibleOverlays])
+
+  useEffect(() => {
     if (!sampleId) return
+
+    const shouldSkipAutoSeed =
+      selectedSampleIds.length === 0 &&
+      visibleSampleIds.length === 0 &&
+      clearedSeedSampleId === sampleId
+
+    if (shouldSkipAutoSeed) {
+      return
+    }
 
     const updates: Array<() => void> = []
 
     if (!selectedSampleIds.includes(sampleId)) {
-      updates.push(() => setNTACompareSelectedSampleIds([...selectedSampleIds, sampleId].slice(0, 20)))
+      updates.push(() => {
+        const nextSelected = [sampleId, ...selectedSampleIds.filter((id) => id !== sampleId)].slice(0, 20)
+        setNTACompareSelectedSampleIds(nextSelected)
+      })
     }
 
     if (!visibleSampleIds.includes(sampleId)) {
-      updates.push(() => setNTACompareVisibleSampleIds([...visibleSampleIds, sampleId].slice(0, ntaCompareSession.maxVisibleOverlays)))
+      updates.push(() => {
+        const nextVisible = [sampleId, ...visibleSampleIds.filter((id) => id !== sampleId)]
+          .slice(0, ntaCompareSession.maxVisibleOverlays)
+        setNTACompareVisibleSampleIds(nextVisible)
+      })
     }
 
     if (!ntaCompareSession.primarySampleId) {
@@ -138,8 +207,10 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
     compareResultForCurrentSample,
     selectedSampleIds,
     visibleSampleIds,
+    clearedSeedSampleId,
     ntaCompareSession.maxVisibleOverlays,
     ntaCompareSession.primarySampleId,
+    setNTACompareMaxVisibleOverlays,
     setNTAComparePrimarySampleId,
     setNTACompareSampleResult,
     setNTACompareSelectedSampleIds,
@@ -149,6 +220,8 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
   const applySelectedSamples = useCallback(async (nextSelected: string[]) => {
     const normalized = Array.from(new Set(nextSelected)).slice(0, 20)
     setNTACompareSelectedSampleIds(normalized)
+    setSessionSampleIds((prev) => Array.from(new Set([...prev, ...normalized])).slice(0, 50))
+    setClearedSeedSampleId(null)
 
     const toFetch = normalized.filter((id) => id !== sampleId)
     if (toFetch.length > 0) {
@@ -166,40 +239,92 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
 
   const handleRemoveSelectedSample = useCallback((sampleIdentifier: string) => {
     const nextSelected = selectedSampleIds.filter((id) => id !== sampleIdentifier)
-    applySelectedSamples(nextSelected)
-  }, [applySelectedSamples, selectedSampleIds])
+    const nextVisible = visibleSampleIds.filter((id) => id !== sampleIdentifier)
+    setNTACompareVisibleSampleIds(nextVisible)
 
-  const handleComparisonUpload = useCallback(async (file: File) => {
+    if (primarySampleId === sampleIdentifier) {
+      setNTAComparePrimarySampleId(nextSelected[0] || null)
+    }
+
+    applySelectedSamples(nextSelected)
+  }, [
+    applySelectedSamples,
+    primarySampleId,
+    selectedSampleIds,
+    setNTAComparePrimarySampleId,
+    setNTACompareVisibleSampleIds,
+    visibleSampleIds,
+  ])
+
+  const handleComparisonUploads = useCallback(async (filesInput: FileList | File[]) => {
+    const files = Array.from(filesInput)
+    if (files.length === 0) return
+
     setCompareUploadLoading(true)
+    setCompareUploadProgress({ total: files.length, completed: 0, failed: 0 })
+
     try {
       const { apiClient } = await import("@/lib/api-client")
-      const response = await apiClient.uploadNTA(file)
+      const selectedSet = new Set(selectedSampleIds)
+      const visibleSet = new Set(visibleSampleIds)
+      const toFetch: string[] = []
 
-      if (!response?.success) {
-        throw new Error("Comparison upload failed")
+      let completed = 0
+      let failed = 0
+
+      for (const file of files) {
+        try {
+          const response = await apiClient.uploadNTA(file)
+          if (!response?.success) {
+            throw new Error("Comparison upload failed")
+          }
+
+          const uploadedSampleId = response.sample_id || file.name
+          selectedSet.add(uploadedSampleId)
+          visibleSet.add(uploadedSampleId)
+
+          if (response.nta_results) {
+            setNTACompareSampleResult(uploadedSampleId, response.nta_results)
+          } else {
+            toFetch.push(uploadedSampleId)
+          }
+
+          completed += 1
+          setCompareUploadProgress({ total: files.length, completed, failed })
+        } catch (error) {
+          failed += 1
+          setCompareUploadProgress({ total: files.length, completed, failed })
+          toast({
+            variant: "destructive",
+            title: `Upload failed: ${file.name}`,
+            description: error instanceof Error ? error.message : "Failed to upload comparison file",
+          })
+        }
       }
 
-      const uploadedSampleId = response.sample_id || file.name
-      if (response.nta_results) {
-        setNTACompareSampleResult(uploadedSampleId, response.nta_results)
-      }
-
-      const nextSelected = Array.from(new Set([...selectedSampleIds, uploadedSampleId])).slice(0, 20)
-      setNTACompareSelectedSampleIds(nextSelected)
-
-      const nextVisible = Array.from(new Set([...visibleSampleIds, uploadedSampleId]))
+      const nextSelected = Array.from(selectedSet).slice(0, 20)
+      const nextVisible = Array.from(visibleSet)
+        .filter((id) => nextSelected.includes(id))
         .slice(0, ntaCompareSession.maxVisibleOverlays)
-      setNTACompareVisibleSampleIds(nextVisible)
 
-      if (!response.nta_results) {
-        await loadNTACompareSamples([uploadedSampleId])
+      setNTACompareSelectedSampleIds(nextSelected)
+      setNTACompareVisibleSampleIds(nextVisible)
+      setSessionSampleIds((prev) => Array.from(new Set([...prev, ...nextSelected])).slice(0, 50))
+      setClearedSeedSampleId(null)
+
+      if (!primarySampleId && nextSelected.length > 0) {
+        setNTAComparePrimarySampleId(nextSelected[0])
+      }
+
+      if (toFetch.length > 0) {
+        await loadNTACompareSamples(toFetch)
       }
 
       await fetchSamples()
 
       toast({
-        title: "Comparison file uploaded",
-        description: `Added ${uploadedSampleId} to compare session.`,
+        title: "Comparison upload complete",
+        description: `${completed} uploaded, ${failed} failed.`,
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to upload comparison file"
@@ -210,18 +335,28 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
       })
     } finally {
       setCompareUploadLoading(false)
+      window.setTimeout(() => setCompareUploadProgress(null), 1800)
     }
   }, [
     fetchSamples,
     loadNTACompareSamples,
     ntaCompareSession.maxVisibleOverlays,
+    primarySampleId,
     selectedSampleIds,
+    setNTAComparePrimarySampleId,
     setNTACompareSampleResult,
     setNTACompareSelectedSampleIds,
     setNTACompareVisibleSampleIds,
     toast,
     visibleSampleIds,
   ])
+
+  const handleClearCompareSession = useCallback(() => {
+    clearNTACompareSession()
+    setSessionSampleIds(sampleId ? [sampleId] : [])
+    setClearedSeedSampleId(sampleId || null)
+    setCompareUploadProgress(null)
+  }, [clearNTACompareSession, sampleId])
 
   const overlaySeries = useMemo(() => {
     const visibleSet = new Set(visibleSampleIds)
@@ -241,6 +376,46 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
       })
       .filter((item): item is { sampleId: string; label: string; color: string; visible: boolean; isPrimary: boolean; result: NTAResult } => !!item)
   }, [selectedSampleIds, sampleId, results, ntaCompareSession.resultsBySampleId, visibleSampleIds, sampleLabelById, primarySampleId])
+
+  // Debounce overlay-series updates to avoid expensive recomputation bursts.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedOverlaySeries(overlaySeries)
+    }, 120)
+    return () => window.clearTimeout(timer)
+  }, [overlaySeries, analysisProfile?.id, ntaAnalysisSettings?.yAxisMode])
+
+  // Progressive paint: render primary first, then stage remaining visible overlays.
+  useEffect(() => {
+    const visible = debouncedOverlaySeries.filter((series) => series.visible)
+    if (visible.length === 0) {
+      setStagedVisibleSampleIds([])
+      return
+    }
+
+    const first = visible.find((series) => series.isPrimary) || visible[0]
+    const queue = visible.filter((series) => series.sampleId !== first.sampleId)
+    setStagedVisibleSampleIds([first.sampleId])
+
+    const timers = queue.map((series, index) => window.setTimeout(() => {
+      setStagedVisibleSampleIds((prev) => (prev.includes(series.sampleId) ? prev : [...prev, series.sampleId]))
+    }, 90 * (index + 1)))
+
+    return () => timers.forEach((timer) => window.clearTimeout(timer))
+  }, [debouncedOverlaySeries])
+
+  // Clear computed chart cache whenever profile/axis settings shift.
+  useEffect(() => {
+    clearNTACompareComputedSeriesCache()
+  }, [analysisProfile?.id, ntaAnalysisSettings?.yAxisMode, clearNTACompareComputedSeriesCache])
+
+  const stagedOverlaySeries = useMemo(() => {
+    const stagedSet = new Set(stagedVisibleSampleIds)
+    return debouncedOverlaySeries.map((series) => ({
+      ...series,
+      visible: series.visible && stagedSet.has(series.sampleId),
+    }))
+  }, [debouncedOverlaySeries, stagedVisibleSampleIds])
 
   const handlePin = (chartTitle: string, chartType: "histogram" | "bar" | "line") => {
     let pinData: Array<{ x: number; y: number; label?: string }> = []
@@ -745,12 +920,13 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
                 <Input
                   type="file"
                   accept=".txt,.csv"
+                  multiple
                   className="h-8 text-xs"
                   disabled={compareUploadLoading}
                   onChange={(event) => {
-                    const file = event.target.files?.[0]
-                    if (file) {
-                      handleComparisonUpload(file)
+                    const files = event.target.files
+                    if (files && files.length > 0) {
+                      handleComparisonUploads(files)
                     }
                     event.currentTarget.value = ""
                   }}
@@ -759,8 +935,14 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
               </div>
               <p className="text-[11px] text-muted-foreground flex items-center gap-1">
                 <Upload className="h-3 w-3" />
-                Upload and auto-add file to selected overlays.
+                Upload one or many files and auto-add to this compare session.
               </p>
+              {compareUploadProgress && (
+                <p className="text-[11px] text-muted-foreground">
+                  Uploaded {compareUploadProgress.completed}/{compareUploadProgress.total}
+                  {compareUploadProgress.failed > 0 ? `, failed ${compareUploadProgress.failed}` : ""}
+                </p>
+              )}
             </div>
 
             <div className="flex items-center justify-between gap-2">
@@ -797,23 +979,39 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
               </div>
             </div>
 
+            <div className="flex items-center justify-between rounded-md border border-border/60 p-2">
+              <Label className="text-xs text-muted-foreground" htmlFor="historical-samples-toggle">
+                Show Historical Database Samples
+              </Label>
+              <Switch
+                id="historical-samples-toggle"
+                checked={showHistoricalSamples}
+                onCheckedChange={setShowHistoricalSamples}
+              />
+            </div>
+
             <ScrollArea className="max-h-45 pr-1">
               <div className="space-y-1">
-                {availableNtaSamples.map((sample) => {
-                  const isSelected = selectedSampleIds.includes(sample.sample_id)
+                {selectableSampleIds.map((sampleIdentifier) => {
+                  const isSelected = selectedSampleIds.includes(sampleIdentifier)
                   return (
                     <label
-                      key={sample.id}
+                      key={sampleIdentifier}
                       className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-secondary/30 cursor-pointer"
                     >
                       <Checkbox
                         checked={isSelected}
-                        onCheckedChange={(checked) => handleSampleSelection(sample.sample_id, checked === true)}
+                        onCheckedChange={(checked) => handleSampleSelection(sampleIdentifier, checked === true)}
                       />
-                      <span className="text-xs truncate flex-1">{sample.sample_id}</span>
+                      <span className="text-xs truncate flex-1">{sampleLabelById[sampleIdentifier] || sampleIdentifier}</span>
                     </label>
                   )
                 })}
+                {selectableSampleIds.length === 0 && (
+                  <p className="px-2 py-3 text-xs text-muted-foreground">
+                    No session samples yet. Upload files or enable historical samples.
+                  </p>
+                )}
               </div>
             </ScrollArea>
 
@@ -889,7 +1087,7 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
                 variant="ghost"
                 size="sm"
                 className="text-xs"
-                onClick={clearNTACompareSession}
+                onClick={handleClearCompareSession}
                 disabled={selectedSampleIds.length === 0}
               >
                 Clear Compare Session
@@ -945,7 +1143,7 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
               </div>
               <NTASizeDistributionChart 
                 data={results} 
-                overlaySeries={overlaySeries}
+                overlaySeries={stagedOverlaySeries}
               />
             </TabsContent>
 
@@ -971,7 +1169,7 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
               </div>
               <ConcentrationProfileChart 
                 data={results} 
-                overlaySeries={overlaySeries}
+                overlaySeries={stagedOverlaySeries}
                 bins={analysisProfile?.bins || []}
               />
             </TabsContent>
@@ -983,7 +1181,11 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
             )}
 
             <TabsContent value="metadata" className="space-y-4">
-              <SupplementaryMetadataTable sampleId={sampleId} />
+              {selectedSampleIds.length > 1 ? (
+                <NTAMetadataCompareTable sampleIds={selectedSampleIds} primarySampleId={primarySampleId} />
+              ) : (
+                <SupplementaryMetadataTable sampleId={sampleId} />
+              )}
             </TabsContent>
           </Tabs>
         </CardContent>

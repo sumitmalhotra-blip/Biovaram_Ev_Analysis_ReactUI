@@ -6,7 +6,10 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "eslint .",
-    "start": "next start"
+    "start": "next start",
+    "perf:gates": "playwright test tests/perf/fcs-compare-gates.spec.ts",
+    "perf:gates:headed": "playwright test tests/perf/fcs-compare-gates.spec.ts --headed",
+    "perf:gates:report": "playwright show-report"
   },
   "dependencies": {
     "@ai-sdk/react": "latest",
@@ -72,6 +75,7 @@
     "zustand": "latest"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@tailwindcss/postcss": "^4.1.9",
     "@types/node": "^22",
     "@types/react": "^19",

@@ -22,7 +22,7 @@ Updated: January 2, 2026 - Added CRMIT-007 Temporal Analysis
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession  # type: ignore[import-not-found]
-from sqlalchemy import select  # type: ignore[import-not-found]
+from sqlalchemy import select, desc  # type: ignore[import-not-found]
 from pydantic import BaseModel, Field
 from loguru import logger
 import numpy as np
@@ -135,6 +135,19 @@ class StatisticalTestResponse(BaseModel):
     group_b_samples: List[str]
     comparisons: List[MetricComparison]
     summary: dict
+
+
+class NTAMultiCompareRequest(BaseModel):
+    """Bulk compare request for NTA sample summaries."""
+    sample_ids: List[str] = Field(..., min_length=1, max_length=20, description="NTA sample IDs")
+    include_size_distribution: bool = Field(
+        default=True,
+        description="Include pre-aggregated size-bin distribution in response"
+    )
+    filters: Optional[Dict[str, float]] = Field(
+        default=None,
+        description="Optional size filters: size_min, size_max"
+    )
 
 
 # ============================================================================
@@ -273,6 +286,132 @@ def run_statistical_test(
 # ============================================================================
 # Statistical Tests Endpoint
 # ============================================================================
+
+
+@router.post("/nta/multi-compare", response_model=dict)
+async def nta_multi_compare(
+    request: NTAMultiCompareRequest,
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    Bulk fetch compact NTA compare payload for multiple sample IDs.
+
+    Returns per-sample latest NTA summary, lightweight metadata, optional
+    pre-aggregated size bins, and warnings/errors for partial failures.
+    """
+    sample_ids = [sample_id.strip() for sample_id in request.sample_ids if sample_id and sample_id.strip()]
+    normalized_sample_ids = list(dict.fromkeys(sample_ids))[:20]
+
+    if len(normalized_sample_ids) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="sample_ids must include at least one non-empty sample id"
+        )
+
+    size_min = float(request.filters.get("size_min")) if request.filters and "size_min" in request.filters else None
+    size_max = float(request.filters.get("size_max")) if request.filters and "size_max" in request.filters else None
+
+    sample_result = await db.execute(
+        select(Sample).where(Sample.sample_id.in_(normalized_sample_ids))
+    )
+    samples = sample_result.scalars().all()
+    sample_by_id = {str(sample.sample_id): sample for sample in samples}
+
+    results_by_sample_id: Dict[str, Dict[str, Any]] = {}
+    metadata_by_sample_id: Dict[str, Dict[str, Any]] = {}
+    warnings_by_sample_id: Dict[str, str] = {}
+    errors_by_sample_id: Dict[str, str] = {}
+
+    def _in_range(bin_min: float, bin_max: float) -> bool:
+        if size_min is not None and bin_max < size_min:
+            return False
+        if size_max is not None and bin_min > size_max:
+            return False
+        return True
+
+    for sample_id in normalized_sample_ids:
+        sample = sample_by_id.get(sample_id)
+        if sample is None:
+            errors_by_sample_id[sample_id] = "Sample not found"
+            continue
+
+        nta_result = await db.execute(
+            select(NTAResult)
+            .where(NTAResult.sample_id == sample.id)
+            .order_by(desc(NTAResult.processed_at), desc(NTAResult.id))
+            .limit(1)
+        )
+        nta = nta_result.scalar_one_or_none()
+
+        if nta is None:
+            errors_by_sample_id[sample_id] = "No NTA results found"
+            continue
+
+        summary: Dict[str, Any] = {
+            "id": getattr(nta, "id", None),
+            "mean_size_nm": getattr(nta, "mean_size_nm", None),
+            "median_size_nm": getattr(nta, "median_size_nm", None),
+            "d10_nm": getattr(nta, "d10_nm", None),
+            "d50_nm": getattr(nta, "d50_nm", None),
+            "d90_nm": getattr(nta, "d90_nm", None),
+            "std_dev_nm": getattr(nta, "std_dev_nm", None),
+            "concentration_particles_ml": getattr(nta, "concentration_particles_ml", None),
+            "temperature_celsius": getattr(nta, "temperature_celsius", None),
+            "ph": getattr(nta, "ph", None),
+            "conductivity": getattr(nta, "conductivity", None),
+            "processed_at": str(getattr(nta, "processed_at", "")) if getattr(nta, "processed_at", None) else None,
+        }
+
+        if request.include_size_distribution:
+            raw_bins = [
+                (30.0, 50.0, "30-50nm", getattr(nta, "bin_30_50nm_pct", None)),
+                (50.0, 80.0, "50-80nm", getattr(nta, "bin_50_80nm_pct", None)),
+                (80.0, 100.0, "80-100nm", getattr(nta, "bin_80_100nm_pct", None)),
+                (100.0, 120.0, "100-120nm", getattr(nta, "bin_100_120nm_pct", None)),
+                (120.0, 150.0, "120-150nm", getattr(nta, "bin_120_150nm_pct", None)),
+                (150.0, 200.0, "150-200nm", getattr(nta, "bin_150_200nm_pct", None)),
+            ]
+            preaggregated_bins = [
+                {
+                    "label": label,
+                    "min_nm": bmin,
+                    "max_nm": bmax,
+                    "percentage": float(pct) if pct is not None else 0.0,
+                }
+                for (bmin, bmax, label, pct) in raw_bins
+                if _in_range(bmin, bmax)
+            ]
+            summary["preaggregated_bins"] = preaggregated_bins
+
+        results_by_sample_id[sample_id] = summary
+        metadata_by_sample_id[sample_id] = {
+            "sample_id": str(sample.sample_id),
+            "treatment": sample.treatment,
+            "operator": sample.operator,
+            "preparation_method": sample.preparation_method,
+            "upload_timestamp": str(sample.upload_timestamp) if sample.upload_timestamp else None,
+            "processing_status": sample.processing_status,
+            "qc_status": sample.qc_status,
+        }
+
+        if getattr(nta, "concentration_particles_ml", None) is None:
+            warnings_by_sample_id[sample_id] = "NTA concentration is missing"
+
+    return {
+        "success": True,
+        "requested_sample_ids": normalized_sample_ids,
+        "results_by_sample_id": results_by_sample_id,
+        "metadata_by_sample_id": metadata_by_sample_id,
+        "warnings_by_sample_id": warnings_by_sample_id,
+        "errors_by_sample_id": errors_by_sample_id,
+        "summary": {
+            "requested": len(normalized_sample_ids),
+            "resolved": len(results_by_sample_id),
+            "failed": len(errors_by_sample_id),
+            "include_size_distribution": request.include_size_distribution,
+            "filters": request.filters or {},
+        },
+    }
 
 @router.post("/statistical-tests", response_model=StatisticalTestResponse)
 async def run_statistical_tests(

@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from "recharts"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -8,6 +8,7 @@ import { Eye, EyeOff, Layers, BarChart3 } from "lucide-react"
 import type { NTAResult } from "@/lib/api-client"
 import type { NTASizeBin } from "@/lib/store"
 import { computeNTABinsForProfile } from "@/lib/nta-size-profiles"
+import { useAnalysisStore } from "@/lib/store"
 
 interface ConcentrationProfileChartProps {
   data?: NTAResult
@@ -72,25 +73,69 @@ export function ConcentrationProfileChart({
   showOverlayControls = true,
 }: ConcentrationProfileChartProps) {
   const [visibilityOverrides, setVisibilityOverrides] = useState<Record<string, boolean>>({})
+  const [debouncedOverlaySeries, setDebouncedOverlaySeries] = useState(overlaySeries)
+  const { ntaCompareSession, setNTACompareComputedSeriesCacheEntry } = useAnalysisStore()
+  const profileKey = useMemo(
+    () => bins.map((bin) => `${bin.min}-${bin.max}`).join("|"),
+    [bins]
+  )
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedOverlaySeries(overlaySeries)
+    }, 120)
+    return () => window.clearTimeout(timer)
+  }, [overlaySeries, profileKey])
 
   const primaryData = useMemo(() => generateConcentrationData(results, bins), [results, bins])
 
   const preparedSeries = useMemo(() => {
-    const visible = overlaySeries.filter((series) => visibilityOverrides[series.sampleId] ?? series.visible)
+    const visible = debouncedOverlaySeries.filter((series) => visibilityOverrides[series.sampleId] ?? series.visible)
     const sorted = [...visible].sort((a, b) => {
       if (a.isPrimary === b.isPrimary) return 0
       return a.isPrimary ? -1 : 1
     })
 
     return sorted.map((series, index) => {
-      const generated = generateConcentrationData(series.result, bins)
+      const cacheKey = `conc:${series.sampleId}:${series.result.id ?? "no-result-id"}:${profileKey}`
+      const cached = ntaCompareSession.computedSeriesCacheByKey[cacheKey]
+      const cachedData = cached?.points?.map((point, pointIndex) => ({
+        position: point.x,
+        range: point.label || `Bin ${pointIndex + 1}`,
+        concentration: point.y,
+        percentage: 0,
+      }))
+      const generated = cachedData && cachedData.length > 0
+        ? cachedData
+        : generateConcentrationData(series.result, bins)
+
       return {
         ...series,
+        cacheKey,
+        shouldCache: !cached,
         chartKey: `series_${index}`,
         data: generated || [],
       }
     })
-  }, [overlaySeries, bins, visibilityOverrides])
+  }, [debouncedOverlaySeries, bins, profileKey, visibilityOverrides, ntaCompareSession.computedSeriesCacheByKey])
+
+  useEffect(() => {
+    preparedSeries.forEach((series) => {
+      if (!series.shouldCache) return
+      setNTACompareComputedSeriesCacheEntry({
+        cacheKey: series.cacheKey,
+        chartType: "concentration",
+        sampleId: series.sampleId,
+        profileId: profileKey,
+        points: series.data.map((point) => ({
+          x: point.position,
+          y: point.concentration,
+          label: point.range,
+        })),
+        updatedAt: Date.now(),
+      })
+    })
+  }, [preparedSeries, profileKey, setNTACompareComputedSeriesCacheEntry])
 
   const hasOverlay = preparedSeries.length > 1
 
