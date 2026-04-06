@@ -396,6 +396,7 @@ export function useApi() {
       file: File,
       metadata?: {
         treatment?: string
+        dye?: string
         concentration_ug?: number
         preparation_method?: string
         operator?: string
@@ -528,6 +529,7 @@ export function useApi() {
       file: File,
       metadata?: {
         treatment?: string
+        dye?: string
         concentration_ug?: number
         preparation_method?: string
         operator?: string
@@ -644,6 +646,7 @@ export function useApi() {
       options?: {
         metadata?: {
           treatment?: string
+          dye?: string
           concentration_ug?: number
           preparation_method?: string
           operator?: string

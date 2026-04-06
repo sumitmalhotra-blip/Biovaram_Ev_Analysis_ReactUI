@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast"
 
 interface FileMetadata {
   treatment: string
+  dye: string
   concentration: string
   operator: string
   preparationMethod: string
@@ -40,11 +41,12 @@ export function DualFileUploadZone() {
   const [activeTab, setActiveTab] = useState<"primary" | "comparison">("primary")
   const [primaryUpload, setPrimaryUpload] = useState<FileUploadState>({
     file: null,
-    metadata: { treatment: "", concentration: "", operator: "", preparationMethod: "" }
+    metadata: { treatment: "", dye: "", concentration: "", operator: "", preparationMethod: "" }
   })
   const [compareBatchFiles, setCompareBatchFiles] = useState<BatchFileUploadState[]>([])
   const [compareBatchMetadata, setCompareBatchMetadata] = useState<FileMetadata>({
     treatment: "",
+    dye: "",
     concentration: "",
     operator: "",
     preparationMethod: "",
@@ -140,6 +142,7 @@ export function DualFileUploadZone() {
 
     await uploadFCS(primaryUpload.file, {
       treatment: primaryUpload.metadata.treatment || undefined,
+      dye: primaryUpload.metadata.dye || undefined,
       concentration_ug: primaryUpload.metadata.concentration ? parseFloat(primaryUpload.metadata.concentration) : undefined,
       preparation_method: primaryUpload.metadata.preparationMethod || undefined,
       operator: primaryUpload.metadata.operator || undefined,
@@ -148,7 +151,7 @@ export function DualFileUploadZone() {
     // Reset form after upload
     setPrimaryUpload({
       file: null,
-      metadata: { treatment: "", concentration: "", operator: "", preparationMethod: "" }
+      metadata: { treatment: "", dye: "", concentration: "", operator: "", preparationMethod: "" }
     })
   }
 
@@ -164,6 +167,7 @@ export function DualFileUploadZone() {
     const summary = await uploadFCSCompareBatch(queuedFiles, {
       metadata: {
         treatment: compareBatchMetadata.treatment || undefined,
+        dye: compareBatchMetadata.dye || undefined,
         concentration_ug: compareBatchMetadata.concentration ? parseFloat(compareBatchMetadata.concentration) : undefined,
         preparation_method: compareBatchMetadata.preparationMethod || undefined,
         operator: compareBatchMetadata.operator || undefined,
@@ -201,13 +205,13 @@ export function DualFileUploadZone() {
   const clearPrimary = () => {
     setPrimaryUpload({
       file: null,
-      metadata: { treatment: "", concentration: "", operator: "", preparationMethod: "" }
+      metadata: { treatment: "", dye: "", concentration: "", operator: "", preparationMethod: "" }
     })
   }
 
   const clearCompareBatch = () => {
     setCompareBatchFiles([])
-    setCompareBatchMetadata({ treatment: "", concentration: "", operator: "", preparationMethod: "" })
+    setCompareBatchMetadata({ treatment: "", dye: "", concentration: "", operator: "", preparationMethod: "" })
   }
 
   const hasPrimaryResults = fcsAnalysis.results !== null
@@ -289,6 +293,23 @@ export function DualFileUploadZone() {
               placeholder="0.5"
               className="h-8 text-xs"
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="primary-dye" className="text-xs">Dye</Label>
+            <Select value={primaryUpload.metadata.dye} onValueChange={(v) => updatePrimaryMetadata("dye", v)}>
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue placeholder="Select" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="PKH26">PKH26</SelectItem>
+                <SelectItem value="PKH67">PKH67</SelectItem>
+                <SelectItem value="DiI">DiI</SelectItem>
+                <SelectItem value="DiO">DiO</SelectItem>
+                <SelectItem value="CFSE">CFSE</SelectItem>
+                <SelectItem value="None">None</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-1.5">
@@ -418,6 +439,23 @@ export function DualFileUploadZone() {
                       <SelectItem value="CD63">CD63</SelectItem>
                       <SelectItem value="Isotype">Isotype</SelectItem>
                       <SelectItem value="Unstained">Unstained</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="batch-dye" className="text-xs">Dye</Label>
+                  <Select value={compareBatchMetadata.dye} onValueChange={(v) => updateBatchMetadata("dye", v)}>
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue placeholder="Select" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="PKH26">PKH26</SelectItem>
+                      <SelectItem value="PKH67">PKH67</SelectItem>
+                      <SelectItem value="DiI">DiI</SelectItem>
+                      <SelectItem value="DiO">DiO</SelectItem>
+                      <SelectItem value="CFSE">CFSE</SelectItem>
+                      <SelectItem value="None">None</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

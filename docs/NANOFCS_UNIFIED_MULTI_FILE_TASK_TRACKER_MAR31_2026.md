@@ -333,7 +333,7 @@ Immediate kickoff items for the active sprint. These items are marked In progres
 
 #### F1. Treatment and dye metadata parity
 - ID: FCS-F1
-- Status: [~]
+- Status: [x]
 - Files:
   - components/flow-cytometry/file-upload-zone.tsx
   - components/flow-cytometry/dual-file-upload-zone.tsx
@@ -341,12 +341,12 @@ Immediate kickoff items for the active sprint. These items are marked In progres
   - lib/api-client.ts
   - backend/src/api/routers/upload.py
 - Checklist:
-  - [ ] Add dye field to single and batch upload flows.
-  - [ ] Send dye in upload API contract and payload.
-  - [ ] Persist and return dye from backend.
-  - [ ] Display treatment and dye badges in compare contexts.
+  - [x] Add dye field to single and batch upload flows.
+  - [x] Send dye in upload API contract and payload.
+  - [x] Persist and return dye from backend.
+  - [x] Display treatment and dye badges in compare contexts.
 - Acceptance:
-  - [ ] Treatment and dye round-trip successfully end-to-end.
+  - [x] Treatment and dye round-trip successfully end-to-end.
 
 #### F2. UAT script and evidence pack
 - ID: FCS-F2

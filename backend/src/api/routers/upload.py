@@ -57,6 +57,52 @@ from src.physics.size_config import (
 settings = get_settings()
 router = APIRouter()
 
+METADATA_OVERRIDE_BEGIN = "[[METADATA_OVERRIDE_JSON]]"
+METADATA_OVERRIDE_END = "[[/METADATA_OVERRIDE_JSON]]"
+
+
+def _extract_metadata_overrides_from_notes(notes: Optional[str]) -> dict:
+    if not notes:
+        return {}
+
+    start = notes.find(METADATA_OVERRIDE_BEGIN)
+    end = notes.find(METADATA_OVERRIDE_END)
+    if start == -1 or end == -1 or end <= start:
+        return {}
+
+    payload = notes[start + len(METADATA_OVERRIDE_BEGIN):end].strip()
+    if not payload:
+        return {}
+
+    try:
+        import json
+
+        decoded = json.loads(payload)
+        return decoded if isinstance(decoded, dict) else {}
+    except Exception:
+        return {}
+
+
+def _upsert_metadata_overrides_in_notes(notes: Optional[str], overrides: dict) -> str:
+    import json
+
+    base_notes = notes or ""
+    block = (
+        f"{METADATA_OVERRIDE_BEGIN}\n"
+        f"{json.dumps(overrides, ensure_ascii=True, indent=2)}\n"
+        f"{METADATA_OVERRIDE_END}"
+    )
+
+    start = base_notes.find(METADATA_OVERRIDE_BEGIN)
+    end = base_notes.find(METADATA_OVERRIDE_END)
+    if start != -1 and end != -1 and end > start:
+        tail = end + len(METADATA_OVERRIDE_END)
+        return f"{base_notes[:start].rstrip()}\n\n{block}\n{base_notes[tail:].lstrip()}".strip()
+
+    if base_notes.strip():
+        return f"{base_notes.rstrip()}\n\n{block}"
+    return block
+
 
 def _serialize_file_path(path: Path) -> str:
     """Return a stable file path string without raising relative_to errors."""
@@ -545,6 +591,7 @@ def generate_sample_id(filename: str) -> str:
 async def upload_fcs_file(
     file: UploadFile = File(...),
     treatment: Optional[str] = Form(None),
+    dye: Optional[str] = Form(None),
     concentration_ug: Optional[float] = Form(None),
     preparation_method: Optional[str] = Form(None),
     operator: Optional[str] = Form(None),
@@ -562,6 +609,7 @@ async def upload_fcs_file(
     **Request:**
     - file: FCS file (multipart/form-data)
     - treatment: Treatment name (e.g., "CD81", "ISO", "Control")
+    - dye: Dye used for labeling (e.g., "PKH26", "PKH67", "DiI")
     - concentration_ug: Antibody concentration in µg
     - preparation_method: Preparation method (e.g., "SEC", "Centrifugation")
     - operator: Operator name
@@ -1128,6 +1176,13 @@ async def upload_fcs_file(
                 rel_path = str(file_path)
             
             if existing_sample:
+                base_notes = notes if notes is not None else existing_sample.notes
+                notes_with_overrides = base_notes
+                if dye:
+                    overrides = _extract_metadata_overrides_from_notes(base_notes)
+                    overrides["dye"] = dye
+                    notes_with_overrides = _upsert_metadata_overrides_in_notes(base_notes, overrides)
+
                 # Update existing sample with FCS file path
                 db_sample = await update_sample(
                     db=db,
@@ -1137,7 +1192,7 @@ async def upload_fcs_file(
                     concentration_ug=concentration_ug,
                     preparation_method=preparation_method,
                     operator=operator,
-                    notes=notes,
+                    notes=notes_with_overrides,
                 )
                 logger.info(f"📝 Updated existing sample: {sample_id}")
             else:
@@ -1146,6 +1201,12 @@ async def upload_fcs_file(
                 parts = sample_id.rsplit('_', 1)
                 biological_sample_id = parts[0] if len(parts) > 1 else sample_id
                 
+                notes_with_overrides = notes
+                if dye:
+                    overrides = _extract_metadata_overrides_from_notes(notes)
+                    overrides["dye"] = dye
+                    notes_with_overrides = _upsert_metadata_overrides_in_notes(notes, overrides)
+
                 # Create new sample record with user ownership
                 db_sample = await create_sample(
                     db=db,
@@ -1156,7 +1217,7 @@ async def upload_fcs_file(
                     concentration_ug=concentration_ug,
                     preparation_method=preparation_method,
                     operator=operator,
-                    notes=notes,
+                    notes=notes_with_overrides,
                     user_id=user_id,
                 )
                 logger.info(f"✨ Created new sample: {sample_id} (user_id: {user_id})")
@@ -1237,6 +1298,7 @@ async def upload_fcs_file(
             "id": db_id,  # Database ID (real if DB connected, temp otherwise)
             "sample_id": sample_id,  # String display name
             "treatment": treatment,
+            "dye": dye,
             "concentration_ug": concentration_ug,
             "preparation_method": preparation_method,
             "operator": operator,

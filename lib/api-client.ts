@@ -19,6 +19,7 @@ export interface Sample {
   sample_id: string;
   biological_sample_id?: string;
   treatment?: string;
+  dye?: string;
   concentration_ug?: number;
   preparation_method?: string;
   passage_number?: number;
@@ -904,6 +905,7 @@ export interface UploadResponse {
   id: number;
   sample_id: string;
   treatment?: string;
+  dye?: string;
   concentration_ug?: number;
   preparation_method?: string;
   operator?: string;
@@ -1217,6 +1219,7 @@ class ApiClient {
     file: File,
     metadata?: {
       treatment?: string;
+      dye?: string;
       concentration_ug?: number;
       preparation_method?: string;
       operator?: string;
@@ -1232,6 +1235,7 @@ class ApiClient {
       formData.append("file", file);
 
       if (metadata?.treatment) formData.append("treatment", metadata.treatment);
+      if (metadata?.dye) formData.append("dye", metadata.dye);
       if (metadata?.concentration_ug)
         formData.append("concentration_ug", metadata.concentration_ug.toString());
       if (metadata?.preparation_method)

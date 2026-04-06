@@ -454,11 +454,13 @@ async def list_samples(
         samples_data = []
         for sample in samples:
             upload_ts = getattr(sample, 'upload_timestamp', None)
+            overrides = _extract_metadata_overrides_from_notes(sample.notes)
             samples_data.append({
                 "id": sample.id,
                 "sample_id": sample.sample_id,
                 "biological_sample_id": sample.biological_sample_id,
                 "treatment": sample.treatment,
+                "dye": overrides.get("dye"),
                 "qc_status": sample.qc_status,
                 "processing_status": sample.processing_status,
                 "upload_timestamp": upload_ts.isoformat() if upload_ts else None,
@@ -648,12 +650,14 @@ async def get_sample(
         
         upload_ts = getattr(sample, 'upload_timestamp', None)
         exp_date = getattr(sample, 'experiment_date', None)
+        overrides = _extract_metadata_overrides_from_notes(sample.notes)
         
         return {
             "id": sample.id,
             "sample_id": sample.sample_id,
             "biological_sample_id": sample.biological_sample_id,
             "treatment": sample.treatment,
+            "dye": overrides.get("dye"),
             "concentration_ug": sample.concentration_ug,
             "preparation_method": sample.preparation_method,
             "passage_number": sample.passage_number,

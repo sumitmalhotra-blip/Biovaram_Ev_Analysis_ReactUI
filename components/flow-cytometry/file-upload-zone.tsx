@@ -18,6 +18,7 @@ export function FileUploadZone() {
   const [isDragging, setIsDragging] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [treatment, setTreatment] = useState("")
+  const [dye, setDye] = useState("")
   const [concentration, setConcentration] = useState("")
   const [operator, setOperator] = useState("")
   const [preparationMethod, setPreparationMethod] = useState("")
@@ -62,6 +63,7 @@ export function FileUploadZone() {
 
     await uploadFCS(selectedFile, {
       treatment: treatment || undefined,
+      dye: dye || undefined,
       concentration_ug: concentration ? parseFloat(concentration) : undefined,
       preparation_method: preparationMethod || undefined,
       operator: operator || undefined,
@@ -70,6 +72,7 @@ export function FileUploadZone() {
     // Reset form after upload
     setSelectedFile(null)
     setTreatment("")
+    setDye("")
     setConcentration("")
     setOperator("")
     setPreparationMethod("")
@@ -105,7 +108,7 @@ export function FileUploadZone() {
               <input type="file" id="fcs-upload" className="hidden" accept=".fcs" onChange={handleFileSelect} />
               <label htmlFor="fcs-upload" className="cursor-pointer w-full">
                 <div className="flex flex-col items-center gap-3 md:gap-4">
-                  <div className="p-4 md:p-5 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 shadow-lg touch-manipulation">
+                  <div className="p-4 md:p-5 rounded-xl bg-linear-to-br from-primary/20 to-accent/20 shadow-lg touch-manipulation">
                     <FileText className="h-8 w-8 md:h-10 md:w-10 text-primary" />
                   </div>
                   <p className="text-base md:text-lg font-medium">Drop FCS file here or tap to browse</p>
@@ -177,6 +180,23 @@ export function FileUploadZone() {
                   onChange={(e) => setConcentration(e.target.value)}
                   placeholder="e.g., 0.5"
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="dye">Dye</Label>
+                <Select value={dye} onValueChange={setDye}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select dye" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PKH26">PKH26</SelectItem>
+                    <SelectItem value="PKH67">PKH67</SelectItem>
+                    <SelectItem value="DiI">DiI</SelectItem>
+                    <SelectItem value="DiO">DiO</SelectItem>
+                    <SelectItem value="CFSE">CFSE</SelectItem>
+                    <SelectItem value="None">None</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">

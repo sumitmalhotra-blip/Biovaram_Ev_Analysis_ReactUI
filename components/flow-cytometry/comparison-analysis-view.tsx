@@ -86,6 +86,7 @@ export function ComparisonAnalysisView() {
     setOverlayConfig,
     resetFCSAnalysis,
     resetSecondaryFCSAnalysis,
+    apiSamples,
     clearFCSCompareSession,
     fcsCompareGraphInstances,
     activeFCSCompareGraphInstanceId,
@@ -164,6 +165,16 @@ export function ComparisonAnalysisView() {
   )
   const primarySampleId = fcsAnalysis.sampleId
   const comparisonSampleId = secondaryFcsAnalysis.sampleId
+  const sampleMetadataById = useMemo(() => {
+    const map = new Map<string, { treatment?: string; dye?: string }>()
+    apiSamples.forEach((sample) => {
+      map.set(sample.sample_id, {
+        treatment: sample.treatment,
+        dye: sample.dye,
+      })
+    })
+    return map
+  }, [apiSamples])
 
   const normalizationSummary = useMemo(() => {
     const schemas: FCSNormalizationSchema[] = []
@@ -846,6 +857,7 @@ export function ComparisonAnalysisView() {
               const isVisible = visibleSampleIds.includes(sampleId)
               const isPrimary = (fcsCompareSession.primarySampleId || compareSampleIds[0]) === sampleId
               const status = compareStatusBySampleId[sampleId]
+              const metadata = sampleMetadataById.get(sampleId)
               const statusVariant = status === "error" ? "destructive" : status === "ready" ? "default" : "outline"
               const statusLabel = status === "loading"
                 ? "Loading"
@@ -861,6 +873,8 @@ export function ComparisonAnalysisView() {
                   <Badge variant={statusVariant}>{statusLabel}</Badge>
                   {isPrimary && <Badge variant="secondary">Primary</Badge>}
                   {isVisible ? <Badge>Visible</Badge> : <Badge variant="outline">Hidden</Badge>}
+                  {metadata?.treatment && <Badge variant="outline">Tx: {metadata.treatment}</Badge>}
+                  {metadata?.dye && <Badge variant="outline">Dye: {metadata.dye}</Badge>}
                   {replicateGroupingMode === "prefix" && (
                     <Badge variant="outline">
                       Group {sampleId.split(/[_-]/)[0] || sampleId}
