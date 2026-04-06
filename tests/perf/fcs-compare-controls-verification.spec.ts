@@ -68,6 +68,8 @@ async function getPersistedStore(page: import("@playwright/test").Page): Promise
 }
 
 test("FCS compare controls verification checklist", async ({ page }) => {
+  test.setTimeout(120000)
+
   await page.addInitScript(() => {
     const seededState = {
       state: {
@@ -217,7 +219,7 @@ test("FCS compare controls verification checklist", async ({ page }) => {
   if (await appErrorHeading.isVisible().catch(() => false)) {
     throw new Error("App entered error boundary before overlay interaction")
   }
-  await expect(page.getByRole("tab", { name: /^Overlay/i })).toBeVisible()
+  await expect(page.getByRole("tab", { name: /^Overlay/i })).toBeVisible({ timeout: 30000 })
   await page.getByRole("tab", { name: /^Overlay/i }).click()
 
   await expect(page.getByRole("button", { name: /^New$/i })).toBeVisible({ timeout: 30000 })

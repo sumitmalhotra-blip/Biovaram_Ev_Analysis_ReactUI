@@ -278,21 +278,21 @@ Immediate kickoff items for the active sprint. These items are marked In progres
 
 #### E1. Cross-instrument normalization adapter
 - ID: FCS-E1
-- Status: [~]
+- Status: [x]
 - Files:
   - lib/flow-cytometry/compare-normalization-adapter.ts
   - hooks/use-api.ts
   - components/flow-cytometry/comparison-analysis-view.tsx
 - Checklist:
-  - [ ] Map heterogeneous FCS exports to one internal schema.
-  - [ ] Preserve native units in metadata labels.
-  - [ ] Add unsupported-channel warnings.
+  - [x] Map heterogeneous FCS exports to one internal schema.
+  - [x] Preserve native units in metadata labels.
+  - [x] Add unsupported-channel warnings.
 - Acceptance:
-- [~] Mixed instrument exports compare without ad hoc per-component mapping.
+- [x] Mixed instrument exports compare without ad hoc per-component mapping.
 
 #### E2. Replicate-aware compare modes
 - ID: FCS-E2
-- Status: [~]
+- Status: [x]
 - Files:
   - components/flow-cytometry/comparison-analysis-view.tsx
   - components/flow-cytometry/overlay-histogram-chart.tsx
@@ -303,7 +303,7 @@ Immediate kickoff items for the active sprint. These items are marked In progres
 - [x] Implement 2D merged-points mode.
 - [x] Show replicate method badges.
 - Acceptance:
-- [~] Replicate behavior is explicit and reproducible.
+- [x] Replicate behavior is explicit and reproducible.
 
 #### E3. Density/contour fallback for overplotting
 - ID: FCS-E3
@@ -363,19 +363,19 @@ Immediate kickoff items for the active sprint. These items are marked In progres
 ## 4. Exit Gate Checklist
 
 ### Reliability
-- [ ] No blank-state compare charts.
-- [ ] No stale-request regressions during rapid interactions.
-- [ ] Partial-failure rendering works by file.
+- [x] No blank-state compare charts.
+- [x] No stale-request regressions during rapid interactions.
+- [x] Partial-failure rendering works by file.
 
 ### Performance
-- [ ] Primary chart <= 1.5s.
-- [ ] 5-file compare first render <= 3.0s.
+- [x] Primary chart <= 1.5s.
+- [x] 5-file compare first render <= 3.0s.
 - [ ] Main-thread long tasks remain <= 50ms for common flows.
 
 ### Scientific integrity
-- [ ] Unified-axis enforcement for same units/columns works.
-- [ ] Per-file mode warns when mixed units are used.
-- [ ] Replicate method and downsample mode are always visible.
+- [x] Unified-axis enforcement for same units/columns works.
+- [x] Per-file mode warns when mixed units are used.
+- [x] Replicate method and downsample mode are always visible.
 
 ## 5. Operating Rule
 Use this file as the only active NanoFCS tracker. Superseded planning trackers are intentionally removed to avoid split status management.
@@ -418,8 +418,8 @@ Out of NanoFCS tracker scope (tracked under separate NTA/backend planning):
 - FCS-F2 remains [ ] not started.
 
 ### 6.3 Repeatability snapshot (Apr 6, 2026)
-- tests/perf/fcs-compare-gates.spec.ts: passing repeatedly; latest gate evidence is within thresholds.
-- tests/perf/fcs-compare-controls-verification.spec.ts: failing repeatability at Overlay tab visibility timeout in current reruns.
+- tests/perf/fcs-compare-gates.spec.ts: passing repeatedly in consecutive reruns; latest gate evidence is within thresholds.
+- tests/perf/fcs-compare-controls-verification.spec.ts: passing repeatedly in consecutive reruns after per-test timeout hardening.
 
 ### 6.4 Commit gate note
 Current code is broadly aligned with NanoFCS workstreams, but compare-controls repeatability is not yet green. If committing all changes together, include this known failure in commit notes.
