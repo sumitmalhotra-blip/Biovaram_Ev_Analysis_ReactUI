@@ -17,6 +17,11 @@ interface ScatterPlotChartProps {
   xLabel: string
   yLabel: string
   data?: ScatterDataPoint[]
+  densityData?: Array<{ x: number; y: number; count: number; normalized: number }>
+  renderMode?: "raw" | "density"
+  showRawOverlayInDensity?: boolean
+  xDomain?: [number, number]
+  yDomain?: [number, number]
   anomalousIndices?: number[]
   highlightAnomalies?: boolean
   showLegend?: boolean
@@ -27,6 +32,11 @@ export function ScatterPlotChart({
   xLabel,
   yLabel,
   data,
+  densityData = [],
+  renderMode = "raw",
+  showRawOverlayInDensity = false,
+  xDomain,
+  yDomain,
   anomalousIndices = [],
   highlightAnomalies = true,
   showLegend = true,
@@ -83,8 +93,22 @@ export function ScatterPlotChart({
     return { normalData: normal, anomalyData: anomalies }
   }, [data, anomalousIndices, highlightAnomalies])
 
+  const isDensityMode = renderMode === "density" && densityData.length > 0
+
   const totalPoints = normalData.length + anomalyData.length
   const anomalyPercentage = totalPoints > 0 ? ((anomalyData.length / totalPoints) * 100).toFixed(2) : "0.00"
+
+  const densitySeries = useMemo(
+    () => densityData.map((cell, idx) => ({
+      x: cell.x,
+      y: cell.y,
+      z: Math.max(10, Math.round(18 + cell.normalized * 58)),
+      index: idx,
+      count: cell.count,
+      normalized: cell.normalized,
+    })),
+    [densityData]
+  )
 
   return (
     <div className="space-y-2">
@@ -114,6 +138,7 @@ export function ScatterPlotChart({
             <XAxis
               dataKey="x"
               type="number"
+              domain={xDomain}
               stroke="#64748b"
               tick={{ fontSize: 11 }}
               label={{ value: xLabel, position: "bottom", offset: -5, fill: "#64748b", fontSize: 12 }}
@@ -121,6 +146,7 @@ export function ScatterPlotChart({
             <YAxis
               dataKey="y"
               type="number"
+              domain={yDomain}
               stroke="#64748b"
               tick={{ fontSize: 11 }}
               label={{ value: yLabel, angle: -90, position: "insideLeft", fill: "#64748b", fontSize: 12 }}
@@ -146,14 +172,32 @@ export function ScatterPlotChart({
                 height={36}
               />
             )}
-            {/* TASK-018: Use consistent purple color for normal events */}
-            <Scatter
-              name="Normal Events"
-              data={normalData}
-              fill={CHART_COLORS.primary}
-              fillOpacity={0.6}
-              shape="circle"
-            />
+            {isDensityMode ? (
+              <Scatter
+                name="Density Contour"
+                data={densitySeries}
+                fill={CHART_COLORS.primary}
+                fillOpacity={0.32}
+                shape="square"
+              />
+            ) : (
+              <Scatter
+                name="Normal Events"
+                data={normalData}
+                fill={CHART_COLORS.primary}
+                fillOpacity={0.6}
+                shape="circle"
+              />
+            )}
+            {isDensityMode && showRawOverlayInDensity && (
+              <Scatter
+                name="Raw Overlay"
+                data={normalData}
+                fill={CHART_COLORS.primary}
+                fillOpacity={0.2}
+                shape="circle"
+              />
+            )}
             {anomalyData.length > 0 && highlightAnomalies && (
               <Scatter
                 name="Anomalous Events"

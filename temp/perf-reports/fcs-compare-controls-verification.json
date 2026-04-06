@@ -1,11 +1,13 @@
 {
-  "timestamp": "2026-04-06T09:19:20.477Z",
+  "timestamp": "2026-04-06T09:47:23.743Z",
   "checks": {
     "d1_graph_instance_created": true,
     "d2_duplicate_isolation_axis_mode": true,
     "d3_pin_payload_persisted": true,
     "d4_maximize_restore": true,
-    "d4_export_download": true
+    "d4_export_download": true,
+    "e3_density_contour_mode": true,
+    "e4_zoom_presets_and_reset": true
   },
   "evidence": {
     "graphInstanceCount": 3,

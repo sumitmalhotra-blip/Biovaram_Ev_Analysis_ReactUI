@@ -226,6 +226,12 @@ test("FCS compare controls verification checklist", async ({ page }) => {
   await expect(page.getByRole("button", { name: /^Duplicate$/i })).toBeVisible()
   await expect(page.getByRole("button", { name: /^Pin$/i })).toBeVisible()
   await expect(page.getByRole("button", { name: /^Export$/i })).toBeVisible()
+  await expect(page.getByText(/Scatter Comparison/i)).toBeVisible({ timeout: 30000 })
+
+  const scatterModeTrigger = page.locator("button").filter({ hasText: /^Scatter:/i }).first()
+  const zoomPresetTrigger = page.locator("button").filter({ hasText: /^Zoom:/i }).first()
+  await expect(scatterModeTrigger).toBeVisible()
+  await expect(zoomPresetTrigger).toBeVisible()
 
   // D1: new graph instance creates additional independent graph instance.
   await page.getByRole("button", { name: /^New$/i }).click()
@@ -258,6 +264,21 @@ test("FCS compare controls verification checklist", async ({ page }) => {
   expect(unchanged?.axisMode).toBe("unified")
 
   const finalInstances = afterModeChange
+
+  // E3: density fallback mode can be selected and surfaced.
+  await scatterModeTrigger.scrollIntoViewIfNeeded()
+  await scatterModeTrigger.click()
+  await page.getByRole("option", { name: /Scatter: density\/contour/i }).click()
+  const densityBadge = page.getByText(/Density fallback active/i)
+  await expect(densityBadge).toBeVisible()
+
+  // E4: zoom presets switch and reset-to-auto is available.
+  await zoomPresetTrigger.click()
+  await page.getByRole("option", { name: /Zoom: core 30%/i }).click()
+  await expect(page.getByText(/Zoom preset: core-30/i)).toBeVisible()
+  await zoomPresetTrigger.click()
+  await page.getByRole("option", { name: /Zoom: auto/i }).click()
+  await expect(page.getByText(/Zoom preset: auto/i)).toBeVisible()
 
   // D3: pin compare graph and verify payload persisted.
   await page.getByRole("button", { name: /^Pin$/i }).click()
@@ -317,6 +338,8 @@ test("FCS compare controls verification checklist", async ({ page }) => {
       d3_pin_payload_persisted: pinned.length >= 1,
       d4_maximize_restore: d4MaximizeRestorePassed,
       d4_export_download: suggestedName.toLowerCase().includes("overlay"),
+      e3_density_contour_mode: await densityBadge.isVisible(),
+      e4_zoom_presets_and_reset: true,
     },
     evidence: {
       graphInstanceCount: finalInstances.length,

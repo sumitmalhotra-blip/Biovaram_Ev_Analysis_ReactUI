@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect, useMemo } from "react"
+import { useState, useCallback, useEffect, useMemo, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -47,6 +47,7 @@ import {
   resolveChannelForSample,
   type FCSNormalizationSchema,
 } from "@/lib/flow-cytometry/compare-normalization-adapter"
+import { runScatterDensitySeriesWorker } from "@/lib/fcs-series-worker-client"
 
 const INTERACTIVE_SCATTER_CAP = 1200
 const SETTLED_SCATTER_CAP = 3500
@@ -55,6 +56,57 @@ const COMPARE_FIVE_FILE_GATE_MS = 3000
 
 type ReplicateGroupingMode = "none" | "prefix"
 type ReplicateRenderMode = "standard" | "histogram-average" | "merged-points"
+type ScatterDensityMode = "auto" | "raw" | "density"
+type ScatterZoomPreset = "auto" | "center-60" | "core-30" | "high-signal"
+
+const DENSITY_TRIGGER_POINTS = 1400
+
+function getQuantile(sorted: number[], q: number): number {
+  if (sorted.length === 0) return 0
+  const index = Math.max(0, Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * q)))
+  return sorted[index]
+}
+
+function buildZoomDomain(
+  primary: Array<{ x: number; y: number }>,
+  secondary: Array<{ x: number; y: number }>,
+  preset: ScatterZoomPreset
+): { xDomain?: [number, number]; yDomain?: [number, number] } {
+  if (preset === "auto") {
+    return {}
+  }
+
+  const all = [...primary, ...secondary]
+  if (all.length === 0) {
+    return {}
+  }
+
+  const xs = all.map((point) => point.x).filter((value) => Number.isFinite(value)).sort((a, b) => a - b)
+  const ys = all.map((point) => point.y).filter((value) => Number.isFinite(value)).sort((a, b) => a - b)
+
+  if (xs.length < 2 || ys.length < 2) {
+    return {}
+  }
+
+  if (preset === "center-60") {
+    return {
+      xDomain: [getQuantile(xs, 0.2), getQuantile(xs, 0.8)],
+      yDomain: [getQuantile(ys, 0.2), getQuantile(ys, 0.8)],
+    }
+  }
+
+  if (preset === "core-30") {
+    return {
+      xDomain: [getQuantile(xs, 0.35), getQuantile(xs, 0.65)],
+      yDomain: [getQuantile(ys, 0.35), getQuantile(ys, 0.65)],
+    }
+  }
+
+  return {
+    xDomain: [getQuantile(xs, 0.2), getQuantile(xs, 0.8)],
+    yDomain: [getQuantile(ys, 0.6), getQuantile(ys, 0.98)],
+  }
+}
 
 declare global {
   interface Window {
@@ -1143,8 +1195,14 @@ function OverlayAnalysisPanel({
   const secondaryResults = secondaryFcsAnalysis.results
   const [primaryScatterData, setPrimaryScatterData] = useState<Array<{ x: number; y: number; index?: number; diameter?: number }>>([])
   const [secondaryScatterData, setSecondaryScatterData] = useState<Array<{ x: number; y: number; index?: number; diameter?: number }>>([])
+  const [scatterDensityMode, setScatterDensityMode] = useState<ScatterDensityMode>("auto")
+  const [scatterZoomPreset, setScatterZoomPreset] = useState<ScatterZoomPreset>("auto")
+  const [showRawOverlayInDensity, setShowRawOverlayInDensity] = useState(false)
+  const [primaryDensityCells, setPrimaryDensityCells] = useState<Array<{ x: number; y: number; count: number; normalized: number }>>([])
+  const [secondaryDensityCells, setSecondaryDensityCells] = useState<Array<{ x: number; y: number; count: number; normalized: number }>>([])
   const [primaryScatterLoaded, setPrimaryScatterLoaded] = useState(false)
   const [secondaryScatterLoaded, setSecondaryScatterLoaded] = useState(false)
+  const densityRequestIdRef = useRef(1)
 
   useEffect(() => {
     if (!fcsAnalysis.sampleId) return
@@ -1234,6 +1292,87 @@ function OverlayAnalysisPanel({
     compareScatterBySampleId,
     scatterPointCap,
     secondaryScatterData,
+  ])
+
+  const primaryShouldUseDensity = scatterDensityMode === "density"
+    || (scatterDensityMode === "auto" && primaryScatterData.length >= DENSITY_TRIGGER_POINTS)
+  const secondaryShouldUseDensity = scatterDensityMode === "density"
+    || (scatterDensityMode === "auto" && mergedComparisonScatterData.length >= DENSITY_TRIGGER_POINTS)
+
+  const zoomDomain = useMemo(
+    () => buildZoomDomain(primaryScatterData, mergedComparisonScatterData, scatterZoomPreset),
+    [primaryScatterData, mergedComparisonScatterData, scatterZoomPreset]
+  )
+
+  useEffect(() => {
+    let cancelled = false
+
+    const buildDensityFallbacks = async () => {
+      if (!primaryShouldUseDensity && !secondaryShouldUseDensity) {
+        setPrimaryDensityCells([])
+        setSecondaryDensityCells([])
+        return
+      }
+
+      const requests: Array<Promise<void>> = []
+
+      if (primaryShouldUseDensity) {
+        const requestId = densityRequestIdRef.current++
+        requests.push(
+          runScatterDensitySeriesWorker(requestId, {
+            points: primaryScatterData,
+            xBins: 36,
+            yBins: 36,
+            maxCells: 900,
+          }).then((payload) => {
+            if (!cancelled) {
+              setPrimaryDensityCells(payload.cells)
+            }
+          }).catch(() => {
+            if (!cancelled) {
+              setPrimaryDensityCells([])
+            }
+          })
+        )
+      } else {
+        setPrimaryDensityCells([])
+      }
+
+      if (secondaryShouldUseDensity) {
+        const requestId = densityRequestIdRef.current++
+        requests.push(
+          runScatterDensitySeriesWorker(requestId, {
+            points: mergedComparisonScatterData,
+            xBins: 36,
+            yBins: 36,
+            maxCells: 900,
+          }).then((payload) => {
+            if (!cancelled) {
+              setSecondaryDensityCells(payload.cells)
+            }
+          }).catch(() => {
+            if (!cancelled) {
+              setSecondaryDensityCells([])
+            }
+          })
+        )
+      } else {
+        setSecondaryDensityCells([])
+      }
+
+      await Promise.all(requests)
+    }
+
+    buildDensityFallbacks()
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    primaryShouldUseDensity,
+    secondaryShouldUseDensity,
+    primaryScatterData,
+    mergedComparisonScatterData,
   ])
 
   if (!primaryResults || !secondaryResults) return null
@@ -1536,6 +1675,37 @@ function OverlayAnalysisPanel({
               >
                 Per-file Axis
               </Button>
+              <Select value={scatterDensityMode} onValueChange={(value) => setScatterDensityMode(value as ScatterDensityMode)}>
+                <SelectTrigger className="h-8 w-[172px] text-xs">
+                  <SelectValue placeholder="Scatter mode" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">Scatter: auto density</SelectItem>
+                  <SelectItem value="raw">Scatter: raw points</SelectItem>
+                  <SelectItem value="density">Scatter: density/contour</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={scatterZoomPreset} onValueChange={(value) => setScatterZoomPreset(value as ScatterZoomPreset)}>
+                <SelectTrigger className="h-8 w-[196px] text-xs">
+                  <SelectValue placeholder="Zoom preset" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">Zoom: auto</SelectItem>
+                  <SelectItem value="center-60">Zoom: center 60%</SelectItem>
+                  <SelectItem value="core-30">Zoom: core 30%</SelectItem>
+                  <SelectItem value="high-signal">Zoom: high signal band</SelectItem>
+                </SelectContent>
+              </Select>
+              {(primaryShouldUseDensity || secondaryShouldUseDensity) && (
+                <Button
+                  variant={showRawOverlayInDensity ? "default" : "outline"}
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={() => setShowRawOverlayInDensity((prev) => !prev)}
+                >
+                  Raw Overlay
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -1574,6 +1744,10 @@ function OverlayAnalysisPanel({
           <div className="mb-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
             <Badge variant="outline">Primary map: {primaryAxisMappingLabel}</Badge>
             <Badge variant="outline">Comparison map: {comparisonAxisMappingLabel}</Badge>
+            <Badge variant="outline">Zoom preset: {scatterZoomPreset}</Badge>
+            {(primaryShouldUseDensity || secondaryShouldUseDensity) && (
+              <Badge variant="secondary">Density fallback active</Badge>
+            )}
           </div>
           {(primaryAxisResolution.usedFallback || comparisonAxisResolution.usedFallback) && (
             <Alert className="mb-3 border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
@@ -1614,6 +1788,11 @@ function OverlayAnalysisPanel({
                 <ScatterPlotChart 
                   title={`Primary ${primaryAxisResolution.resolvedX} vs ${primaryAxisResolution.resolvedY}`}
                   data={primaryScatterData}
+                  densityData={primaryDensityCells}
+                  renderMode={primaryShouldUseDensity ? "density" : "raw"}
+                  showRawOverlayInDensity={showRawOverlayInDensity}
+                  xDomain={zoomDomain.xDomain}
+                  yDomain={zoomDomain.yDomain}
                   xLabel={primaryAxisResolution.resolvedX}
                   yLabel={primaryAxisResolution.resolvedY}
                   height={280}
@@ -1649,6 +1828,11 @@ function OverlayAnalysisPanel({
                 <ScatterPlotChart 
                   title={`Comparison ${comparisonAxisResolution.resolvedX} vs ${comparisonAxisResolution.resolvedY}`}
                   data={mergedComparisonScatterData}
+                  densityData={secondaryDensityCells}
+                  renderMode={secondaryShouldUseDensity ? "density" : "raw"}
+                  showRawOverlayInDensity={showRawOverlayInDensity}
+                  xDomain={zoomDomain.xDomain}
+                  yDomain={zoomDomain.yDomain}
                   xLabel={comparisonAxisResolution.resolvedX}
                   yLabel={comparisonAxisResolution.resolvedY}
                   height={280}

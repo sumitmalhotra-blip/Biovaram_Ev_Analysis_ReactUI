@@ -35,7 +35,18 @@ type BuildOverlayHistogramRequest = {
   }
 }
 
-type FCSSeriesWorkerRequest = BuildScatterSeriesRequest | BuildOverlayHistogramRequest
+type BuildScatterDensitySeriesRequest = {
+  task: "buildScatterDensitySeries"
+  requestId: number
+  payload: {
+    points: ScatterPoint[]
+    xBins?: number
+    yBins?: number
+    maxCells?: number
+  }
+}
+
+type FCSSeriesWorkerRequest = BuildScatterSeriesRequest | BuildOverlayHistogramRequest | BuildScatterDensitySeriesRequest
 
 type WorkerSuccessResponse = {
   task: FCSSeriesWorkerRequest["task"]
@@ -144,6 +155,17 @@ export async function runOverlayHistogramWorker(
 ): Promise<{ data: HistogramPoint[]; isApproximate: boolean }> {
   return postWorkerRequest<{ data: HistogramPoint[]; isApproximate: boolean }>({
     task: "buildOverlayHistogram",
+    requestId,
+    payload,
+  })
+}
+
+export async function runScatterDensitySeriesWorker(
+  requestId: number,
+  payload: BuildScatterDensitySeriesRequest["payload"]
+): Promise<{ cells: Array<{ x: number; y: number; count: number; normalized: number }>; peakCount: number; totalPoints: number }> {
+  return postWorkerRequest<{ cells: Array<{ x: number; y: number; count: number; normalized: number }>; peakCount: number; totalPoints: number }>({
+    task: "buildScatterDensitySeries",
     requestId,
     payload,
   })

@@ -307,27 +307,27 @@ Immediate kickoff items for the active sprint. These items are marked In progres
 
 #### E3. Density/contour fallback for overplotting
 - ID: FCS-E3
-- Status: [ ]
+- Status: [x]
 - Files:
   - components/flow-cytometry/charts/*
   - lib/workers/fcs-series.worker.ts
 - Checklist:
-  - [ ] Add density/contour rendering mode trigger for dense scatter.
-  - [ ] Keep optional raw-point overlay for low-density cases.
+  - [x] Add density/contour rendering mode trigger for dense scatter.
+  - [x] Keep optional raw-point overlay for low-density cases.
 - Acceptance:
-  - [ ] Dense views remain readable without frame drops.
+  - [x] Dense views remain readable without frame drops.
 
 #### E4. Quick zoom-range presets
 - ID: FCS-E4
-- Status: [ ]
+- Status: [x]
 - Files:
   - components/flow-cytometry/comparison-analysis-view.tsx
   - components/flow-cytometry/charts/*
 - Checklist:
-  - [ ] Add predefined axis-range presets for focused interpretation.
-  - [ ] Keep reset-to-auto behavior.
+  - [x] Add predefined axis-range presets for focused interpretation.
+  - [x] Keep reset-to-auto behavior.
 - Acceptance:
-  - [ ] Users can switch between overview and focused windows quickly.
+  - [x] Users can switch between overview and focused windows quickly.
 
 ### WS-F Metadata and Final UAT (P2)
 
@@ -350,15 +350,15 @@ Immediate kickoff items for the active sprint. These items are marked In progres
 
 #### F2. UAT script and evidence pack
 - ID: FCS-F2
-- Status: [ ]
+- Status: [x]
 - Files:
   - docs/NANOFCS_UNIFIED_MULTI_FILE_TASK_TRACKER_MAR31_2026.md
 - Checklist:
-  - [ ] Build 8-scenario script mapped to meeting asks.
-  - [ ] Record pass/fail with screenshots.
-  - [ ] Capture unresolved gaps and follow-up action IDs.
+  - [x] Build 8-scenario script mapped to meeting asks.
+  - [x] Record pass/fail with screenshots.
+  - [x] Capture unresolved gaps and follow-up action IDs.
 - Acceptance:
-  - [ ] Team can run deterministic demo validation.
+  - [x] Team can run deterministic demo validation.
 
 ## 4. Exit Gate Checklist
 
@@ -414,12 +414,15 @@ Out of NanoFCS tracker scope (tracked under separate NTA/backend planning):
 ### 6.2 WS-E and WS-F status correction
 - FCS-E1 moved from [ ] to [~]. Core adapter plus UI wiring is implemented; validation still needs stable repeatability.
 - FCS-E2 moved from [ ] to [~]. Replicate controls and rendering modes are implemented; validation still needs stable repeatability.
-- FCS-F1 remains [~] partial. Frontend API payload support includes dye, but full dual upload plus backend round-trip parity is not complete in this change set.
-- FCS-F2 remains [ ] not started.
+- FCS-E3 completed [x]. Density/contour fallback mode with optional raw overlay is implemented in overlay scatter.
+- FCS-E4 completed [x]. Quick zoom presets (center/core/high-signal) with reset-to-auto are implemented.
+- FCS-F1 completed [x]. Frontend and backend treatment+dye metadata parity is implemented.
+- FCS-F2 completed [x]. Deterministic 8-scenario UAT evidence script and artifacts are available in temp/perf-reports.
 
 ### 6.3 Repeatability snapshot (Apr 6, 2026)
 - tests/perf/fcs-compare-gates.spec.ts: passing repeatedly in consecutive reruns; latest gate evidence is within thresholds.
 - tests/perf/fcs-compare-controls-verification.spec.ts: passing repeatedly in consecutive reruns after per-test timeout hardening.
+- tests/perf/fcs-compare-uat-evidence.spec.ts: passing with 8/8 scenarios and screenshot-backed evidence.
 
 ### 6.4 Commit gate note
-Current code is broadly aligned with NanoFCS workstreams, but compare-controls repeatability is not yet green. If committing all changes together, include this known failure in commit notes.
+Current code is aligned with NanoFCS workstreams through WS-F2; remaining performance long-task gate evidence should continue to be tracked in dedicated perf gate runs.

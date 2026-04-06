@@ -1,0 +1,65 @@
+{
+  "timestamp": "2026-04-06T09:49:45.148Z",
+  "scenarios": [
+    {
+      "id": "01-overlay-access",
+      "ask": "Open overlay compare workspace",
+      "status": "pass",
+      "evidence": "fcs-uat-01-overlay-access.png"
+    },
+    {
+      "id": "02-graph-instance",
+      "ask": "Create and duplicate graph instances",
+      "status": "pass",
+      "evidence": "fcs-uat-02-graph-instance.png"
+    },
+    {
+      "id": "03-axis-isolation",
+      "ask": "Switch per-file axis mode",
+      "status": "pass",
+      "evidence": "fcs-uat-03-axis-isolation.png"
+    },
+    {
+      "id": "04-density-fallback",
+      "ask": "Enable density/contour fallback",
+      "status": "pass",
+      "evidence": "fcs-uat-04-density-fallback.png"
+    },
+    {
+      "id": "05-zoom-presets",
+      "ask": "Apply focused zoom preset then reset to auto",
+      "status": "pass",
+      "evidence": "fcs-uat-05-zoom-presets.png"
+    },
+    {
+      "id": "06-metadata-badges",
+      "ask": "Show treatment and dye compare badges",
+      "status": "pass",
+      "evidence": "fcs-uat-06-metadata-badges.png"
+    },
+    {
+      "id": "07-pin-export",
+      "ask": "Pin and export compare overlay",
+      "status": "pass",
+      "evidence": "fcs-uat-07-pin-export.png"
+    },
+    {
+      "id": "08-clear-session",
+      "ask": "Run deterministic clear-session action",
+      "status": "pass",
+      "evidence": "fcs-uat-08-clear-session.png"
+    }
+  ],
+  "summary": {
+    "total": 8,
+    "passed": 8,
+    "failed": 0
+  },
+  "unresolvedGaps": [
+    {
+      "id": "UAT-GAP-001",
+      "gap": "Main-thread <=50ms gate is tracked but not automatically asserted in this UAT script.",
+      "followUp": "Keep dedicated perf gate spec and attach long-task telemetry snapshot in next evidence run."
+    }
+  ]
+}

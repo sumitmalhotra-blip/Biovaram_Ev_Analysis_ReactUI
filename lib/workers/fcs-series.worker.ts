@@ -35,7 +35,18 @@ type BuildOverlayHistogramRequest = {
   }
 }
 
-type FCSSeriesWorkerRequest = BuildScatterSeriesRequest | BuildOverlayHistogramRequest
+type BuildScatterDensitySeriesRequest = {
+  task: "buildScatterDensitySeries"
+  requestId: number
+  payload: {
+    points: ScatterPoint[]
+    xBins?: number
+    yBins?: number
+    maxCells?: number
+  }
+}
+
+type FCSSeriesWorkerRequest = BuildScatterSeriesRequest | BuildOverlayHistogramRequest | BuildScatterDensitySeriesRequest
 
 type FCSSeriesWorkerResponse = {
   task: FCSSeriesWorkerRequest["task"]
@@ -158,6 +169,75 @@ function buildHistogramSeries(payload: BuildOverlayHistogramRequest["payload"]):
   return { data, isApproximate: !hasRealData }
 }
 
+function buildScatterDensitySeries(payload: BuildScatterDensitySeriesRequest["payload"]): {
+  cells: Array<{ x: number; y: number; count: number; normalized: number }>
+  peakCount: number
+  totalPoints: number
+} {
+  const points = payload.points
+    .filter((point) => finiteNumber(point.x) && finiteNumber(point.y))
+
+  if (points.length === 0) {
+    return { cells: [], peakCount: 0, totalPoints: 0 }
+  }
+
+  const xBins = Math.max(12, Math.min(80, payload.xBins ?? 36))
+  const yBins = Math.max(12, Math.min(80, payload.yBins ?? 36))
+  const maxCells = Math.max(50, Math.min(5000, payload.maxCells ?? 1200))
+
+  const xs = points.map((point) => point.x)
+  const ys = points.map((point) => point.y)
+  const minX = Math.min(...xs)
+  const maxX = Math.max(...xs)
+  const minY = Math.min(...ys)
+  const maxY = Math.max(...ys)
+
+  if (!Number.isFinite(minX) || !Number.isFinite(maxX) || !Number.isFinite(minY) || !Number.isFinite(maxY)) {
+    return { cells: [], peakCount: 0, totalPoints: points.length }
+  }
+
+  const xRange = Math.max(maxX - minX, Number.EPSILON)
+  const yRange = Math.max(maxY - minY, Number.EPSILON)
+
+  const densityMap = new Map<string, number>()
+
+  for (const point of points) {
+    const xRatio = (point.x - minX) / xRange
+    const yRatio = (point.y - minY) / yRange
+
+    const xIndex = Math.max(0, Math.min(xBins - 1, Math.floor(xRatio * xBins)))
+    const yIndex = Math.max(0, Math.min(yBins - 1, Math.floor(yRatio * yBins)))
+    const key = `${xIndex}:${yIndex}`
+    densityMap.set(key, (densityMap.get(key) ?? 0) + 1)
+  }
+
+  const peakCount = Math.max(...Array.from(densityMap.values()), 1)
+  const cells = Array.from(densityMap.entries())
+    .map(([key, count]) => {
+      const [xIndexRaw, yIndexRaw] = key.split(":")
+      const xIndex = Number.parseInt(xIndexRaw, 10)
+      const yIndex = Number.parseInt(yIndexRaw, 10)
+
+      const xCenter = minX + ((xIndex + 0.5) / xBins) * xRange
+      const yCenter = minY + ((yIndex + 0.5) / yBins) * yRange
+
+      return {
+        x: xCenter,
+        y: yCenter,
+        count,
+        normalized: count / peakCount,
+      }
+    })
+    .sort((a, b) => b.count - a.count)
+    .slice(0, maxCells)
+
+  return {
+    cells,
+    peakCount,
+    totalPoints: points.length,
+  }
+}
+
 function postWorkerMessage(message: FCSSeriesWorkerResponse | FCSSeriesWorkerError): void {
   self.postMessage(message)
 }
@@ -184,6 +264,17 @@ self.onmessage = (event: MessageEvent<FCSSeriesWorkerRequest>) => {
         requestId: request.requestId,
         ok: true,
         payload: histogram,
+      })
+      return
+    }
+
+    if (request.task === "buildScatterDensitySeries") {
+      const densitySeries = buildScatterDensitySeries(request.payload)
+      postWorkerMessage({
+        task: request.task,
+        requestId: request.requestId,
+        ok: true,
+        payload: densitySeries,
       })
       return
     }
