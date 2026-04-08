@@ -79,7 +79,27 @@ export function getApiBaseUrl(): string {
   // Explicit override always wins
   const envUrl = process.env.NEXT_PUBLIC_API_URL
   if (envUrl) {
-    return envUrl.replace(/\/api\/v1$/, "")
+    const normalized = envUrl.replace(/\/api\/v1$/, "")
+
+    // In dev, a relative API URL can accidentally route large multipart uploads
+    // through Next.js (port 3000), which enforces a small body limit.
+    if (/^https?:\/\//i.test(normalized)) {
+      return normalized
+    }
+
+    if (normalized.startsWith("/")) {
+      if (typeof window !== "undefined") {
+        const port = parseInt(window.location.port, 10)
+        if (port === 3000) {
+          return `http://localhost:${MODULE_PORTS[CURRENT_MODULE]}`
+        }
+        return window.location.origin
+      }
+
+      return `http://localhost:${MODULE_PORTS[CURRENT_MODULE]}`
+    }
+
+    return normalized
   }
 
   // In the browser: if NOT on the Next.js dev port (3000), the frontend is

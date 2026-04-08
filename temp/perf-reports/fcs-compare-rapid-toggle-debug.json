@@ -1,0 +1,1856 @@
+{
+  "timestamp": "2026-04-08T08:50:50.104Z",
+  "test": "rapid-toggle-control-timeline-debug",
+  "failureContext": null,
+  "cyclesCaptured": 6,
+  "interactionTimeline": [
+    {
+      "ts": "2026-04-08T08:49:51.327Z",
+      "cycle": 0,
+      "step": "after-goto",
+      "control": "checkpoint",
+      "attempt": 0,
+      "action": "checkpoint",
+      "snapshot": {
+        "compareCardVisible": false,
+        "overlayHeadingVisible": false,
+        "selectedTabLabel": null,
+        "controls": {
+          "showAll": 0,
+          "referenceOnly": 0,
+          "setReference": 0,
+          "unifiedAxis": 0,
+          "perFileAxis": 0
+        },
+        "session": {
+          "selectedCount": 4,
+          "visibleCount": 4,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unknown",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:49:53.413Z",
+      "cycle": 0,
+      "step": "after-upload-mode-visible",
+      "control": "checkpoint",
+      "attempt": 0,
+      "action": "checkpoint",
+      "snapshot": {
+        "compareCardVisible": false,
+        "overlayHeadingVisible": false,
+        "selectedTabLabel": "Side by Side",
+        "controls": {
+          "showAll": 0,
+          "referenceOnly": 0,
+          "setReference": 0,
+          "unifiedAxis": 0,
+          "perFileAxis": 0
+        },
+        "session": {
+          "selectedCount": 4,
+          "visibleCount": 4,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:49:54.115Z",
+      "cycle": 0,
+      "step": "after-switch-compare-mode",
+      "control": "checkpoint",
+      "attempt": 0,
+      "action": "checkpoint",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": false,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 4,
+          "unifiedAxis": 1,
+          "perFileAxis": 1
+        },
+        "session": {
+          "selectedCount": 4,
+          "visibleCount": 4,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:49:55.804Z",
+      "cycle": 0,
+      "step": "after-upload-click",
+      "control": "checkpoint",
+      "attempt": 0,
+      "action": "checkpoint",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": false,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 1,
+          "perFileAxis": 1
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:12.061Z",
+      "cycle": 0,
+      "step": "after-overlay-tab-click",
+      "control": "checkpoint",
+      "attempt": 0,
+      "action": "checkpoint",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:14.587Z",
+      "cycle": 0,
+      "step": "after-scatter-heading-visible",
+      "control": "checkpoint",
+      "attempt": 0,
+      "action": "checkpoint",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:14.624Z",
+      "cycle": 1,
+      "step": "show-all-1",
+      "control": "/Show All/i",
+      "attempt": 1,
+      "action": "before-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:14.738Z",
+      "cycle": 1,
+      "step": "show-all-1",
+      "control": "/Show All/i",
+      "attempt": 1,
+      "action": "after-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:14.767Z",
+      "cycle": 1,
+      "step": "reference-only",
+      "control": "/Reference Only/i",
+      "attempt": 1,
+      "action": "before-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:18.153Z",
+      "cycle": 1,
+      "step": "reference-only",
+      "control": "/Reference Only/i",
+      "attempt": 1,
+      "action": "after-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 1,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:18.199Z",
+      "cycle": 1,
+      "step": "show-all-2",
+      "control": "/Show All/i",
+      "attempt": 1,
+      "action": "before-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 1,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:19.835Z",
+      "cycle": 1,
+      "step": "show-all-2",
+      "control": "/Show All/i",
+      "attempt": 1,
+      "action": "after-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:19.921Z",
+      "cycle": 1,
+      "step": "per-file-axis",
+      "control": "/Per-file Axis/i",
+      "attempt": 1,
+      "action": "before-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:20.384Z",
+      "cycle": 1,
+      "step": "per-file-axis",
+      "control": "/Per-file Axis/i",
+      "attempt": 1,
+      "action": "after-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "per-file",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:20.407Z",
+      "cycle": 1,
+      "step": "unified-axis",
+      "control": "/Unified Axis/i",
+      "attempt": 1,
+      "action": "before-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "per-file",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:20.977Z",
+      "cycle": 1,
+      "step": "unified-axis",
+      "control": "/Unified Axis/i",
+      "attempt": 1,
+      "action": "after-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:21.099Z",
+      "cycle": 2,
+      "step": "show-all-1",
+      "control": "/Show All/i",
+      "attempt": 1,
+      "action": "before-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:21.172Z",
+      "cycle": 2,
+      "step": "show-all-1",
+      "control": "/Show All/i",
+      "attempt": 1,
+      "action": "after-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:21.196Z",
+      "cycle": 2,
+      "step": "reference-only",
+      "control": "/Reference Only/i",
+      "attempt": 1,
+      "action": "before-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:23.935Z",
+      "cycle": 2,
+      "step": "reference-only",
+      "control": "/Reference Only/i",
+      "attempt": 1,
+      "action": "after-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 1,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:23.970Z",
+      "cycle": 2,
+      "step": "show-all-2",
+      "control": "/Show All/i",
+      "attempt": 1,
+      "action": "before-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 1,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:26.016Z",
+      "cycle": 2,
+      "step": "show-all-2",
+      "control": "/Show All/i",
+      "attempt": 1,
+      "action": "after-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:26.133Z",
+      "cycle": 2,
+      "step": "per-file-axis",
+      "control": "/Per-file Axis/i",
+      "attempt": 1,
+      "action": "before-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:26.604Z",
+      "cycle": 2,
+      "step": "per-file-axis",
+      "control": "/Per-file Axis/i",
+      "attempt": 1,
+      "action": "after-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "per-file",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:26.639Z",
+      "cycle": 2,
+      "step": "unified-axis",
+      "control": "/Unified Axis/i",
+      "attempt": 1,
+      "action": "before-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "per-file",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:27.348Z",
+      "cycle": 2,
+      "step": "unified-axis",
+      "control": "/Unified Axis/i",
+      "attempt": 1,
+      "action": "after-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:27.513Z",
+      "cycle": 3,
+      "step": "show-all-1",
+      "control": "/Show All/i",
+      "attempt": 1,
+      "action": "before-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:27.623Z",
+      "cycle": 3,
+      "step": "show-all-1",
+      "control": "/Show All/i",
+      "attempt": 1,
+      "action": "after-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:27.667Z",
+      "cycle": 3,
+      "step": "reference-only",
+      "control": "/Reference Only/i",
+      "attempt": 1,
+      "action": "before-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:30.261Z",
+      "cycle": 3,
+      "step": "reference-only",
+      "control": "/Reference Only/i",
+      "attempt": 1,
+      "action": "after-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 1,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:30.306Z",
+      "cycle": 3,
+      "step": "show-all-2",
+      "control": "/Show All/i",
+      "attempt": 1,
+      "action": "before-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 1,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:32.501Z",
+      "cycle": 3,
+      "step": "show-all-2",
+      "control": "/Show All/i",
+      "attempt": 1,
+      "action": "after-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:32.614Z",
+      "cycle": 3,
+      "step": "per-file-axis",
+      "control": "/Per-file Axis/i",
+      "attempt": 1,
+      "action": "before-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:33.166Z",
+      "cycle": 3,
+      "step": "per-file-axis",
+      "control": "/Per-file Axis/i",
+      "attempt": 1,
+      "action": "after-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "per-file",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:33.209Z",
+      "cycle": 3,
+      "step": "unified-axis",
+      "control": "/Unified Axis/i",
+      "attempt": 1,
+      "action": "before-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "per-file",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:33.882Z",
+      "cycle": 3,
+      "step": "unified-axis",
+      "control": "/Unified Axis/i",
+      "attempt": 1,
+      "action": "after-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:34.077Z",
+      "cycle": 4,
+      "step": "show-all-1",
+      "control": "/Show All/i",
+      "attempt": 1,
+      "action": "before-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:34.234Z",
+      "cycle": 4,
+      "step": "show-all-1",
+      "control": "/Show All/i",
+      "attempt": 1,
+      "action": "after-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:34.278Z",
+      "cycle": 4,
+      "step": "reference-only",
+      "control": "/Reference Only/i",
+      "attempt": 1,
+      "action": "before-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:36.058Z",
+      "cycle": 4,
+      "step": "reference-only",
+      "control": "/Reference Only/i",
+      "attempt": 1,
+      "action": "after-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 1,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:36.102Z",
+      "cycle": 4,
+      "step": "show-all-2",
+      "control": "/Show All/i",
+      "attempt": 1,
+      "action": "before-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 1,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:37.907Z",
+      "cycle": 4,
+      "step": "show-all-2",
+      "control": "/Show All/i",
+      "attempt": 1,
+      "action": "after-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:38.023Z",
+      "cycle": 4,
+      "step": "per-file-axis",
+      "control": "/Per-file Axis/i",
+      "attempt": 1,
+      "action": "before-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:38.574Z",
+      "cycle": 4,
+      "step": "per-file-axis",
+      "control": "/Per-file Axis/i",
+      "attempt": 1,
+      "action": "after-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "per-file",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:38.627Z",
+      "cycle": 4,
+      "step": "unified-axis",
+      "control": "/Unified Axis/i",
+      "attempt": 1,
+      "action": "before-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "per-file",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:39.282Z",
+      "cycle": 4,
+      "step": "unified-axis",
+      "control": "/Unified Axis/i",
+      "attempt": 1,
+      "action": "after-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:39.510Z",
+      "cycle": 5,
+      "step": "show-all-1",
+      "control": "/Show All/i",
+      "attempt": 1,
+      "action": "before-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:39.663Z",
+      "cycle": 5,
+      "step": "show-all-1",
+      "control": "/Show All/i",
+      "attempt": 1,
+      "action": "after-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:39.710Z",
+      "cycle": 5,
+      "step": "reference-only",
+      "control": "/Reference Only/i",
+      "attempt": 1,
+      "action": "before-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:41.336Z",
+      "cycle": 5,
+      "step": "reference-only",
+      "control": "/Reference Only/i",
+      "attempt": 1,
+      "action": "after-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 1,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:41.409Z",
+      "cycle": 5,
+      "step": "show-all-2",
+      "control": "/Show All/i",
+      "attempt": 1,
+      "action": "before-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 1,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:43.193Z",
+      "cycle": 5,
+      "step": "show-all-2",
+      "control": "/Show All/i",
+      "attempt": 1,
+      "action": "after-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:43.307Z",
+      "cycle": 5,
+      "step": "per-file-axis",
+      "control": "/Per-file Axis/i",
+      "attempt": 1,
+      "action": "before-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:43.890Z",
+      "cycle": 5,
+      "step": "per-file-axis",
+      "control": "/Per-file Axis/i",
+      "attempt": 1,
+      "action": "after-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "per-file",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:43.945Z",
+      "cycle": 5,
+      "step": "unified-axis",
+      "control": "/Unified Axis/i",
+      "attempt": 1,
+      "action": "before-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "per-file",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:44.586Z",
+      "cycle": 5,
+      "step": "unified-axis",
+      "control": "/Unified Axis/i",
+      "attempt": 1,
+      "action": "after-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:44.799Z",
+      "cycle": 6,
+      "step": "show-all-1",
+      "control": "/Show All/i",
+      "attempt": 1,
+      "action": "before-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:44.956Z",
+      "cycle": 6,
+      "step": "show-all-1",
+      "control": "/Show All/i",
+      "attempt": 1,
+      "action": "after-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:45.014Z",
+      "cycle": 6,
+      "step": "reference-only",
+      "control": "/Reference Only/i",
+      "attempt": 1,
+      "action": "before-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:46.694Z",
+      "cycle": 6,
+      "step": "reference-only",
+      "control": "/Reference Only/i",
+      "attempt": 1,
+      "action": "after-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 1,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:46.766Z",
+      "cycle": 6,
+      "step": "show-all-2",
+      "control": "/Show All/i",
+      "attempt": 1,
+      "action": "before-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 1,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:48.537Z",
+      "cycle": 6,
+      "step": "show-all-2",
+      "control": "/Show All/i",
+      "attempt": 1,
+      "action": "after-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:48.660Z",
+      "cycle": 6,
+      "step": "per-file-axis",
+      "control": "/Per-file Axis/i",
+      "attempt": 1,
+      "action": "before-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:49.196Z",
+      "cycle": 6,
+      "step": "per-file-axis",
+      "control": "/Per-file Axis/i",
+      "attempt": 1,
+      "action": "after-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "per-file",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:49.247Z",
+      "cycle": 6,
+      "step": "unified-axis",
+      "control": "/Unified Axis/i",
+      "attempt": 1,
+      "action": "before-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "per-file",
+          "requestVersion": null
+        }
+      }
+    },
+    {
+      "ts": "2026-04-08T08:50:49.911Z",
+      "cycle": 6,
+      "step": "unified-axis",
+      "control": "/Unified Axis/i",
+      "attempt": 1,
+      "action": "after-click",
+      "snapshot": {
+        "compareCardVisible": true,
+        "overlayHeadingVisible": true,
+        "selectedTabLabel": "Compare Session Files✓",
+        "controls": {
+          "showAll": 1,
+          "referenceOnly": 1,
+          "setReference": 6,
+          "unifiedAxis": 2,
+          "perFileAxis": 2
+        },
+        "session": {
+          "selectedCount": 6,
+          "visibleCount": 6,
+          "primarySampleId": "S1",
+          "overlayEnabled": true,
+          "axisMode": "unified",
+          "requestVersion": null
+        }
+      }
+    }
+  ]
+}

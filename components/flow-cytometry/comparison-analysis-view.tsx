@@ -53,11 +53,13 @@ const INTERACTIVE_SCATTER_CAP = 1200
 const SETTLED_SCATTER_CAP = 3500
 const PRIMARY_CHART_GATE_MS = 1500
 const COMPARE_FIVE_FILE_GATE_MS = 3000
+const EMPTY_SCATTER_POINTS: Array<{ x: number; y: number; index?: number; diameter?: number }> = []
 
 type ReplicateGroupingMode = "none" | "prefix"
 type ReplicateRenderMode = "standard" | "histogram-average" | "merged-points"
 type ScatterDensityMode = "auto" | "raw" | "density"
 type ScatterZoomPreset = "auto" | "center-60" | "core-30" | "high-signal"
+type CompareMode = "pairwise" | "multi-overlay"
 
 const DENSITY_TRIGGER_POINTS = 1400
 
@@ -117,10 +119,11 @@ declare global {
 /**
  * ComparisonAnalysisView
  * 
- * Enhanced component for comparing two FCS files with separate tabs:
- * 1. Primary Tab - Complete analysis of primary file
- * 2. Comparison Tab - Complete analysis of comparison file
- * 3. Overlay Tab - Side-by-side comparison with overlay charts
+ * Compare-session component for multi-file FCS analytics:
+ * 1. Reference Tab - Reference sample analysis
+ * 2. Peer Tab - Active peer sample analysis
+ * 3. Overlay Tab - Session overlay analytics
+ * 4. Sample Detail Tab - Full single-sample analysis for any compare-session file
  */
 export function ComparisonAnalysisView() {
   const { 
@@ -135,6 +138,11 @@ export function ComparisonAnalysisView() {
     setFCSCompareVisibleSampleIds,
     toggleFCSCompareSampleVisibility,
     setFCSComparePrimarySampleId,
+    setFCSSampleId,
+    setSecondaryFCSSampleId,
+    setFCSResults,
+    setSecondaryFCSResults,
+    setSecondaryFCSScatterData,
     setOverlayConfig,
     resetFCSAnalysis,
     resetSecondaryFCSAnalysis,
@@ -152,14 +160,17 @@ export function ComparisonAnalysisView() {
   const { toast } = useToast()
   const { loadFCSCompareSamples } = useApi()
   
-  const [activeView, setActiveView] = useState<"primary" | "comparison" | "overlay">("primary")
+  const [activeView, setActiveView] = useState<"primary" | "comparison" | "overlay" | "sample">("primary")
   const [compareLoadInFlight, setCompareLoadInFlight] = useState(false)
   const [compareLoadingBySampleId, setCompareLoadingBySampleId] = useState<Record<string, boolean>>({})
   const [compareErrorsBySampleId, setCompareErrorsBySampleId] = useState<Record<string, string>>({})
   const [lodMode, setLodMode] = useState<"interactive" | "settled">("settled")
   const [activeScatterPointCap, setActiveScatterPointCap] = useState(SETTLED_SCATTER_CAP)
   const [replicateGroupingMode, setReplicateGroupingMode] = useState<ReplicateGroupingMode>("none")
-  const [replicateRenderMode, setReplicateRenderMode] = useState<ReplicateRenderMode>("standard")
+  const [replicateRenderMode, setReplicateRenderMode] = useState<ReplicateRenderMode>("merged-points")
+  const [compareMode, setCompareMode] = useState<CompareMode>(() => (overlayConfig.enabled ? "multi-overlay" : "pairwise"))
+  const [activePeerSampleId, setActivePeerSampleId] = useState<string | null>(null)
+  const [inspectionSampleId, setInspectionSampleId] = useState<string | null>(null)
   const activeGraphInstance = useMemo(() => {
     return fcsCompareGraphInstances.find((instance) => instance.id === activeFCSCompareGraphInstanceId)
       || fcsCompareGraphInstances[0]
@@ -181,8 +192,7 @@ export function ComparisonAnalysisView() {
   })
   
   const hasPrimaryResults = fcsAnalysis.results !== null
-  const hasComparisonResults = secondaryFcsAnalysis.results !== null
-  const canShowOverlay = hasPrimaryResults && hasComparisonResults
+  const hasComparisonResults = secondaryFcsAnalysis.results !== null || fcsCompareSession.selectedSampleIds.length > 1
   const benchmarkCompareSampleIds = useMemo(() => {
     if (typeof window === "undefined") return []
     const raw = window.__FCS_PERF_COMPARE_SAMPLE_IDS__
@@ -217,6 +227,181 @@ export function ComparisonAnalysisView() {
   )
   const primarySampleId = fcsAnalysis.sampleId
   const comparisonSampleId = secondaryFcsAnalysis.sampleId
+  const canShowOverlay = compareSampleIds.length > 1
+  const sessionCardSampleIds = useMemo(() => {
+    if (compareSampleIds.length > 0) {
+      return compareSampleIds
+    }
+
+    return Array.from(
+      new Set([fcsAnalysis.sampleId, secondaryFcsAnalysis.sampleId].filter(Boolean) as string[])
+    )
+  }, [compareSampleIds, fcsAnalysis.sampleId, secondaryFcsAnalysis.sampleId])
+
+  const peerOptions = useMemo(
+    () => compareSampleIds.filter((id) => id !== primarySampleId),
+    [compareSampleIds, primarySampleId]
+  )
+
+  const effectivePeerSampleId = useMemo(() => {
+    if (activePeerSampleId && activePeerSampleId !== primarySampleId && compareSampleIds.includes(activePeerSampleId)) {
+      return activePeerSampleId
+    }
+    if (secondaryFcsAnalysis.sampleId && secondaryFcsAnalysis.sampleId !== primarySampleId && compareSampleIds.includes(secondaryFcsAnalysis.sampleId)) {
+      return secondaryFcsAnalysis.sampleId
+    }
+    return peerOptions[0] ?? null
+  }, [activePeerSampleId, compareSampleIds, peerOptions, primarySampleId, secondaryFcsAnalysis.sampleId])
+
+  const canUseMultiOverlay = canShowOverlay
+
+  useEffect(() => {
+    if (!canUseMultiOverlay && compareMode === "multi-overlay") {
+      setCompareMode("pairwise")
+      setOverlayConfig({ enabled: false })
+    }
+  }, [canUseMultiOverlay, compareMode, setOverlayConfig])
+
+  const handleCompareModeChange = useCallback((nextMode: CompareMode) => {
+    if (nextMode === "multi-overlay" && !canUseMultiOverlay) {
+      toast({
+        title: "Cannot Enable Multi-overlay",
+        description: "Select at least two compare files and ensure results are loaded.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setCompareMode(nextMode)
+    const nextOverlayEnabled = nextMode === "multi-overlay"
+    setOverlayConfig({ enabled: nextOverlayEnabled })
+
+    if (nextOverlayEnabled) {
+      setActiveView("overlay")
+    } else if (activeView === "overlay") {
+      setActiveView("comparison")
+    }
+
+    toast({
+      title: nextMode === "pairwise" ? "Pairwise Mode" : "Multi-overlay Mode",
+      description:
+        nextMode === "pairwise"
+          ? "Comparing reference vs one peer sample."
+          : "Comparing reference vs visible compare set.",
+    })
+  }, [activeView, canUseMultiOverlay, setOverlayConfig, toast])
+
+  useEffect(() => {
+    if (effectivePeerSampleId !== activePeerSampleId) {
+      setActivePeerSampleId(effectivePeerSampleId)
+    }
+  }, [activePeerSampleId, effectivePeerSampleId])
+
+  useEffect(() => {
+    if (inspectionSampleId && compareSampleIds.includes(inspectionSampleId)) {
+      return
+    }
+    setInspectionSampleId(compareSampleIds[0] ?? null)
+  }, [compareSampleIds, inspectionSampleId])
+
+  useEffect(() => {
+    if (compareSampleIds.length === 0) {
+      return
+    }
+
+    const sessionPrimary = fcsCompareSession.primarySampleId && compareSampleIds.includes(fcsCompareSession.primarySampleId)
+      ? fcsCompareSession.primarySampleId
+      : (compareSampleIds[0] ?? null)
+
+    if (!sessionPrimary) {
+      return
+    }
+
+    const compareMetaById = fcsCompareSession.compareItemMetaById ?? {}
+    const resolveBackendSampleId = (compareItemId: string) => compareMetaById[compareItemId]?.backendSampleId || compareItemId
+    const sessionPrimaryBackendId = resolveBackendSampleId(sessionPrimary)
+
+    if (fcsAnalysis.sampleId !== sessionPrimaryBackendId) {
+      setFCSSampleId(sessionPrimaryBackendId)
+    }
+
+    const primaryResult = fcsCompareSession.resultsBySampleId[sessionPrimary] ?? null
+    if (fcsAnalysis.results !== primaryResult) {
+      setFCSResults(primaryResult)
+    }
+
+    const secondaryCandidate = compareMode === "pairwise"
+      ? (
+        (effectivePeerSampleId && effectivePeerSampleId !== sessionPrimary && compareSampleIds.includes(effectivePeerSampleId))
+          ? effectivePeerSampleId
+          : (compareSampleIds.find((id) => id !== sessionPrimary) ?? null)
+      )
+      : (
+        visibleSampleIds.find((id) => id !== sessionPrimary)
+          ?? compareSampleIds.find((id) => id !== sessionPrimary)
+          ?? null
+      )
+
+    if (secondaryCandidate) {
+      const secondaryBackendId = resolveBackendSampleId(secondaryCandidate)
+
+      if (secondaryFcsAnalysis.sampleId !== secondaryBackendId) {
+        setSecondaryFCSSampleId(secondaryBackendId)
+      }
+
+      const secondaryResult = fcsCompareSession.resultsBySampleId[secondaryCandidate] ?? null
+      if (secondaryFcsAnalysis.results !== secondaryResult) {
+        setSecondaryFCSResults(secondaryResult)
+      }
+
+      const secondaryScatter = fcsCompareSession.scatterBySampleId[secondaryCandidate] ?? EMPTY_SCATTER_POINTS
+      if (secondaryFcsAnalysis.scatterData !== secondaryScatter) {
+        setSecondaryFCSScatterData(secondaryScatter)
+      }
+      return
+    }
+
+    if (secondaryFcsAnalysis.sampleId !== null) {
+      setSecondaryFCSSampleId(null)
+    }
+    if (secondaryFcsAnalysis.results !== null) {
+      setSecondaryFCSResults(null)
+    }
+    if ((secondaryFcsAnalysis.scatterData?.length ?? 0) > 0) {
+      setSecondaryFCSScatterData(EMPTY_SCATTER_POINTS)
+    }
+  }, [
+    compareSampleIds,
+    visibleSampleIds,
+    effectivePeerSampleId,
+    compareMode,
+    fcsCompareSession.primarySampleId,
+    fcsCompareSession.compareItemMetaById,
+    fcsCompareSession.resultsBySampleId,
+    fcsCompareSession.scatterBySampleId,
+    fcsAnalysis.sampleId,
+    fcsAnalysis.results,
+    secondaryFcsAnalysis.sampleId,
+    secondaryFcsAnalysis.results,
+    secondaryFcsAnalysis.scatterData,
+    setFCSSampleId,
+    setSecondaryFCSSampleId,
+    setFCSResults,
+    setSecondaryFCSResults,
+    setSecondaryFCSScatterData,
+  ])
+
+  useEffect(() => {
+    if (activeView === "overlay" && !canShowOverlay) {
+      setActiveView(hasPrimaryResults ? "primary" : "comparison")
+      return
+    }
+
+    if (activeView === "comparison" && !hasComparisonResults && hasPrimaryResults) {
+      setActiveView("primary")
+    }
+  }, [activeView, canShowOverlay, hasComparisonResults, hasPrimaryResults])
+
   const sampleMetadataById = useMemo(() => {
     const map = new Map<string, { treatment?: string; dye?: string }>()
     apiSamples.forEach((sample) => {
@@ -227,6 +412,11 @@ export function ComparisonAnalysisView() {
     })
     return map
   }, [apiSamples])
+
+  const getCompareDisplayLabel = useCallback((compareItemId: string) => {
+    const compareMetaById = fcsCompareSession.compareItemMetaById ?? {}
+    return compareMetaById[compareItemId]?.sampleLabel || compareItemId
+  }, [fcsCompareSession.compareItemMetaById])
 
   const normalizationSummary = useMemo(() => {
     const schemas: FCSNormalizationSchema[] = []
@@ -374,6 +564,7 @@ export function ComparisonAnalysisView() {
         scatterPointLimit?: number
         resultConcurrency?: number
         scatterConcurrency?: number
+        preserveSessionSelection?: boolean
       }
     ) => {
       if (sampleIds.length === 0) return
@@ -383,6 +574,7 @@ export function ComparisonAnalysisView() {
       const scatterPointLimit = options?.scatterPointLimit ?? SETTLED_SCATTER_CAP
       const resultConcurrency = options?.resultConcurrency ?? 2
       const scatterConcurrency = options?.scatterConcurrency ?? 2
+      const preserveSessionSelection = options?.preserveSessionSelection ?? false
 
       setCompareLoadInFlight(true)
       setCompareLoadingBySampleId((prev) => {
@@ -397,6 +589,7 @@ export function ComparisonAnalysisView() {
           resultConcurrency,
           scatterConcurrency,
           scatterPointLimit,
+          preserveSessionSelection,
         })
 
         if (summary.cancelled) {
@@ -449,8 +642,9 @@ export function ComparisonAnalysisView() {
     async (sampleIds: string[], visibleSampleIds: string[], options?: { silent?: boolean }) => {
       if (sampleIds.length === 0) return
 
-      const primaryOnlySample = primarySampleId && sampleIds.includes(primarySampleId)
-        ? primarySampleId
+      const currentPrimary = useAnalysisStore.getState().fcsCompareSession.primarySampleId
+      const primaryOnlySample = currentPrimary && sampleIds.includes(currentPrimary)
+        ? currentPrimary
         : sampleIds[0]
 
       setCompareLoadInFlight(true)
@@ -463,6 +657,7 @@ export function ComparisonAnalysisView() {
         scatterPointLimit: INTERACTIVE_SCATTER_CAP,
         resultConcurrency: 1,
         scatterConcurrency: 1,
+        preserveSessionSelection: true,
       })
 
       const primaryRenderMs = Date.now() - primaryStartedAt
@@ -471,6 +666,9 @@ export function ComparisonAnalysisView() {
         primaryRenderMs,
         lastUpdatedAt: Date.now(),
       }))
+
+      // Yield to the browser so controls remain responsive before settled pass starts.
+      await new Promise((resolve) => setTimeout(resolve, 0))
 
       setLodMode("settled")
       setActiveScatterPointCap(SETTLED_SCATTER_CAP)
@@ -491,12 +689,22 @@ export function ComparisonAnalysisView() {
       }))
       setCompareLoadInFlight(false)
     },
-    [primarySampleId, runCompareLoad]
+    [runCompareLoad]
   )
 
   useEffect(() => {
     if (compareSampleIds.length === 0) {
       setCompareErrorsBySampleId({})
+      return
+    }
+
+    // Avoid reloading large compare payloads on pure visibility/UI toggles when data is already hydrated.
+    const allResultsReady = compareSampleIds.every((sampleId) => Boolean(fcsCompareSession.resultsBySampleId[sampleId]))
+    const allScatterReady = compareSampleIds.every((sampleId) => {
+      const points = fcsCompareSession.scatterBySampleId[sampleId]
+      return Array.isArray(points) && points.length > 0
+    })
+    if (allResultsReady && allScatterReady) {
       return
     }
 
@@ -589,13 +797,16 @@ export function ComparisonAnalysisView() {
     clearFCSCompareSession()
     setCompareLoadingBySampleId({})
     setCompareErrorsBySampleId({})
+    setActivePeerSampleId(null)
+    setInspectionSampleId(null)
+    resetFCSAnalysis()
     resetSecondaryFCSAnalysis()
     setOverlayConfig({ enabled: false })
     toast({
       title: "Compare Session Cleared",
       description: "Selected and visible compare samples were reset.",
     })
-  }, [clearFCSCompareSession, resetSecondaryFCSAnalysis, setOverlayConfig, toast])
+  }, [clearFCSCompareSession, resetFCSAnalysis, resetSecondaryFCSAnalysis, setOverlayConfig, toast])
 
   const handleResetAll = useCallback(() => {
     resetFCSAnalysis()
@@ -604,7 +815,7 @@ export function ComparisonAnalysisView() {
     setOverlayConfig({ enabled: false })
     toast({
       title: "Analysis Reset",
-      description: "Both files cleared. Upload new files to start fresh.",
+      description: "Reference and peer analyses cleared. Upload compare files to start fresh.",
     })
   }, [resetFCSAnalysis, resetSecondaryFCSAnalysis, clearFCSCompareSession, setOverlayConfig, toast])
 
@@ -612,8 +823,8 @@ export function ComparisonAnalysisView() {
     resetFCSAnalysis()
     setOverlayConfig({ enabled: false })
     toast({
-      title: "Primary File Reset",
-      description: "Primary analysis cleared.",
+      title: "Reference Sample Reset",
+      description: "Reference sample analysis cleared.",
     })
   }, [resetFCSAnalysis, setOverlayConfig, toast])
 
@@ -621,35 +832,10 @@ export function ComparisonAnalysisView() {
     resetSecondaryFCSAnalysis()
     setOverlayConfig({ enabled: false })
     toast({
-      title: "Comparison File Reset",
-      description: "Comparison analysis cleared.",
+      title: "Session Peer Reset",
+      description: "Peer sample analysis cleared.",
     })
   }, [resetSecondaryFCSAnalysis, setOverlayConfig, toast])
-
-  const toggleOverlay = useCallback(() => {
-    if (!canShowOverlay) {
-      toast({
-        title: "Cannot Enable Overlay",
-        description: "Upload both primary and comparison files first.",
-        variant: "destructive"
-      })
-      return
-    }
-    
-    const newEnabled = !overlayConfig.enabled
-    setOverlayConfig({ enabled: newEnabled })
-    
-    if (newEnabled) {
-      setActiveView("overlay")
-    }
-    
-    toast({
-      title: newEnabled ? "Overlay Enabled" : "Overlay Disabled",
-      description: newEnabled 
-        ? "Viewing combined analysis" 
-        : "Switched to individual file view",
-    })
-  }, [canShowOverlay, overlayConfig.enabled, setOverlayConfig, toast])
 
   const primaryStatus = deriveCompareSampleStatus({
     sampleId: primarySampleId,
@@ -665,19 +851,6 @@ export function ComparisonAnalysisView() {
     hasResults: hasComparisonResults,
   })
 
-  // If no results at all, show placeholder
-  if (!hasPrimaryResults && !hasComparisonResults) {
-    return (
-      <Alert>
-        <AlertCircle className="h-4 w-4" />
-        <AlertTitle>No Analysis Results</AlertTitle>
-        <AlertDescription>
-          Upload FCS files to see analysis results. Use the tabs above to upload primary and comparison files.
-        </AlertDescription>
-      </Alert>
-    )
-  }
-
   return (
     <div className="space-y-4">
       {/* View Tabs and Controls */}
@@ -687,9 +860,9 @@ export function ComparisonAnalysisView() {
             <div className="flex items-center gap-2">
               <CardTitle className="text-base">Analysis View</CardTitle>
               {canShowOverlay && (
-                <Badge variant={overlayConfig.enabled ? "default" : "outline"} className="gap-1">
+                <Badge variant={compareMode === "multi-overlay" ? "default" : "outline"} className="gap-1">
                   <GitCompare className="h-3 w-3" />
-                  {overlayConfig.enabled ? "Overlay Active" : "Overlay Available"}
+                  {compareMode === "multi-overlay" ? "Multi-overlay Active" : "Pairwise Active"}
                 </Badge>
               )}
             </div>
@@ -714,26 +887,27 @@ export function ComparisonAnalysisView() {
                 </Button>
               )}
 
-              {canShowOverlay && (
+              <div className="flex items-center gap-1">
                 <Button
-                  variant={overlayConfig.enabled ? "default" : "outline"}
+                  variant={compareMode === "pairwise" ? "default" : "outline"}
                   size="sm"
-                  onClick={toggleOverlay}
+                  onClick={() => handleCompareModeChange("pairwise")}
                   className="gap-1"
                 >
-                  {overlayConfig.enabled ? (
-                    <>
-                      <EyeOff className="h-3 w-3" />
-                      Disable Overlay
-                    </>
-                  ) : (
-                    <>
-                      <Eye className="h-3 w-3" />
-                      Enable Overlay
-                    </>
-                  )}
+                  <GitCompare className="h-3 w-3" />
+                  Pairwise
                 </Button>
-              )}
+                <Button
+                  variant={compareMode === "multi-overlay" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => handleCompareModeChange("multi-overlay")}
+                  className="gap-1"
+                  disabled={!canUseMultiOverlay}
+                >
+                  <Layers className="h-3 w-3" />
+                  Multi-overlay
+                </Button>
+              </div>
               <Button 
                 variant="outline" 
                 size="sm" 
@@ -769,7 +943,7 @@ export function ComparisonAnalysisView() {
                 variant={progressiveLoadMetrics.primaryRenderMs !== null && progressiveLoadMetrics.primaryRenderMs <= PRIMARY_CHART_GATE_MS ? "default" : "destructive"}
                 className="justify-center"
               >
-                Primary Gate: {progressiveLoadMetrics.primaryRenderMs ?? "--"}ms / {PRIMARY_CHART_GATE_MS}ms
+                Reference Gate: {progressiveLoadMetrics.primaryRenderMs ?? "--"}ms / {PRIMARY_CHART_GATE_MS}ms
               </Badge>
               <Badge
                 variant={progressiveLoadMetrics.settledRenderMs !== null && progressiveLoadMetrics.settledRenderMs <= COMPARE_FIVE_FILE_GATE_MS ? "default" : "destructive"}
@@ -785,7 +959,7 @@ export function ComparisonAnalysisView() {
               <Badge variant="outline">Loading compare samples...</Badge>
               {compareSampleIds.map((id) => (
                 <Badge key={id} variant="outline" className="font-mono">
-                  {id}
+                  {getCompareDisplayLabel(id)}
                 </Badge>
               ))}
             </div>
@@ -796,7 +970,7 @@ export function ComparisonAnalysisView() {
               {Object.entries(compareErrorsBySampleId).map(([id, message]) => (
                 <div key={id} className="flex items-center gap-1">
                   <Badge variant="destructive" className="font-mono" title={message}>
-                    {id}: load warning
+                    {getCompareDisplayLabel(id)}: load warning
                   </Badge>
                   <Button
                     variant="ghost"
@@ -828,11 +1002,11 @@ export function ComparisonAnalysisView() {
             </Alert>
           )}
 
-          <Tabs value={activeView} onValueChange={(v) => setActiveView(v as "primary" | "comparison" | "overlay")}>
-            <TabsList className="grid w-full grid-cols-3">
+          <Tabs value={activeView} onValueChange={(v) => setActiveView(v as "primary" | "comparison" | "overlay" | "sample")}>
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="primary" disabled={!hasPrimaryResults} className="gap-2">
                 <FileText className="h-4 w-4" />
-                Primary
+                Reference
                 {hasPrimaryResults && (
                   <Badge variant="outline" className="ml-1 h-5 px-1.5 text-[10px]">
                     {(fcsAnalysis.results?.total_events || 0).toLocaleString()}
@@ -841,26 +1015,30 @@ export function ComparisonAnalysisView() {
               </TabsTrigger>
               <TabsTrigger value="comparison" disabled={!hasComparisonResults} className="gap-2">
                 <Layers className="h-4 w-4" />
-                Comparison
+                Session Peer
                 {hasComparisonResults && (
                   <Badge variant="outline" className="ml-1 h-5 px-1.5 text-[10px]">
                     {(secondaryFcsAnalysis.results?.total_events || 0).toLocaleString()}
                   </Badge>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="overlay" disabled={!canShowOverlay} className="gap-2">
+              <TabsTrigger value="overlay" className="gap-2" disabled={!canShowOverlay}>
                 <GitCompare className="h-4 w-4" />
                 Overlay
-                {canShowOverlay && overlayConfig.enabled && (
+                {canShowOverlay && compareMode === "multi-overlay" && (
                   <Badge className="ml-1 h-5 px-1.5 text-[10px]">Active</Badge>
                 )}
+              </TabsTrigger>
+              <TabsTrigger value="sample" disabled={compareSampleIds.length === 0} className="gap-2">
+                <Layers className="h-4 w-4" />
+                Sample Detail
               </TabsTrigger>
             </TabsList>
           </Tabs>
         </CardContent>
       </Card>
 
-      {compareSampleIds.length > 0 && benchmarkCompareSampleIds.length === 0 && (
+      {compareSampleIds.length > 0 && (
         <Card className="card-3d">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -868,6 +1046,27 @@ export function ComparisonAnalysisView() {
               <div className="flex items-center gap-2 flex-wrap">
                 <div className="flex items-center gap-1">
                   <Badge variant="outline" className="h-7">Replicates: {replicateGroups.length}</Badge>
+                  {compareMode === "pairwise" ? (
+                    <Select
+                      value={effectivePeerSampleId ?? "none"}
+                      onValueChange={(value) => setActivePeerSampleId(value === "none" ? null : value)}
+                    >
+                      <SelectTrigger className="h-7 w-[180px] text-xs">
+                        <SelectValue placeholder="Peer sample" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {peerOptions.length === 0 ? (
+                          <SelectItem value="none">Peer: none</SelectItem>
+                        ) : (
+                          peerOptions.map((id) => (
+                            <SelectItem key={id} value={id}>Peer: {getCompareDisplayLabel(id)}</SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Badge variant="secondary" className="h-7">Visible set drives overlay membership</Badge>
+                  )}
                   <Select value={replicateGroupingMode} onValueChange={(value) => setReplicateGroupingMode(value as ReplicateGroupingMode)}>
                     <SelectTrigger className="h-7 w-[170px] text-xs">
                       <SelectValue placeholder="Group mode" />
@@ -890,7 +1089,23 @@ export function ComparisonAnalysisView() {
                 </div>
                 <div className="flex items-center gap-1">
                 <Button variant="outline" size="sm" className="h-7 text-xs" onClick={showAllVisible}>Show All</Button>
-                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={showPrimaryOnly}>Primary Only</Button>
+                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={showPrimaryOnly}>Reference Only</Button>
+                <Button
+                  variant={axisMode === "unified" ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => handleAxisModeChange("unified")}
+                >
+                  Unified Axis
+                </Button>
+                <Button
+                  variant={axisMode === "per-file" ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => handleAxisModeChange("per-file")}
+                >
+                  Per-file Axis
+                </Button>
                 <Button variant="outline" size="sm" className="h-7 text-xs" onClick={clearVisible}>Hide All</Button>
                 <Button
                   variant="outline"
@@ -905,11 +1120,14 @@ export function ComparisonAnalysisView() {
             </div>
           </CardHeader>
           <CardContent className="space-y-2">
-            {compareSampleIds.map((sampleId) => {
+            {sessionCardSampleIds.map((sampleId) => {
               const isVisible = visibleSampleIds.includes(sampleId)
-              const isPrimary = (fcsCompareSession.primarySampleId || compareSampleIds[0]) === sampleId
+              const isPrimary = (fcsCompareSession.primarySampleId || sessionCardSampleIds[0]) === sampleId
               const status = compareStatusBySampleId[sampleId]
-              const metadata = sampleMetadataById.get(sampleId)
+              const compareMeta = (fcsCompareSession.compareItemMetaById ?? {})[sampleId]
+              const metadata = compareMeta
+                ? { treatment: compareMeta.treatment, dye: compareMeta.dye }
+                : sampleMetadataById.get(sampleId)
               const statusVariant = status === "error" ? "destructive" : status === "ready" ? "default" : "outline"
               const statusLabel = status === "loading"
                 ? "Loading"
@@ -921,15 +1139,15 @@ export function ComparisonAnalysisView() {
 
               return (
                 <div key={sampleId} className="flex items-center gap-2 rounded-md border p-2">
-                  <Badge variant="outline" className="font-mono">{sampleId}</Badge>
+                  <Badge variant="outline" className="font-mono">{getCompareDisplayLabel(sampleId)}</Badge>
                   <Badge variant={statusVariant}>{statusLabel}</Badge>
-                  {isPrimary && <Badge variant="secondary">Primary</Badge>}
+                  {isPrimary && <Badge variant="secondary">Reference</Badge>}
                   {isVisible ? <Badge>Visible</Badge> : <Badge variant="outline">Hidden</Badge>}
                   {metadata?.treatment && <Badge variant="outline">Tx: {metadata.treatment}</Badge>}
                   {metadata?.dye && <Badge variant="outline">Dye: {metadata.dye}</Badge>}
                   {replicateGroupingMode === "prefix" && (
                     <Badge variant="outline">
-                      Group {sampleId.split(/[_-]/)[0] || sampleId}
+                      Group {getCompareDisplayLabel(sampleId).split(/[_-]/)[0] || getCompareDisplayLabel(sampleId)}
                     </Badge>
                   )}
 
@@ -941,13 +1159,37 @@ export function ComparisonAnalysisView() {
                       onClick={() => setFCSComparePrimarySampleId(sampleId)}
                       disabled={isPrimary}
                     >
-                      Set Primary
+                      Set Reference
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2"
+                      onClick={() => {
+                        setActivePeerSampleId(sampleId)
+                        setActiveView("comparison")
+                      }}
+                      disabled={compareMode !== "pairwise" || isPrimary || effectivePeerSampleId === sampleId}
+                    >
+                      Set Peer
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2"
+                      onClick={() => {
+                        setInspectionSampleId(sampleId)
+                        setActiveView("sample")
+                      }}
+                    >
+                      Details
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
                       className="h-7 px-2"
                       onClick={() => toggleFCSCompareSampleVisibility(sampleId)}
+                      disabled={compareMode !== "multi-overlay"}
                     >
                       {isVisible ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                     </Button>
@@ -980,7 +1222,7 @@ export function ComparisonAnalysisView() {
         />
       )}
 
-      {activeView === "overlay" && canShowOverlay && (
+      {activeView === "overlay" && (
         <OverlayAnalysisPanel
           graphInstances={fcsCompareGraphInstances}
           activeGraphInstanceId={activeGraphInstance?.id || null}
@@ -1020,12 +1262,92 @@ export function ComparisonAnalysisView() {
           scatterPointCap={activeScatterPointCap}
         />
       )}
+
+      {activeView === "sample" && (
+        <SampleDetailAnalysisPanel
+          sampleIds={compareSampleIds}
+          sampleLabelsById={Object.fromEntries(
+            compareSampleIds.map((id) => [id, getCompareDisplayLabel(id)])
+          )}
+          selectedSampleId={inspectionSampleId}
+          onSelectSampleId={setInspectionSampleId}
+        />
+      )}
+    </div>
+  )
+}
+
+function SampleDetailAnalysisPanel({
+  sampleIds,
+  sampleLabelsById,
+  selectedSampleId,
+  onSelectSampleId,
+}: {
+  sampleIds: string[]
+  sampleLabelsById: Record<string, string>
+  selectedSampleId: string | null
+  onSelectSampleId: (sampleId: string) => void
+}) {
+  const { fcsCompareSession } = useAnalysisStore()
+
+  const resolvedSampleId = selectedSampleId && sampleIds.includes(selectedSampleId)
+    ? selectedSampleId
+    : (sampleIds[0] ?? null)
+
+  const selectedResult = resolvedSampleId
+    ? (fcsCompareSession.resultsBySampleId[resolvedSampleId] ?? null)
+    : null
+
+  if (!resolvedSampleId) {
+    return (
+      <Alert>
+        <AlertCircle className="h-4 w-4" />
+        <AlertTitle>No compare samples selected</AlertTitle>
+        <AlertDescription>Upload compare files to inspect per-sample details.</AlertDescription>
+      </Alert>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card className="card-3d">
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <CardTitle className="text-base">Sample Detail View</CardTitle>
+            <Select value={resolvedSampleId} onValueChange={onSelectSampleId}>
+              <SelectTrigger className="h-8 w-60">
+                <SelectValue placeholder="Select sample" />
+              </SelectTrigger>
+              <SelectContent>
+                {sampleIds.map((id) => (
+                  <SelectItem key={id} value={id}>{sampleLabelsById[id] || id}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardHeader>
+      </Card>
+
+      {!selectedResult ? (
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Sample still loading</AlertTitle>
+          <AlertDescription>
+            {sampleLabelsById[resolvedSampleId] || resolvedSampleId} has not finished loading yet. Wait for compare loading to complete, then retry.
+          </AlertDescription>
+        </Alert>
+      ) : (
+        <>
+          <StatisticsCards results={selectedResult} />
+          <FullAnalysisDashboard results={selectedResult} />
+        </>
+      )}
     </div>
   )
 }
 
 /**
- * Primary Analysis Panel - Full analysis of the primary file
+ * Reference Analysis Panel - Full analysis of the reference sample
  */
 function PrimaryAnalysisPanel({ onReset }: { onReset: () => void }) {
   const { fcsAnalysis } = useAnalysisStore()
@@ -1042,7 +1364,7 @@ function PrimaryAnalysisPanel({ onReset }: { onReset: () => void }) {
             <div className="flex items-center gap-2">
               <FileText className="h-5 w-5 text-primary" />
               <div>
-                <p className="font-medium">{fcsAnalysis.file?.name || fcsAnalysis.sampleId || "Primary File"}</p>
+                <p className="font-medium">{fcsAnalysis.file?.name || fcsAnalysis.sampleId || "Reference File"}</p>
                 <p className="text-xs text-muted-foreground">
                   {results.total_events?.toLocaleString()} events • {results.channels?.length || 0} channels
                 </p>
@@ -1066,7 +1388,7 @@ function PrimaryAnalysisPanel({ onReset }: { onReset: () => void }) {
 }
 
 /**
- * Comparison Analysis Panel - Full analysis of the comparison file
+ * Session Peer Analysis Panel - Full analysis of the active peer sample
  */
 function ComparisonAnalysisPanel({ onReset }: { onReset: () => void }) {
   const { secondaryFcsAnalysis } = useAnalysisStore()
@@ -1083,7 +1405,7 @@ function ComparisonAnalysisPanel({ onReset }: { onReset: () => void }) {
             <div className="flex items-center gap-2">
               <Layers className="h-5 w-5 text-orange-500" />
               <div>
-                <p className="font-medium">{secondaryFcsAnalysis.file?.name || secondaryFcsAnalysis.sampleId || "Comparison File"}</p>
+                <p className="font-medium">{secondaryFcsAnalysis.file?.name || secondaryFcsAnalysis.sampleId || "Session Peer"}</p>
                 <p className="text-xs text-muted-foreground">
                   {results.total_events?.toLocaleString()} events • {results.channels?.length || 0} channels
                 </p>
@@ -1193,6 +1515,8 @@ function OverlayAnalysisPanel({
   const { toast } = useToast()
   const primaryResults = fcsAnalysis.results
   const secondaryResults = secondaryFcsAnalysis.results
+  const effectivePrimaryResults = primaryResults ?? secondaryResults
+  const effectiveSecondaryResults = secondaryResults ?? primaryResults
   const [primaryScatterData, setPrimaryScatterData] = useState<Array<{ x: number; y: number; index?: number; diameter?: number }>>([])
   const [secondaryScatterData, setSecondaryScatterData] = useState<Array<{ x: number; y: number; index?: number; diameter?: number }>>([])
   const [scatterDensityMode, setScatterDensityMode] = useState<ScatterDensityMode>("auto")
@@ -1375,20 +1699,20 @@ function OverlayAnalysisPanel({
     mergedComparisonScatterData,
   ])
 
-  if (!primaryResults || !secondaryResults) return null
+  if (!effectivePrimaryResults || !effectiveSecondaryResults) return null
 
   const handlePinGraph = useCallback(() => {
     const combinedPoints = [
       ...primaryScatterData.map((point) => ({
         x: point.x,
         y: point.y,
-        label: "Primary",
+        label: "Reference",
         category: "primary",
       })),
       ...mergedComparisonScatterData.map((point) => ({
         x: point.x,
         y: point.y,
-        label: "Comparison",
+        label: "Session Peer",
         category: "comparison",
       })),
     ]
@@ -1419,7 +1743,7 @@ function OverlayAnalysisPanel({
 
     toast({
       title: "Graph Pinned",
-      description: `${graphTitle} pinned with primary and comparison series context.`,
+      description: `${graphTitle} pinned with reference and peer series context.`,
     })
   }, [
     graphTitle,
@@ -1449,7 +1773,7 @@ function OverlayAnalysisPanel({
     const url = URL.createObjectURL(csvBlob)
     const link = document.createElement("a")
     link.href = url
-    link.download = `${(fcsAnalysis.sampleId || "primary")}_vs_${(secondaryFcsAnalysis.sampleId || "comparison")}_overlay.csv`
+    link.download = `${(fcsAnalysis.sampleId || "reference")}_vs_${(secondaryFcsAnalysis.sampleId || "peer")}_overlay.csv`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -1473,9 +1797,9 @@ function OverlayAnalysisPanel({
   ])
 
   const primaryDisplayed = primaryScatterData.length
-  const primaryTotal = primaryResults.total_events || 0
+  const primaryTotal = effectivePrimaryResults.total_events || 0
   const secondaryDisplayed = mergedComparisonScatterData.length
-  const secondaryTotal = secondaryResults.total_events || 0
+  const secondaryTotal = effectiveSecondaryResults.total_events || 0
   const primaryDownsampled = primaryTotal > primaryDisplayed && primaryDisplayed > 0
   const secondaryDownsampled = secondaryTotal > secondaryDisplayed && secondaryDisplayed > 0
 
@@ -1540,26 +1864,26 @@ function OverlayAnalysisPanel({
                 style={{ backgroundColor: overlayConfig.primaryColor }}
               />
               <CardTitle className="text-sm">
-                {fcsAnalysis.file?.name || "Primary"}
+                {fcsAnalysis.file?.name || "Reference"}
               </CardTitle>
             </div>
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-2 text-sm">
             <div>
               <p className="text-muted-foreground text-xs">Events</p>
-              <p className="font-mono font-medium">{primaryResults.total_events?.toLocaleString()}</p>
+              <p className="font-mono font-medium">{effectivePrimaryResults.total_events?.toLocaleString()}</p>
             </div>
             <div>
               <p className="text-muted-foreground text-xs">D50 Size</p>
-              <p className="font-mono font-medium">{primaryResults.size_statistics?.d50?.toFixed(1) || "N/A"} nm</p>
+              <p className="font-mono font-medium">{effectivePrimaryResults.size_statistics?.d50?.toFixed(1) || "N/A"} nm</p>
             </div>
             <div>
               <p className="text-muted-foreground text-xs">FSC Median</p>
-              <p className="font-mono font-medium">{primaryResults.fsc_median?.toFixed(1) || "N/A"}</p>
+              <p className="font-mono font-medium">{effectivePrimaryResults.fsc_median?.toFixed(1) || "N/A"}</p>
             </div>
             <div>
               <p className="text-muted-foreground text-xs">Debris %</p>
-              <p className="font-mono font-medium">{primaryResults.debris_pct?.toFixed(1) || "N/A"}%</p>
+              <p className="font-mono font-medium">{effectivePrimaryResults.debris_pct?.toFixed(1) || "N/A"}%</p>
             </div>
           </CardContent>
         </Card>
@@ -1573,26 +1897,26 @@ function OverlayAnalysisPanel({
                 style={{ backgroundColor: overlayConfig.secondaryColor }}
               />
               <CardTitle className="text-sm">
-                {secondaryFcsAnalysis.file?.name || "Comparison"}
+                {secondaryFcsAnalysis.file?.name || "Session Peer"}
               </CardTitle>
             </div>
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-2 text-sm">
             <div>
               <p className="text-muted-foreground text-xs">Events</p>
-              <p className="font-mono font-medium">{secondaryResults.total_events?.toLocaleString()}</p>
+              <p className="font-mono font-medium">{effectiveSecondaryResults.total_events?.toLocaleString()}</p>
             </div>
             <div>
               <p className="text-muted-foreground text-xs">D50 Size</p>
-              <p className="font-mono font-medium">{secondaryResults.size_statistics?.d50?.toFixed(1) || "N/A"} nm</p>
+              <p className="font-mono font-medium">{effectiveSecondaryResults.size_statistics?.d50?.toFixed(1) || "N/A"} nm</p>
             </div>
             <div>
               <p className="text-muted-foreground text-xs">FSC Median</p>
-              <p className="font-mono font-medium">{secondaryResults.fsc_median?.toFixed(1) || "N/A"}</p>
+              <p className="font-mono font-medium">{effectiveSecondaryResults.fsc_median?.toFixed(1) || "N/A"}</p>
             </div>
             <div>
               <p className="text-muted-foreground text-xs">Debris %</p>
-              <p className="font-mono font-medium">{secondaryResults.debris_pct?.toFixed(1) || "N/A"}%</p>
+              <p className="font-mono font-medium">{effectiveSecondaryResults.debris_pct?.toFixed(1) || "N/A"}%</p>
             </div>
           </CardContent>
         </Card>
@@ -1603,31 +1927,31 @@ function OverlayAnalysisPanel({
         <CardHeader className="pb-2">
           <div className="flex items-center gap-2">
             <GitCompare className="h-4 w-4 text-primary" />
-            <CardTitle className="text-base">Comparison Summary</CardTitle>
+            <CardTitle className="text-base">Session Difference Summary</CardTitle>
           </div>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <DifferenceMetric 
               label="Event Count Diff" 
-              primary={primaryResults.total_events || 0}
-              secondary={secondaryResults.total_events || 0}
+              primary={effectivePrimaryResults.total_events || 0}
+              secondary={effectiveSecondaryResults.total_events || 0}
             />
             <DifferenceMetric 
               label="D50 Size Diff" 
-              primary={primaryResults.size_statistics?.d50 || 0}
-              secondary={secondaryResults.size_statistics?.d50 || 0}
+              primary={effectivePrimaryResults.size_statistics?.d50 || 0}
+              secondary={effectiveSecondaryResults.size_statistics?.d50 || 0}
               unit="nm"
             />
             <DifferenceMetric 
               label="FSC Median Diff" 
-              primary={primaryResults.fsc_median || 0}
-              secondary={secondaryResults.fsc_median || 0}
+              primary={effectivePrimaryResults.fsc_median || 0}
+              secondary={effectiveSecondaryResults.fsc_median || 0}
             />
             <DifferenceMetric 
               label="Debris % Diff" 
-              primary={primaryResults.debris_pct || 0}
-              secondary={secondaryResults.debris_pct || 0}
+              primary={effectivePrimaryResults.debris_pct || 0}
+              secondary={effectiveSecondaryResults.debris_pct || 0}
               unit="%"
               isPercentage
             />
@@ -1742,8 +2066,8 @@ function OverlayAnalysisPanel({
             )}
           </div>
           <div className="mb-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
-            <Badge variant="outline">Primary map: {primaryAxisMappingLabel}</Badge>
-            <Badge variant="outline">Comparison map: {comparisonAxisMappingLabel}</Badge>
+            <Badge variant="outline">Reference map: {primaryAxisMappingLabel}</Badge>
+            <Badge variant="outline">Peer map: {comparisonAxisMappingLabel}</Badge>
             <Badge variant="outline">Zoom preset: {scatterZoomPreset}</Badge>
             {(primaryShouldUseDensity || secondaryShouldUseDensity) && (
               <Badge variant="secondary">Density fallback active</Badge>
@@ -1755,25 +2079,25 @@ function OverlayAnalysisPanel({
               <AlertTitle className="text-sm font-semibold text-amber-700 dark:text-amber-400">Axis fallback active</AlertTitle>
               <AlertDescription className="text-xs text-amber-600 dark:text-amber-300 space-y-1">
                 <div>
-                  Primary: {primaryAxisResolution.resolvedX} vs {primaryAxisResolution.resolvedY}
+                  Reference: {primaryAxisResolution.resolvedX} vs {primaryAxisResolution.resolvedY}
                 </div>
                 <div>
-                  Comparison: {comparisonAxisResolution.resolvedX} vs {comparisonAxisResolution.resolvedY}
+                  Peer: {comparisonAxisResolution.resolvedX} vs {comparisonAxisResolution.resolvedY}
                 </div>
               </AlertDescription>
             </Alert>
           )}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Primary Scatter */}
+            {/* Reference Scatter */}
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <div 
                   className="w-3 h-3 rounded-full" 
                   style={{ backgroundColor: overlayConfig.primaryColor }}
                 />
-                <span className="text-sm font-medium">{fcsAnalysis.file?.name || "Primary"}</span>
+                <span className="text-sm font-medium">{fcsAnalysis.file?.name || "Reference"}</span>
                 <Badge variant="outline" className="text-xs">
-                  {primaryResults.total_events?.toLocaleString()} events
+                  {effectivePrimaryResults.total_events?.toLocaleString()} events
                 </Badge>
                 <Badge variant="outline" className="text-xs">
                   Rendered {primaryDisplayed.toLocaleString()} / cap {scatterPointCap.toLocaleString()}
@@ -1786,7 +2110,7 @@ function OverlayAnalysisPanel({
               </div>
               <div className="h-75 bg-secondary/20 rounded-lg p-2">
                 <ScatterPlotChart 
-                  title={`Primary ${primaryAxisResolution.resolvedX} vs ${primaryAxisResolution.resolvedY}`}
+                  title={`Reference ${primaryAxisResolution.resolvedX} vs ${primaryAxisResolution.resolvedY}`}
                   data={primaryScatterData}
                   densityData={primaryDensityCells}
                   renderMode={primaryShouldUseDensity ? "density" : "raw"}
@@ -1799,21 +2123,21 @@ function OverlayAnalysisPanel({
                   showLegend={false}
                 />
                 {!primaryScatterLoaded && (
-                  <div className="text-xs text-muted-foreground mt-1">Loading primary scatter points...</div>
+                  <div className="text-xs text-muted-foreground mt-1">Loading reference scatter points...</div>
                 )}
               </div>
             </div>
             
-            {/* Comparison Scatter */}
+            {/* Session Peer Scatter */}
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <div 
                   className="w-3 h-3 rounded-full" 
                   style={{ backgroundColor: overlayConfig.secondaryColor }}
                 />
-                <span className="text-sm font-medium">{secondaryFcsAnalysis.file?.name || "Comparison"}</span>
+                <span className="text-sm font-medium">{secondaryFcsAnalysis.file?.name || "Session Peer"}</span>
                 <Badge variant="outline" className="text-xs">
-                  {secondaryResults.total_events?.toLocaleString()} events
+                  {effectiveSecondaryResults.total_events?.toLocaleString()} events
                 </Badge>
                 <Badge variant="outline" className="text-xs">
                   Rendered {secondaryDisplayed.toLocaleString()} / cap {scatterPointCap.toLocaleString()}
@@ -1826,7 +2150,7 @@ function OverlayAnalysisPanel({
               </div>
               <div className="h-75 bg-secondary/20 rounded-lg p-2">
                 <ScatterPlotChart 
-                  title={`Comparison ${comparisonAxisResolution.resolvedX} vs ${comparisonAxisResolution.resolvedY}`}
+                  title={`Session Peer ${comparisonAxisResolution.resolvedX} vs ${comparisonAxisResolution.resolvedY}`}
                   data={mergedComparisonScatterData}
                   densityData={secondaryDensityCells}
                   renderMode={secondaryShouldUseDensity ? "density" : "raw"}
@@ -1839,7 +2163,7 @@ function OverlayAnalysisPanel({
                   showLegend={false}
                 />
                 {!secondaryScatterLoaded && (
-                  <div className="text-xs text-muted-foreground mt-1">Loading comparison scatter points...</div>
+                  <div className="text-xs text-muted-foreground mt-1">Loading peer scatter points...</div>
                 )}
               </div>
             </div>

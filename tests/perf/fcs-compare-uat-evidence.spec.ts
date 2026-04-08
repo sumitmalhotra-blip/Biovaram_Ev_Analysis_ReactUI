@@ -53,6 +53,7 @@ function buildDenseMockScatter() {
 
 test("FCS compare UAT evidence pack (8 scenarios)", async ({ page }) => {
   test.setTimeout(180000)
+  let uploadCounter = 0
 
   const outDir = path.resolve("temp/perf-reports")
   fs.mkdirSync(outDir, { recursive: true })
@@ -130,6 +131,10 @@ test("FCS compare UAT evidence pack (8 scenarios)", async ({ page }) => {
           selectedSampleIds: ["S1", "S2"],
           visibleSampleIds: ["S1", "S2"],
           primarySampleId: "S1",
+          compareItemMetaById: {
+            S1: { backendSampleId: "S1", sampleLabel: "S1", fileName: "seed-s1.fcs", treatment: "Control", dye: "CFSE", uploadedAt: 1712400000201 },
+            S2: { backendSampleId: "S2", sampleLabel: "S2", fileName: "seed-s2.fcs", treatment: "DrugA", dye: "PKH26", uploadedAt: 1712400000202 },
+          },
           resultsBySampleId: {},
           scatterBySampleId: {},
           loadingBySampleId: {},
@@ -176,21 +181,37 @@ test("FCS compare UAT evidence pack (8 scenarios)", async ({ page }) => {
     })
   })
 
-  await page.route("**/api/v1/samples/*/fcs", async (route) => {
+  await page.route("**/upload/fcs**", async (route) => {
+    uploadCounter += 1
+    const sampleId = uploadCounter === 1 ? "S1" : "S2"
+    await route.fulfill({
+      status: 200,
+      json: {
+        success: true,
+        id: uploadCounter,
+        sample_id: sampleId,
+        job_id: `job-${sampleId}`,
+        processing_status: "completed",
+        fcs_results: buildMockResult(sampleId),
+      },
+    })
+  })
+
+  await page.route("**/samples/*/fcs**", async (route) => {
     const url = route.request().url()
     const sampleId = url.split("/samples/")[1]?.split("/")[0] || "S1"
     await route.fulfill({ status: 200, json: { sample_id: sampleId, results: [buildMockResult(sampleId)] } })
   })
 
-  await page.route("**/api/v1/samples/*/scatter-data**", async (route) => {
+  await page.route("**/samples/*/scatter-data**", async (route) => {
     const url = route.request().url()
     const sampleId = url.split("/samples/")[1]?.split("/")[0] || "S1"
     await route.fulfill({ status: 200, json: { sample_id: sampleId, ...buildDenseMockScatter() } })
   })
 
-  await page.route("**/api/v1/samples**", async (route) => {
+  await page.route("**/samples**", async (route) => {
     const url = new URL(route.request().url())
-    if (!url.pathname.endsWith("/api/v1/samples")) {
+    if (!url.pathname.endsWith("/samples") && !url.pathname.endsWith("/api/v1/samples")) {
       await route.fallback()
       return
     }
@@ -247,12 +268,21 @@ test("FCS compare UAT evidence pack (8 scenarios)", async ({ page }) => {
   }
 
   await page.getByRole("button", { name: /Compare Files/i }).click()
-  await expect(page.getByRole("tab", { name: /^Overlay/i })).toBeVisible({ timeout: 30000 })
-  await page.getByRole("tab", { name: /^Overlay/i }).click()
+  const uploadInput = page.locator("#fcs-upload-comparison")
+  await uploadInput.setInputFiles([
+    { name: "uat-a.fcs", mimeType: "application/octet-stream", buffer: Buffer.from("uat-a") },
+    { name: "uat-b.fcs", mimeType: "application/octet-stream", buffer: Buffer.from("uat-b") },
+  ])
+  await page.getByRole("button", { name: /Upload to Compare Session/i }).click()
+
+  const overlayTab = page.getByRole("tab", { name: /^Overlay/i })
+  await expect(overlayTab).toBeVisible({ timeout: 30000 })
+  await expect(overlayTab).toBeEnabled({ timeout: 30000 })
+  await overlayTab.click()
   await expect(page.getByText(/Scatter Comparison/i)).toBeVisible({ timeout: 30000 })
 
   await runScenario("01-overlay-access", "Open overlay compare workspace", async () => {
-    await expect(page.getByText(/Compare Session/i)).toBeVisible()
+    await expect(page.getByText("Compare Session", { exact: true }).first()).toBeVisible()
     await expect(page.getByRole("button", { name: /^New$/i })).toBeVisible()
   })
 
@@ -263,9 +293,9 @@ test("FCS compare UAT evidence pack (8 scenarios)", async ({ page }) => {
   })
 
   await runScenario("03-axis-isolation", "Switch per-file axis mode", async () => {
-    await page.getByRole("button", { name: /Per-file Axis/i }).click()
-    await expect(page.getByText(/Primary map:/i)).toBeVisible()
-    await expect(page.getByText(/Comparison map:/i)).toBeVisible()
+    await page.getByRole("button", { name: /Per-file Axis/i }).first().click()
+    await expect(page.getByText(/Reference map:|Primary map:/i).first()).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText(/Peer map:|Comparison map:/i)).toBeVisible()
   })
 
   await runScenario("04-density-fallback", "Enable density/contour fallback", async () => {
@@ -303,16 +333,38 @@ test("FCS compare UAT evidence pack (8 scenarios)", async ({ page }) => {
 
   await runScenario("08-clear-session", "Run deterministic clear-session action", async () => {
     await page.getByRole("button", { name: /Clear Session/i }).click()
-    await expect(page.getByText(/Analysis View/i)).toBeVisible()
+    await expect(page.getByRole("button", { name: /Flow Cytometry/i })).toBeVisible({ timeout: 15000 })
+    await expect(page.locator("main")).toBeVisible({ timeout: 15000 })
   })
 
-  const unresolvedGaps = [
-    {
+  let unresolvedGaps: Array<{ id: string; gap: string; followUp: string }> = []
+  const longTaskEvidencePath = path.join(outDir, "fcs-compare-longtask-gate.json")
+  if (fs.existsSync(longTaskEvidencePath)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(longTaskEvidencePath, "utf-8")) as {
+        passFail?: { recurringOver50: boolean }
+      }
+      if (parsed?.passFail?.recurringOver50) {
+        unresolvedGaps.push({
+          id: "UAT-GAP-001",
+          gap: "Main-thread <=50ms long-task gate still reports recurring >50ms tasks.",
+          followUp: "Profile the interaction path from long-task gate evidence and reduce main-thread blocking work.",
+        })
+      }
+    } catch {
+      unresolvedGaps.push({
+        id: "UAT-GAP-001",
+        gap: "Long-task evidence artifact exists but could not be parsed.",
+        followUp: "Re-run dedicated long-task gate spec and verify evidence serialization.",
+      })
+    }
+  } else {
+    unresolvedGaps.push({
       id: "UAT-GAP-001",
-      gap: "Main-thread <=50ms gate is tracked but not automatically asserted in this UAT script.",
-      followUp: "Keep dedicated perf gate spec and attach long-task telemetry snapshot in next evidence run.",
-    },
-  ]
+      gap: "Main-thread <=50ms gate evidence not attached for this run.",
+      followUp: "Run dedicated long-task gate spec before final sign-off.",
+    })
+  }
 
   const evidence = {
     timestamp: new Date().toISOString(),

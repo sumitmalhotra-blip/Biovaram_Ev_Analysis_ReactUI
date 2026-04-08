@@ -2,6 +2,9 @@ import { test, expect } from "@playwright/test"
 import fs from "node:fs"
 import path from "node:path"
 
+const LONG_TASK_GATE_MS = 50
+const RECURRING_LONG_TASK_LIMIT = 1
+
 function buildMockResult(sampleId: string) {
   return {
     id: sampleId,
@@ -69,8 +72,29 @@ async function getPersistedStore(page: import("@playwright/test").Page): Promise
 
 test("FCS compare controls verification checklist", async ({ page }) => {
   test.setTimeout(120000)
+  let uploadCounter = 0
 
   await page.addInitScript(() => {
+    ;(window as any).__FCS_LONG_TASK_ENTRIES__ = []
+    if (typeof PerformanceObserver !== "undefined") {
+      try {
+        const observer = new PerformanceObserver((list) => {
+          const entries = (window as any).__FCS_LONG_TASK_ENTRIES__ || []
+          for (const entry of list.getEntries()) {
+            entries.push({
+              name: entry.name,
+              startTime: Number(entry.startTime || 0),
+              duration: Number(entry.duration || 0),
+            })
+          }
+          ;(window as any).__FCS_LONG_TASK_ENTRIES__ = entries
+        })
+        observer.observe({ entryTypes: ["longtask"] })
+      } catch {
+        // Ignore environments without longtask observer support.
+      }
+    }
+
     const seededState = {
       state: {
         activeTab: "flow-cytometry",
@@ -122,6 +146,10 @@ test("FCS compare controls verification checklist", async ({ page }) => {
           selectedSampleIds: ["S1", "S2"],
           visibleSampleIds: ["S1", "S2"],
           primarySampleId: "S1",
+          compareItemMetaById: {
+            S1: { backendSampleId: "S1", sampleLabel: "S1", fileName: "seed-s1.fcs", treatment: "Control", dye: "CFSE", uploadedAt: 1712400000101 },
+            S2: { backendSampleId: "S2", sampleLabel: "S2", fileName: "seed-s2.fcs", treatment: "DrugA", dye: "PKH26", uploadedAt: 1712400000102 },
+          },
           resultsBySampleId: {},
           scatterBySampleId: {},
           loadingBySampleId: {},
@@ -168,13 +196,29 @@ test("FCS compare controls verification checklist", async ({ page }) => {
     })
   })
 
-  await page.route("**/api/v1/samples/*/fcs", async (route) => {
+  await page.route("**/upload/fcs**", async (route) => {
+    uploadCounter += 1
+    const sampleId = uploadCounter === 1 ? "S1" : "S2"
+    await route.fulfill({
+      status: 200,
+      json: {
+        success: true,
+        id: uploadCounter,
+        sample_id: sampleId,
+        job_id: `job-${sampleId}`,
+        processing_status: "completed",
+        fcs_results: buildMockResult(sampleId),
+      },
+    })
+  })
+
+  await page.route("**/samples/*/fcs**", async (route) => {
     const url = route.request().url()
     const sampleId = url.split("/samples/")[1]?.split("/")[0] || "S1"
     await route.fulfill({ status: 200, json: { sample_id: sampleId, results: [buildMockResult(sampleId)] } })
   })
 
-  await page.route("**/api/v1/samples/*/scatter-data**", async (route) => {
+  await page.route("**/samples/*/scatter-data**", async (route) => {
     const url = route.request().url()
     const sampleId = url.split("/samples/")[1]?.split("/")[0] || "S1"
     await route.fulfill({ status: 200, json: { sample_id: sampleId, ...buildMockScatter() } })
@@ -219,8 +263,17 @@ test("FCS compare controls verification checklist", async ({ page }) => {
   if (await appErrorHeading.isVisible().catch(() => false)) {
     throw new Error("App entered error boundary before overlay interaction")
   }
-  await expect(page.getByRole("tab", { name: /^Overlay/i })).toBeVisible({ timeout: 30000 })
-  await page.getByRole("tab", { name: /^Overlay/i }).click()
+  const uploadInput = page.locator("#fcs-upload-comparison")
+  await uploadInput.setInputFiles([
+    { name: "peer-a.fcs", mimeType: "application/octet-stream", buffer: Buffer.from("mock-a") },
+    { name: "peer-b.fcs", mimeType: "application/octet-stream", buffer: Buffer.from("mock-b") },
+  ])
+  await page.getByRole("button", { name: /Upload to Compare Session/i }).click()
+
+  const overlayTab = page.getByRole("tab", { name: /^Overlay/i })
+  await expect(overlayTab).toBeVisible({ timeout: 30000 })
+  await expect(overlayTab).toBeEnabled({ timeout: 30000 })
+  await overlayTab.click()
 
   await expect(page.getByRole("button", { name: /^New$/i })).toBeVisible({ timeout: 30000 })
   await expect(page.getByRole("button", { name: /^Duplicate$/i })).toBeVisible()
@@ -250,7 +303,7 @@ test("FCS compare controls verification checklist", async ({ page }) => {
   expect(activeInstance).toBeTruthy()
 
   // Change active duplicated graph axis mode.
-  await page.getByRole("button", { name: /Per-file Axis/i }).click()
+  await page.getByRole("button", { name: /Per-file Axis/i }).first().click()
   state = await getPersistedStore(page)
   const afterModeChange = state.state.fcsCompareGraphInstances ?? []
   const changed = afterModeChange.find((instance) => instance.id === activeId)
@@ -327,6 +380,26 @@ test("FCS compare controls verification checklist", async ({ page }) => {
   const suggestedName = download.suggestedFilename()
   expect(suggestedName).toContain("overlay")
 
+  // Long-task gate probe: isolate lightweight UI interactions and avoid heavy state introspection.
+  await page.evaluate(() => {
+    ;(window as any).__FCS_LONG_TASK_ENTRIES__ = []
+  })
+  await page.getByRole("button", { name: /^Show All$/i }).first().click()
+  await page.waitForTimeout(200)
+
+  const longTaskEntries = await page.evaluate(() => {
+    const raw = ((window as any).__FCS_LONG_TASK_ENTRIES__ || []) as Array<{ duration?: number; startTime?: number; name?: string }>
+    return raw
+      .filter((entry) => Number.isFinite(entry.duration))
+      .map((entry) => ({
+        name: entry.name || "longtask",
+        startTime: Math.round(Number(entry.startTime || 0)),
+        duration: Math.round(Number(entry.duration || 0) * 100) / 100,
+      }))
+  })
+  const over50LongTasks = longTaskEntries.filter((entry) => entry.duration > LONG_TASK_GATE_MS)
+  const longTaskMaxMs = longTaskEntries.reduce((max, entry) => Math.max(max, entry.duration), 0)
+
   const outDir = path.resolve("temp/perf-reports")
   fs.mkdirSync(outDir, { recursive: true })
 
@@ -345,8 +418,37 @@ test("FCS compare controls verification checklist", async ({ page }) => {
       graphInstanceCount: finalInstances.length,
       pinnedCount: pinned.length,
       exportedFilename: suggestedName,
+      longTaskGate: {
+        thresholdMs: LONG_TASK_GATE_MS,
+        recurringLimit: RECURRING_LONG_TASK_LIMIT,
+        totalLongTasks: longTaskEntries.length,
+        overThresholdCount: over50LongTasks.length,
+        maxDurationMs: Math.round(longTaskMaxMs * 100) / 100,
+      },
     },
   }
+
+  fs.writeFileSync(
+    path.join(outDir, "fcs-compare-longtask-gate.json"),
+    JSON.stringify(
+      {
+        timestamp: checklist.timestamp,
+        gate: {
+          thresholdMs: LONG_TASK_GATE_MS,
+          recurringLimit: RECURRING_LONG_TASK_LIMIT,
+        },
+        summary: checklist.evidence.longTaskGate,
+        longTasksOverThreshold: over50LongTasks,
+        passFail: {
+          recurringOver50: over50LongTasks.length > RECURRING_LONG_TASK_LIMIT,
+          gatePassed: over50LongTasks.length <= RECURRING_LONG_TASK_LIMIT,
+        },
+      },
+      null,
+      2
+    ),
+    "utf-8"
+  )
 
   fs.writeFileSync(path.join(outDir, "fcs-compare-controls-verification.json"), JSON.stringify(checklist, null, 2), "utf-8")
   await page.screenshot({ path: path.join(outDir, "fcs-compare-controls-verification.png"), fullPage: true })

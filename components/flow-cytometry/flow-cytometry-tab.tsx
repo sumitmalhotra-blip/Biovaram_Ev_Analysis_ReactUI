@@ -21,10 +21,11 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useToast } from "@/hooks/use-toast"
 
 export function FlowCytometryTab() {
-  const { fcsAnalysis, secondaryFcsAnalysis, overlayConfig, apiConnected, setFCSExperimentalConditions, sidebarCollapsed, resetFCSAnalysis } = useAnalysisStore(useShallow((s) => ({
+  const { fcsAnalysis, secondaryFcsAnalysis, overlayConfig, fcsCompareSession, apiConnected, setFCSExperimentalConditions, sidebarCollapsed, resetFCSAnalysis } = useAnalysisStore(useShallow((s) => ({
     fcsAnalysis: s.fcsAnalysis,
     secondaryFcsAnalysis: s.secondaryFcsAnalysis,
     overlayConfig: s.overlayConfig,
+    fcsCompareSession: s.fcsCompareSession,
     apiConnected: s.apiConnected,
     setFCSExperimentalConditions: s.setFCSExperimentalConditions,
     sidebarCollapsed: s.sidebarCollapsed,
@@ -44,11 +45,18 @@ export function FlowCytometryTab() {
 
   // Show experimental conditions dialog after successful upload
   useEffect(() => {
-    if (fcsAnalysis.results && fcsAnalysis.sampleId && !fcsAnalysis.experimentalConditions) {
+    const hasCompareIntent = uploadMode === "comparison" || fcsCompareSession.selectedSampleIds.length > 0
+    if (!hasCompareIntent && uploadMode === "single" && fcsAnalysis.results && fcsAnalysis.sampleId && !fcsAnalysis.experimentalConditions) {
       setJustUploadedSampleId(fcsAnalysis.sampleId)
       setShowConditionsDialog(true)
     }
-  }, [fcsAnalysis.results, fcsAnalysis.sampleId, fcsAnalysis.experimentalConditions])
+  }, [uploadMode, fcsCompareSession.selectedSampleIds.length, fcsAnalysis.results, fcsAnalysis.sampleId, fcsAnalysis.experimentalConditions])
+
+  useEffect(() => {
+    if (uploadMode === "comparison" && showConditionsDialog) {
+      setShowConditionsDialog(false)
+    }
+  }, [uploadMode, showConditionsDialog])
 
   const handleSaveConditions = (conditions: ExperimentalConditions) => {
     setFCSExperimentalConditions(conditions)
@@ -168,10 +176,8 @@ export function FlowCytometryTab() {
       {/* Show different views based on mode */}
       {uploadMode === "single" && hasResults && <AnalysisResults />}
       
-      {/* Comparison Mode - Show tabbed view with Primary/Comparison/Overlay */}
-      {uploadMode === "comparison" && (hasResults || hasSecondaryResults) && (
-        <ComparisonAnalysisView />
-      )}
+      {/* Comparison Mode - Keep compare view mounted even during transient empty state */}
+      {uploadMode === "comparison" && <ComparisonAnalysisView />}
 
       {/* Experimental Conditions Dialog */}
       <ExperimentalConditionsDialog

@@ -1316,6 +1316,8 @@ async def get_scatter_data(
         # Gain mismatch check (Phase 4 - B3)
         if fcmpass_calibration and fcmpass_calibration.calibrated:
             try:
+                from src.parsers.fcs_parser import FCSParser
+                parser = FCSParser(sample.file_path_fcs)
                 sample_gains = parser.extract_channel_gains()
                 if sample_gains:
                     from src.physics.bead_calibration import check_gain_mismatch

@@ -416,7 +416,7 @@ export function OverlayHistogramChart({
         </CardHeader>
         <CardContent className="flex items-center justify-center h-75 text-muted-foreground gap-2">
           <Loader2 className="h-4 w-4 animate-spin" />
-          Loading primary chart data...
+          Loading reference chart data...
         </CardContent>
       </Card>
     )
@@ -434,13 +434,13 @@ export function OverlayHistogramChart({
         <CardContent className="space-y-3">
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Failed to load primary sample</AlertTitle>
+            <AlertTitle>Failed to load reference sample</AlertTitle>
             <AlertDescription>{primaryError}</AlertDescription>
           </Alert>
           {onRetrySample && effectivePrimarySampleId && (
             <Button variant="outline" size="sm" onClick={() => onRetrySample(effectivePrimarySampleId)} className="gap-1">
               <RefreshCw className="h-3 w-3" />
-              Retry Primary
+              Retry Reference
             </Button>
           )}
         </CardContent>
@@ -476,7 +476,7 @@ export function OverlayHistogramChart({
             {secondaryLoading && (
               <Badge variant="outline" className="gap-1">
                 <Loader2 className="h-3 w-3 animate-spin" />
-                Loading comparison
+                Loading peer
               </Badge>
             )}
             {hasOverlay && (
@@ -488,7 +488,7 @@ export function OverlayHistogramChart({
                   onClick={() => setShowPrimary(!showPrimary)}
                 >
                   {showPrimary ? <Eye className="h-3 w-3 mr-1" /> : <EyeOff className="h-3 w-3 mr-1" />}
-                  Primary
+                  Reference
                 </Button>
                 <Button
                   variant={showSecondary ? "secondary" : "outline"}
@@ -497,7 +497,7 @@ export function OverlayHistogramChart({
                   onClick={() => setShowSecondary(!showSecondary)}
                 >
                   {showSecondary ? <Eye className="h-3 w-3 mr-1" /> : <EyeOff className="h-3 w-3 mr-1" />}
-                  Comparison
+                  Peer
                 </Button>
               </>
             )}
@@ -552,16 +552,16 @@ export function OverlayHistogramChart({
                 formatter={(value: number, name: string) => [
                   value,
                   name === 'primary' 
-                    ? fcsAnalysis.file?.name || 'Primary' 
-                    : secondaryFcsAnalysis.file?.name || 'Comparison'
+                    ? fcsAnalysis.file?.name || 'Reference' 
+                    : secondaryFcsAnalysis.file?.name || 'Session Peer'
                 ]}
               />
               <Legend 
                 verticalAlign="top"
                 height={36}
                 formatter={(value) => value === 'primary' 
-                  ? fcsAnalysis.file?.name?.slice(0, 20) || 'Primary' 
-                  : secondaryFcsAnalysis.file?.name?.slice(0, 20) || 'Comparison'
+                  ? fcsAnalysis.file?.name?.slice(0, 20) || 'Reference' 
+                  : secondaryFcsAnalysis.file?.name?.slice(0, 20) || 'Session Peer'
                 }
               />
               {showPrimary && (
@@ -593,7 +593,7 @@ export function OverlayHistogramChart({
           <div className="mt-4 grid grid-cols-2 gap-4">
             <div className="p-3 rounded-lg" style={{ backgroundColor: `${overlayConfig.primaryColor}20` }}>
               <p className="text-xs font-medium mb-2 truncate" title={fcsAnalysis.file?.name}>
-                {fcsAnalysis.file?.name?.slice(0, 25) || 'Primary'}
+                {fcsAnalysis.file?.name?.slice(0, 25) || 'Reference'}
               </p>
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div>
@@ -602,7 +602,7 @@ export function OverlayHistogramChart({
                   <div className="mb-3">
                     <Alert variant="destructive">
                       <AlertCircle className="h-4 w-4" />
-                      <AlertTitle>Comparison sample load warning</AlertTitle>
+                      <AlertTitle>Peer sample load warning</AlertTitle>
                       <AlertDescription className="flex items-center justify-between gap-2">
                         <span>{secondaryError}</span>
                         {onRetrySample && secondarySampleId && (
@@ -644,7 +644,7 @@ export function OverlayHistogramChart({
             </div>
             <div className="p-3 rounded-lg" style={{ backgroundColor: `${overlayConfig.secondaryColor}20` }}>
               <p className="text-xs font-medium mb-2 truncate" title={secondaryFcsAnalysis.file?.name}>
-                {secondaryFcsAnalysis.file?.name?.slice(0, 25) || 'Comparison'}
+                {secondaryFcsAnalysis.file?.name?.slice(0, 25) || 'Session Peer'}
               </p>
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div>

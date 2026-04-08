@@ -1,0 +1,19 @@
+{
+  "timestamp": "2026-04-08T09:54:42.087Z",
+  "gate": {
+    "thresholdMs": 50,
+    "recurringLimit": 1
+  },
+  "summary": {
+    "thresholdMs": 50,
+    "recurringLimit": 1,
+    "totalLongTasks": 0,
+    "overThresholdCount": 0,
+    "maxDurationMs": 0
+  },
+  "longTasksOverThreshold": [],
+  "passFail": {
+    "recurringOver50": false,
+    "gatePassed": true
+  }
+}

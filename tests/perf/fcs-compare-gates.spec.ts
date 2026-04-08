@@ -159,13 +159,13 @@ test("FCS compare gate badges produce reproducible pass/fail evidence", async ({
     })
   })
 
-  await page.route("**/api/v1/samples/*/fcs", async (route) => {
+  await page.route("**/samples/*/fcs**", async (route) => {
     const url = route.request().url()
     const sampleId = url.split("/samples/")[1]?.split("/")[0] || "S1"
     await route.fulfill({ status: 200, json: { sample_id: sampleId, results: [buildMockResult(sampleId)] } })
   })
 
-  await page.route("**/api/v1/samples/*/scatter-data**", async (route) => {
+  await page.route("**/samples/*/scatter-data**", async (route) => {
     const url = route.request().url()
     const sampleId = url.split("/samples/")[1]?.split("/")[0] || "S1"
     await route.fulfill({ status: 200, json: { sample_id: sampleId, ...buildMockScatter() } })
@@ -176,7 +176,7 @@ test("FCS compare gate badges produce reproducible pass/fail evidence", async ({
   await page.getByText("Upload Mode", { exact: false }).waitFor({ timeout: 30000 })
   await page.getByRole("button", { name: /Compare Files/i }).click()
 
-  const primaryGateBadge = page.getByText(/Primary Gate:/i).first()
+  const primaryGateBadge = page.getByText(/(Reference|Primary) Gate:/i).first()
   const compareGateBadge = page.getByText(/Compare Gate:/i).first()
 
   await expect(primaryGateBadge).toBeVisible({ timeout: 30000 })

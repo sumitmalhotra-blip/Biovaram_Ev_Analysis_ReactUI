@@ -53,6 +53,7 @@ export function useApi() {
     setFCSCompareSelectedSampleIds,
     setFCSCompareVisibleSampleIds,
     setFCSComparePrimarySampleId,
+    setFCSCompareSampleMeta,
     setFCSCompareSampleLoading,
     setFCSCompareSampleError,
     setFCSCompareSampleResult,
@@ -78,6 +79,11 @@ export function useApi() {
 
   const isCurrentFCSCompareRequest = useCallback((requestVersion: number) => {
     return isCurrentCompareRequestVersion(useAnalysisStore.getState().fcsCompareRequestVersion, requestVersion)
+  }, [])
+
+  const buildCompareItemId = useCallback((seed: string, fallbackIndex: number) => {
+    const normalizedSeed = String(seed || fallbackIndex).replace(/[^a-zA-Z0-9_-]/g, "")
+    return `cmp_${Date.now()}_${fallbackIndex}_${normalizedSeed}`
   }, [])
 
   // =========================================================================
@@ -655,8 +661,9 @@ export function useApi() {
         onFileStatus?: (update: {
           key: string
           fileName: string
-          status: "uploading" | "success" | "error"
+          status: "uploading" | "uploaded" | "session_added" | "upload_failed" | "session_add_failed"
           sampleId?: string
+          compareItemId?: string
           error?: string
         }) => void
       }
@@ -666,6 +673,16 @@ export function useApi() {
       failed: number
       successfulSampleIds: string[]
       failedByFileKey: Record<string, string>
+      ingestLog: Array<{
+        fileKey: string
+        fileName: string
+        backendId: number | string | null
+        sampleId: string | null
+        compareItemId: string | null
+        uploadOutcome: "success" | "failed"
+        sessionAddOutcome: "added" | "failed" | "skipped"
+        reason?: string
+      }>
     }> => {
       const cappedFiles = files.slice(0, 10).map((entry, index) => {
         if (entry instanceof File) {
@@ -678,33 +695,23 @@ export function useApi() {
       })
 
       if (cappedFiles.length === 0) {
-        return { total: 0, success: 0, failed: 0, successfulSampleIds: [], failedByFileKey: {} }
-      }
-
-      if (apiClient.offline) {
-        const failedByFileKey: Record<string, string> = {}
-        cappedFiles.forEach(({ file, key }) => {
-          failedByFileKey[key] = "Backend offline"
-          options?.onFileStatus?.({
-            key,
-            fileName: file.name,
-            status: "error",
-            error: "Backend offline",
-          })
-        })
-        return {
-          total: cappedFiles.length,
-          success: 0,
-          failed: cappedFiles.length,
-          successfulSampleIds: [],
-          failedByFileKey,
-        }
+        return { total: 0, success: 0, failed: 0, successfulSampleIds: [], failedByFileKey: {}, ingestLog: [] }
       }
 
       const currentState = useAnalysisStore.getState()
       const existingSelected = currentState.fcsCompareSession.selectedSampleIds
-      const successfulSampleIds: string[] = []
+      const uploadedCompareItemIds: string[] = []
       const failedByFileKey: Record<string, string> = {}
+      const ingestLog: Array<{
+        fileKey: string
+        fileName: string
+        backendId: number | string | null
+        sampleId: string | null
+        compareItemId: string | null
+        uploadOutcome: "success" | "failed"
+        sessionAddOutcome: "added" | "failed" | "skipped"
+        reason?: string
+      }> = []
 
       const fcsSettings = useAnalysisStore.getState().fcsAnalysisSettings
 
@@ -732,10 +739,29 @@ export function useApi() {
             }
           )
 
-          successfulSampleIds.push(response.sample_id)
-          setFCSCompareSampleResult(response.sample_id, response.fcs_results ?? null)
-          setFCSCompareSampleError(response.sample_id, null)
-          setFCSCompareSampleLoading(response.sample_id, false)
+          const compareItemId = buildCompareItemId(String(response.id ?? response.sample_id), index)
+
+          uploadedCompareItemIds.push(compareItemId)
+          setFCSCompareSampleMeta(compareItemId, {
+            backendSampleId: response.sample_id,
+            sampleLabel: response.sample_id,
+            fileName: file.name,
+            treatment: options?.metadata?.treatment,
+            dye: options?.metadata?.dye,
+          })
+          setFCSCompareSampleResult(compareItemId, response.fcs_results ?? null)
+          setFCSCompareSampleError(compareItemId, null)
+          setFCSCompareSampleLoading(compareItemId, false)
+
+          ingestLog.push({
+            fileKey: key,
+            fileName: file.name,
+            backendId: response.id ?? null,
+            sampleId: response.sample_id ?? null,
+            compareItemId,
+            uploadOutcome: "success",
+            sessionAddOutcome: "skipped",
+          })
 
           addProcessingJob({
             id: `${response.job_id}_compare_${index}`,
@@ -747,30 +773,76 @@ export function useApi() {
           options?.onFileStatus?.({
             key,
             fileName: file.name,
-            status: "success",
+            status: "uploaded",
             sampleId: response.sample_id,
+            compareItemId,
           })
         } catch (error) {
           const message = getUserFriendlyErrorMessage(error)
           failedByFileKey[key] = message
+          ingestLog.push({
+            fileKey: key,
+            fileName: file.name,
+            backendId: null,
+            sampleId: null,
+            compareItemId: null,
+            uploadOutcome: "failed",
+            sessionAddOutcome: "skipped",
+            reason: message,
+          })
           options?.onFileStatus?.({
             key,
             fileName: file.name,
-            status: "error",
+            status: "upload_failed",
             error: message,
           })
         }
       }
 
-      if (successfulSampleIds.length > 0) {
-        const mergedSelected = Array.from(new Set([...existingSelected, ...successfulSampleIds])).slice(0, 20)
+      let successfulSampleIds: string[] = []
+
+      if (uploadedCompareItemIds.length > 0) {
+        const mergedSelected = Array.from(new Set([...existingSelected, ...uploadedCompareItemIds])).slice(0, 10)
         setFCSCompareSelectedSampleIds(mergedSelected)
         setFCSCompareVisibleSampleIds(mergedSelected)
 
         const latestState = useAnalysisStore.getState()
         if (!latestState.fcsCompareSession.primarySampleId) {
-          setFCSComparePrimarySampleId(successfulSampleIds[0])
+          setFCSComparePrimarySampleId(uploadedCompareItemIds[0])
         }
+
+        const selectedAfterMerge = useAnalysisStore.getState().fcsCompareSession.selectedSampleIds
+        successfulSampleIds = uploadedCompareItemIds.filter((id) => selectedAfterMerge.includes(id))
+        const failedSessionAdds = uploadedCompareItemIds.filter((id) => !selectedAfterMerge.includes(id))
+
+        ingestLog.forEach((entry) => {
+          if (!entry.compareItemId || entry.uploadOutcome !== "success") {
+            return
+          }
+          if (successfulSampleIds.includes(entry.compareItemId)) {
+            entry.sessionAddOutcome = "added"
+            options?.onFileStatus?.({
+              key: entry.fileKey,
+              fileName: entry.fileName,
+              status: "session_added",
+              sampleId: entry.sampleId ?? undefined,
+              compareItemId: entry.compareItemId,
+            })
+          } else {
+            const reason = "Uploaded successfully but could not be added to compare session (selection limit reached)."
+            entry.sessionAddOutcome = "failed"
+            entry.reason = reason
+            failedByFileKey[entry.fileKey] = reason
+            options?.onFileStatus?.({
+              key: entry.fileKey,
+              fileName: entry.fileName,
+              status: "session_add_failed",
+              sampleId: entry.sampleId ?? undefined,
+              compareItemId: entry.compareItemId,
+              error: reason,
+            })
+          }
+        })
 
         // Preserve current two-file compare behavior while adding multi-file session support.
         if (!latestState.fcsAnalysis.sampleId) {
@@ -790,7 +862,13 @@ export function useApi() {
           setOverlayConfig({ enabled: true })
         }
 
-        fetchSamples()
+        if (successfulSampleIds.length > 0) {
+          fetchSamples()
+        }
+      }
+
+      if (ingestLog.length > 0) {
+        console.info("[FCS_COMPARE_INGEST_LOG]", ingestLog)
       }
 
       return {
@@ -799,10 +877,13 @@ export function useApi() {
         failed: cappedFiles.length - successfulSampleIds.length,
         successfulSampleIds,
         failedByFileKey,
+        ingestLog,
       }
     },
     [
       userId,
+      buildCompareItemId,
+      setFCSCompareSampleMeta,
       setFCSCompareSampleResult,
       setFCSCompareSampleError,
       setFCSCompareSampleLoading,
@@ -851,6 +932,7 @@ export function useApi() {
         resultConcurrency?: number
         scatterConcurrency?: number
         scatterPointLimit?: number
+        preserveSessionSelection?: boolean
       }
     ): Promise<{
       total: number
@@ -883,13 +965,22 @@ export function useApi() {
       const isStale = () => !isCurrentFCSCompareRequest(requestVersion)
 
       const { resultConcurrency, scatterConcurrency, scatterPointLimit } = clampCompareLoadConfig(options)
+      const adaptiveScatterConcurrency = normalizedSampleIds.length >= 5
+        ? 1
+        : scatterConcurrency
+      const adaptiveScatterPointLimit = normalizedSampleIds.length >= 5
+        ? Math.min(scatterPointLimit, 1200)
+        : scatterPointLimit
       const normalizedVisible = normalizeVisibleSampleIds(options?.visibleSampleIds ?? [], normalizedSampleIds)
       const scatterPriorityOrder = buildScatterPriorityOrder(normalizedSampleIds, normalizedVisible)
 
-      setFCSCompareSelectedSampleIds(normalizedSampleIds)
-      setFCSCompareVisibleSampleIds(normalizedVisible)
+      if (!options?.preserveSessionSelection) {
+        setFCSCompareSelectedSampleIds(normalizedSampleIds)
+        setFCSCompareVisibleSampleIds(normalizedVisible)
+      }
 
       const state = useAnalysisStore.getState()
+      const compareMetaById = state.fcsCompareSession.compareItemMetaById ?? {}
       const primarySampleId = state.fcsAnalysis.sampleId
       const secondarySampleId = state.secondaryFcsAnalysis.sampleId
       const preferredPrimary = state.fcsCompareSession.primarySampleId
@@ -897,7 +988,9 @@ export function useApi() {
         ? preferredPrimary
         : (normalizedSampleIds[0] ?? null)
 
-      setFCSComparePrimarySampleId(resolvedPrimary)
+      if (!options?.preserveSessionSelection) {
+        setFCSComparePrimarySampleId(resolvedPrimary)
+      }
 
       normalizedSampleIds.forEach((sampleId) => {
         setFCSCompareSampleLoading(sampleId, true)
@@ -935,39 +1028,41 @@ export function useApi() {
             const currentIndex = resultCursor
             resultCursor += 1
 
-            const sampleId = normalizedSampleIds[currentIndex]
-            if (!sampleId) {
+            const compareItemId = normalizedSampleIds[currentIndex]
+            if (!compareItemId) {
               return
             }
+
+            const backendSampleId = compareMetaById[compareItemId]?.backendSampleId || compareItemId
 
             if (isStale()) {
               return
             }
 
             try {
-              const response = await apiClient.getFCSResults(sampleId)
+              const response = await apiClient.getFCSResults(backendSampleId)
 
               if (isStale()) {
                 return
               }
 
               const latestResult = response?.results?.[0] || null
-              resultsBySampleId[sampleId] = latestResult
-              setFCSCompareSampleResult(sampleId, latestResult)
+              resultsBySampleId[compareItemId] = latestResult
+              setFCSCompareSampleResult(compareItemId, latestResult)
 
               if (latestResult) {
                 loadedResults += 1
 
-                if (sampleId === primarySampleId) {
+                if (compareItemId === primarySampleId) {
                   setFCSResults(latestResult)
                 }
-                if (sampleId === secondarySampleId) {
+                if (compareItemId === secondarySampleId) {
                   setSecondaryFCSResults(latestResult)
                 }
               } else {
                 failed += 1
-                errorsBySampleId[sampleId] = "No FCS results found"
-                setFCSCompareSampleError(sampleId, "No FCS results found")
+                errorsBySampleId[compareItemId] = "No FCS results found"
+                setFCSCompareSampleError(compareItemId, "No FCS results found")
               }
             } catch (error) {
               if (isStale()) {
@@ -976,10 +1071,10 @@ export function useApi() {
 
               failed += 1
               const message = getUserFriendlyErrorMessage(error)
-              resultsBySampleId[sampleId] = null
-              errorsBySampleId[sampleId] = message
-              setFCSCompareSampleResult(sampleId, null)
-              setFCSCompareSampleError(sampleId, message)
+              resultsBySampleId[compareItemId] = null
+              errorsBySampleId[compareItemId] = message
+              setFCSCompareSampleResult(compareItemId, null)
+              setFCSCompareSampleError(compareItemId, message)
             }
           }
         }
@@ -1008,17 +1103,19 @@ export function useApi() {
             const currentIndex = scatterCursor
             scatterCursor += 1
 
-            const sampleId = scatterPriorityOrder[currentIndex]
-            if (!sampleId) {
+            const compareItemId = scatterPriorityOrder[currentIndex]
+            if (!compareItemId) {
               return
             }
+
+            const backendSampleId = compareMetaById[compareItemId]?.backendSampleId || compareItemId
 
             if (isStale()) {
               return
             }
 
             try {
-              const scatterResponse = await apiClient.getScatterData(sampleId, scatterPointLimit)
+              const scatterResponse = await apiClient.getScatterData(backendSampleId, adaptiveScatterPointLimit)
 
               if (isStale()) {
                 return
@@ -1029,8 +1126,8 @@ export function useApi() {
 
               if (rawScatterData.length > 0) {
                 const scatterCacheKey = buildScatterSeriesCacheKey({
-                  sampleId,
-                  pointLimit: scatterPointLimit,
+                  sampleId: compareItemId,
+                  pointLimit: adaptiveScatterPointLimit,
                 })
 
                 const cachedEntry = getFCSSeriesCacheEntry(scatterCacheKey)
@@ -1050,10 +1147,15 @@ export function useApi() {
                   if (!scatterData) {
                     const scatterWorkerPayload = await runScatterSeriesWorker(requestVersion * 1000 + currentIndex, {
                       points: rawScatterData,
-                      maxPoints: scatterPointLimit,
+                      maxPoints: adaptiveScatterPointLimit,
                     })
 
-                    scatterData = scatterWorkerPayload.points
+                    scatterData = scatterWorkerPayload.points.map((point, pointIndex) => ({
+                      x: point.x,
+                      y: point.y,
+                      index: Number.isFinite(point.index) ? point.index : pointIndex,
+                      diameter: Number.isFinite(point.diameter) ? point.diameter : undefined,
+                    }))
                     const cacheResult = setFCSSeriesCacheEntry({
                       key: scatterCacheKey,
                       task: "scatterSeries",
@@ -1081,19 +1183,19 @@ export function useApi() {
                 }
               }
 
-              scatterBySampleId[sampleId] = scatterData
-              setFCSCompareSampleScatter(sampleId, scatterData)
+              scatterBySampleId[compareItemId] = scatterData
+              setFCSCompareSampleScatter(compareItemId, scatterData)
 
               if (scatterData && scatterData.length > 0) {
                 loadedScatter += 1
 
-                if (sampleId === secondarySampleId) {
+                if (compareItemId === secondarySampleId) {
                   setSecondaryFCSScatterData(scatterData)
                 }
               } else {
-                if (!errorsBySampleId[sampleId]) {
-                  errorsBySampleId[sampleId] = "No scatter data found"
-                  setFCSCompareSampleError(sampleId, "No scatter data found")
+                if (!errorsBySampleId[compareItemId]) {
+                  errorsBySampleId[compareItemId] = "No scatter data found"
+                  setFCSCompareSampleError(compareItemId, "No scatter data found")
                 }
               }
             } catch (error) {
@@ -1102,18 +1204,18 @@ export function useApi() {
               }
 
               const message = getUserFriendlyErrorMessage(error)
-              scatterBySampleId[sampleId] = null
-              setFCSCompareSampleScatter(sampleId, null)
-              if (!errorsBySampleId[sampleId]) {
-                errorsBySampleId[sampleId] = message
-                setFCSCompareSampleError(sampleId, message)
+              scatterBySampleId[compareItemId] = null
+              setFCSCompareSampleScatter(compareItemId, null)
+              if (!errorsBySampleId[compareItemId]) {
+                errorsBySampleId[compareItemId] = message
+                setFCSCompareSampleError(compareItemId, message)
               }
             }
           }
         }
 
         await Promise.all(
-          Array.from({ length: Math.min(scatterConcurrency, scatterPriorityOrder.length) }, () => scatterWorker())
+          Array.from({ length: Math.min(adaptiveScatterConcurrency, scatterPriorityOrder.length) }, () => scatterWorker())
         )
 
         return {
@@ -1139,6 +1241,7 @@ export function useApi() {
       setFCSCompareSelectedSampleIds,
       setFCSCompareVisibleSampleIds,
       setFCSComparePrimarySampleId,
+      setFCSCompareSampleMeta,
       setFCSCompareSampleLoading,
       setFCSCompareSampleError,
       setFCSCompareSampleResult,

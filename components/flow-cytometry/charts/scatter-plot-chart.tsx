@@ -179,6 +179,7 @@ export function ScatterPlotChart({
                 fill={CHART_COLORS.primary}
                 fillOpacity={0.32}
                 shape="square"
+                isAnimationActive={false}
               />
             ) : (
               <Scatter
@@ -187,6 +188,7 @@ export function ScatterPlotChart({
                 fill={CHART_COLORS.primary}
                 fillOpacity={0.6}
                 shape="circle"
+                isAnimationActive={false}
               />
             )}
             {isDensityMode && showRawOverlayInDensity && (
@@ -196,6 +198,7 @@ export function ScatterPlotChart({
                 fill={CHART_COLORS.primary}
                 fillOpacity={0.2}
                 shape="circle"
+                isAnimationActive={false}
               />
             )}
             {anomalyData.length > 0 && highlightAnomalies && (
@@ -205,6 +208,7 @@ export function ScatterPlotChart({
                 fill={CHART_COLORS.anomaly}
                 fillOpacity={0.9}
                 shape="circle"
+                isAnimationActive={false}
               />
             )}
           </ScatterChart>

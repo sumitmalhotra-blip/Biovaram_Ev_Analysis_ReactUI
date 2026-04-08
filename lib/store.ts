@@ -203,6 +203,15 @@ export interface FCSCompareSessionState {
   selectedSampleIds: string[]
   visibleSampleIds: string[]
   primarySampleId: string | null
+  compareItemMetaById: Record<string, {
+    compareItemId?: string
+    backendSampleId: string
+    sampleLabel: string
+    fileName?: string
+    treatment?: string
+    dye?: string
+    uploadedAt: number
+  }>
   resultsBySampleId: Record<string, FCSResult>
   scatterBySampleId: Record<string, ScatterDataPoint[]>
   loadingBySampleId: Record<string, boolean>
@@ -585,6 +594,14 @@ export interface AnalysisState {
   setFCSCompareVisibleSampleIds: (sampleIds: string[]) => void
   toggleFCSCompareSampleVisibility: (sampleId: string) => void
   setFCSComparePrimarySampleId: (sampleId: string | null) => void
+  setFCSCompareSampleMeta: (sampleId: string, meta: {
+    backendSampleId: string
+    sampleLabel: string
+    fileName?: string
+    treatment?: string
+    dye?: string
+    uploadedAt?: number
+  }) => void
   setFCSCompareSampleLoading: (sampleId: string, loading: boolean) => void
   setFCSCompareSampleError: (sampleId: string, error: string | null) => void
   setFCSCompareSampleResult: (sampleId: string, result: FCSResult | null) => void
@@ -759,11 +776,120 @@ const initialFCSCompareSession: FCSCompareSessionState = {
   selectedSampleIds: [],
   visibleSampleIds: [],
   primarySampleId: null,
+  compareItemMetaById: {},
   resultsBySampleId: {},
   scatterBySampleId: {},
   loadingBySampleId: {},
   errorBySampleId: {},
   maxVisibleOverlays: 8,
+}
+
+const FCS_COMPARE_MAX_SELECTED = 10
+
+const normalizeFCSCompareSessionForHydration = (
+  session: Partial<FCSCompareSessionState> | undefined
+): FCSCompareSessionState => {
+  const rawSelected = Array.isArray(session?.selectedSampleIds)
+    ? Array.from(new Set(session?.selectedSampleIds.filter(Boolean) ?? [])).slice(0, FCS_COMPARE_MAX_SELECTED)
+    : []
+  const rawVisible = Array.isArray(session?.visibleSampleIds)
+    ? Array.from(new Set(session?.visibleSampleIds.filter(Boolean) ?? []))
+    : []
+  const rawPrimary = typeof session?.primarySampleId === "string" ? session.primarySampleId : null
+  const rawMetaById = session?.compareItemMetaById ?? {}
+
+  const selectedSampleIds: string[] = []
+  const originalIdBySelectedId: Record<string, string> = {}
+
+  rawSelected.forEach((selectedId) => {
+    let compareItemId = selectedId
+    if (!rawMetaById[compareItemId]) {
+      const fallbackMetaEntry = Object.entries(rawMetaById).find(([, meta]) => meta?.backendSampleId === selectedId)
+      if (fallbackMetaEntry?.[0]) {
+        compareItemId = fallbackMetaEntry[0]
+      }
+    }
+
+    if (!selectedSampleIds.includes(compareItemId)) {
+      selectedSampleIds.push(compareItemId)
+      originalIdBySelectedId[compareItemId] = selectedId
+    }
+  })
+
+  const maxVisibleOverlays = Number.isFinite(session?.maxVisibleOverlays)
+    ? Math.max(1, Math.min(8, Number(session?.maxVisibleOverlays)))
+    : initialFCSCompareSession.maxVisibleOverlays
+
+  const visibleSampleIds = rawVisible
+    .map((id) => {
+      if (selectedSampleIds.includes(id)) {
+        return id
+      }
+      return selectedSampleIds.find((selectedId) => originalIdBySelectedId[selectedId] === id) ?? null
+    })
+    .filter((id): id is string => typeof id === "string" && selectedSampleIds.includes(id))
+    .slice(0, maxVisibleOverlays)
+
+  const primarySampleId = rawPrimary && selectedSampleIds.includes(rawPrimary)
+    ? rawPrimary
+    : (
+      rawPrimary
+        ? (selectedSampleIds.find((id) => originalIdBySelectedId[id] === rawPrimary) ?? selectedSampleIds[0] ?? null)
+        : (selectedSampleIds[0] ?? null)
+    )
+
+  const normalizeMapBySelected = <T,>(map: Record<string, T> | undefined): Record<string, T> => {
+    const source = map ?? {}
+    const normalized: Record<string, T> = {}
+
+    selectedSampleIds.forEach((compareItemId) => {
+      if (source[compareItemId] !== undefined) {
+        normalized[compareItemId] = source[compareItemId]
+        return
+      }
+
+      const originalId = originalIdBySelectedId[compareItemId]
+      if (originalId && source[originalId] !== undefined) {
+        normalized[compareItemId] = source[originalId]
+      }
+    })
+
+    return normalized
+  }
+
+  const compareItemMetaById = Object.fromEntries(
+    selectedSampleIds.map((compareItemId) => {
+      const originalId = originalIdBySelectedId[compareItemId]
+      const existingMeta = rawMetaById[compareItemId]
+        ?? Object.entries(rawMetaById).find(([metaKey]) => metaKey === originalId)?.[1]
+
+      const fallbackBackendId = originalId ?? compareItemId
+      return [
+        compareItemId,
+        {
+          compareItemId,
+          backendSampleId: existingMeta?.backendSampleId ?? fallbackBackendId,
+          sampleLabel: existingMeta?.sampleLabel ?? existingMeta?.fileName ?? fallbackBackendId,
+          fileName: existingMeta?.fileName,
+          treatment: existingMeta?.treatment,
+          dye: existingMeta?.dye,
+          uploadedAt: existingMeta?.uploadedAt ?? Date.now(),
+        },
+      ]
+    })
+  )
+
+  return {
+    selectedSampleIds,
+    visibleSampleIds,
+    primarySampleId,
+    compareItemMetaById,
+    resultsBySampleId: normalizeMapBySelected(session?.resultsBySampleId),
+    scatterBySampleId: normalizeMapBySelected(session?.scatterBySampleId),
+    loadingBySampleId: normalizeMapBySelected(session?.loadingBySampleId),
+    errorBySampleId: normalizeMapBySelected(session?.errorBySampleId),
+    maxVisibleOverlays,
+  }
 }
 
 const createDefaultFCSCompareGraphInstance = (title = "Overlay Graph 1"): FCSCompareGraphInstance => ({
@@ -1086,7 +1212,7 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
       },
     })),
   setFCSCompareSelectedSampleIds: (sampleIds) => set((state) => {
-    const selectedSampleIds = Array.from(new Set(sampleIds)).slice(0, 20)
+    const selectedSampleIds = Array.from(new Set(sampleIds)).slice(0, FCS_COMPARE_MAX_SELECTED)
     const maxVisible = state.fcsCompareSession.maxVisibleOverlays
     const existingVisible = state.fcsCompareSession.visibleSampleIds
       .filter((id) => selectedSampleIds.includes(id))
@@ -1114,6 +1240,10 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
     const errorBySampleId = Object.fromEntries(
       Object.entries(state.fcsCompareSession.errorBySampleId).filter(([id]) => selectedSampleIds.includes(id))
     )
+    const existingMetaById = state.fcsCompareSession.compareItemMetaById ?? {}
+    const compareItemMetaById = Object.fromEntries(
+      Object.entries(existingMetaById).filter(([id]) => selectedSampleIds.includes(id))
+    )
 
     const selectedUnchanged = areStringArraysEqual(state.fcsCompareSession.selectedSampleIds, selectedSampleIds)
     const visibleUnchanged = areStringArraysEqual(state.fcsCompareSession.visibleSampleIds, visibleSampleIds)
@@ -1122,6 +1252,7 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
     const scatterUnchanged = Object.keys(scatterBySampleId).length === Object.keys(state.fcsCompareSession.scatterBySampleId).length
     const loadingUnchanged = Object.keys(loadingBySampleId).length === Object.keys(state.fcsCompareSession.loadingBySampleId).length
     const errorUnchanged = Object.keys(errorBySampleId).length === Object.keys(state.fcsCompareSession.errorBySampleId).length
+    const metaUnchanged = Object.keys(compareItemMetaById).length === Object.keys(existingMetaById).length
 
     if (
       selectedUnchanged
@@ -1131,6 +1262,7 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
       && scatterUnchanged
       && loadingUnchanged
       && errorUnchanged
+      && metaUnchanged
     ) {
       return state
     }
@@ -1141,6 +1273,7 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
         selectedSampleIds,
         visibleSampleIds,
         primarySampleId,
+        compareItemMetaById,
         resultsBySampleId,
         scatterBySampleId,
         loadingBySampleId,
@@ -1195,6 +1328,20 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
       },
     }
   }),
+  setFCSCompareSampleMeta: (sampleId, meta) => set((state) => ({
+    fcsCompareSession: {
+      ...state.fcsCompareSession,
+      compareItemMetaById: {
+        ...state.fcsCompareSession.compareItemMetaById,
+        [sampleId]: {
+          ...state.fcsCompareSession.compareItemMetaById[sampleId],
+          compareItemId: sampleId,
+          ...meta,
+          uploadedAt: meta.uploadedAt ?? Date.now(),
+        },
+      },
+    },
+  })),
   setFCSCompareSampleLoading: (sampleId, loading) => set((state) => ({
     fcsCompareSession: {
       ...state.fcsCompareSession,
@@ -1852,13 +1999,13 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
           // Mark hydration as complete
           state._hasHydrated = true
 
+          if (state.fcsCompareSession) {
+            state.fcsCompareSession = normalizeFCSCompareSessionForHydration(state.fcsCompareSession)
+          }
+
           // Migrate older sessions that persisted the previous overlay limit.
           if (state.ntaCompareSession?.maxVisibleOverlays && state.ntaCompareSession.maxVisibleOverlays < 8) {
             state.ntaCompareSession.maxVisibleOverlays = 8
-          }
-
-          if (state.fcsCompareSession?.maxVisibleOverlays && state.fcsCompareSession.maxVisibleOverlays < 8) {
-            state.fcsCompareSession.maxVisibleOverlays = 8
           }
 
           if (!state.fcsCompareGraphInstances || state.fcsCompareGraphInstances.length === 0) {

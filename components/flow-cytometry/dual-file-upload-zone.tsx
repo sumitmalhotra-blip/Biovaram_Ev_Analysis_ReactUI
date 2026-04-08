@@ -32,13 +32,14 @@ interface FileUploadState {
 interface BatchFileUploadState {
   key: string
   file: File
-  status: "queued" | "uploading" | "success" | "error"
+  status: "queued" | "uploading" | "uploaded" | "session_added" | "upload_failed" | "session_add_failed"
   sampleId?: string
+  compareItemId?: string
   error?: string
 }
 
 export function DualFileUploadZone() {
-  const [activeTab, setActiveTab] = useState<"primary" | "comparison">("primary")
+  const [activeTab, setActiveTab] = useState<"primary" | "comparison">("comparison")
   const [primaryUpload, setPrimaryUpload] = useState<FileUploadState>({
     file: null,
     metadata: { treatment: "", dye: "", concentration: "", operator: "", preparationMethod: "" }
@@ -84,22 +85,37 @@ export function DualFileUploadZone() {
   const enqueueCompareFiles = useCallback((files: File[]) => {
     const valid = files.filter((file) => file.name.toLowerCase().endsWith(".fcs"))
     if (valid.length === 0) {
+      toast({
+        variant: "destructive",
+        title: "No FCS files detected",
+        description: "Select .fcs files to add them to the compare queue.",
+      })
       return
     }
 
     setCompareBatchFiles((prev) => {
-      const existingKeys = new Set(prev.map((item) => item.key))
-      const additions = valid
+      const queueSlotsRemaining = Math.max(0, 10 - prev.length)
+      const accepted = valid.slice(0, queueSlotsRemaining)
+
+      const additions = accepted
         .map((file, index) => ({
-          key: `${file.name}-${file.lastModified}-${index}`,
+          key: `${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
           file,
           status: "queued" as const,
         }))
-        .filter((item) => !existingKeys.has(item.key))
 
-      return [...prev, ...additions].slice(0, 10)
+      const droppedCount = valid.length - accepted.length
+      if (droppedCount > 0) {
+        toast({
+          variant: "destructive",
+          title: "Queue limit reached",
+          description: `Only 10 files can be queued at once. ${droppedCount} file(s) were not added.`,
+        })
+      }
+
+      return [...prev, ...additions]
     })
-  }, [])
+  }, [toast])
 
   const handleDrop = useCallback((e: React.DragEvent, target: "primary" | "comparison") => {
     e.preventDefault()
@@ -156,11 +172,15 @@ export function DualFileUploadZone() {
   }
 
   const handleUploadCompareBatch = async () => {
-    const queuedFiles = compareBatchFiles
-      .filter((item) => item.status === "queued" || item.status === "error")
-      .map((item) => ({ key: item.key, file: item.file }))
+    const uploadableEntries = compareBatchFiles
+      .filter((item) => item.status === "queued" || item.status === "upload_failed" || item.status === "session_add_failed")
+    const queuedFiles = uploadableEntries.map((item) => ({ key: item.key, file: item.file }))
 
     if (queuedFiles.length === 0) {
+      toast({
+        title: "Nothing to upload",
+        description: "Add queued files or retry failed files first.",
+      })
       return
     }
 
@@ -170,7 +190,7 @@ export function DualFileUploadZone() {
         dye: compareBatchMetadata.dye || undefined,
         concentration_ug: compareBatchMetadata.concentration ? parseFloat(compareBatchMetadata.concentration) : undefined,
         preparation_method: compareBatchMetadata.preparationMethod || undefined,
-        operator: compareBatchMetadata.operator || undefined,
+        operator: compareBatchMetadata.operator.trim() || "Unknown",
       },
       onFileStatus: (update) => {
         setCompareBatchFiles((prev) =>
@@ -181,6 +201,7 @@ export function DualFileUploadZone() {
               ...item,
               status: update.status,
               sampleId: update.sampleId,
+              compareItemId: update.compareItemId,
               error: update.error,
             }
           })
@@ -189,15 +210,19 @@ export function DualFileUploadZone() {
     })
 
     if (summary.success > 0) {
+      setCompareBatchFiles((prev) => prev.filter((item) => item.status === "upload_failed" || item.status === "session_add_failed"))
       toast({
         title: "Compare files uploaded",
         description: `${summary.success} file(s) added to the compare session.${summary.failed > 0 ? ` ${summary.failed} failed.` : ""}`,
       })
     } else {
+      const firstFailureReason = Object.values(summary.failedByFileKey)[0]
       toast({
         variant: "destructive",
         title: "Compare upload failed",
-        description: "No files were added to the compare session.",
+        description: firstFailureReason
+          ? `No files were added to the compare session. ${firstFailureReason}`
+          : "No files were added to the compare session.",
       })
     }
   }
@@ -217,6 +242,10 @@ export function DualFileUploadZone() {
   const hasPrimaryResults = fcsAnalysis.results !== null
   const hasComparisonResults = secondaryFcsAnalysis.results !== null || fcsCompareSession.selectedSampleIds.length > 0
   const compareReadyCount = fcsCompareSession.selectedSampleIds.length
+  const compareQueuedCount = compareBatchFiles.filter((item) => item.status === "queued").length
+  const compareUploadingCount = compareBatchFiles.filter((item) => item.status === "uploading").length
+  const compareFailedCount = compareBatchFiles.filter((item) => item.status === "upload_failed" || item.status === "session_add_failed").length
+  const compareUploadableCount = compareBatchFiles.filter((item) => item.status === "queued" || item.status === "upload_failed" || item.status === "session_add_failed").length
 
   const renderPrimaryDropZone = () => {
     if (!primaryUpload.file) {
@@ -363,7 +392,7 @@ export function DualFileUploadZone() {
           <div className="p-1.5 rounded-lg bg-primary/10">
             <Upload className="h-4 w-4 text-primary" />
           </div>
-          <CardTitle className="text-base md:text-lg">Upload FCS Files</CardTitle>
+          <CardTitle className="text-base md:text-lg">Upload Compare Session Files</CardTitle>
           {!apiConnected && (
             <Badge variant="destructive" className="ml-auto">Offline</Badge>
           )}
@@ -377,23 +406,14 @@ export function DualFileUploadZone() {
       </CardHeader>
       <CardContent className="space-y-4">
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "primary" | "comparison")}>
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="primary" className="gap-2">
-              <FileText className="h-4 w-4" />
-              Primary File
-              {hasPrimaryResults && <Badge variant="outline" className="ml-1 h-5 text-xs">✓</Badge>}
-            </TabsTrigger>
+          <TabsList className="grid w-full grid-cols-1">
             <TabsTrigger value="comparison" className="gap-2">
               <Layers className="h-4 w-4" />
-              Comparison File
+              Compare Session Files
               {hasComparisonResults && <Badge variant="outline" className="ml-1 h-5 text-xs">✓</Badge>}
             </TabsTrigger>
           </TabsList>
-          
-          <TabsContent value="primary" className="mt-4">
-            {renderPrimaryDropZone()}
-          </TabsContent>
-          
+
           <TabsContent value="comparison" className="mt-4">
             <div className="space-y-4">
               <div
@@ -420,7 +440,7 @@ export function DualFileUploadZone() {
                     <div className="p-3 rounded-xl shadow-lg bg-linear-to-br from-orange-500/20 to-amber-500/20">
                       <Layers className="h-6 w-6 md:h-8 md:w-8 text-orange-500" />
                     </div>
-                    <p className="text-sm md:text-base font-medium">Drop 5-10 compare FCS files</p>
+                    <p className="text-sm md:text-base font-medium">Drop up to 10 compare FCS files</p>
                     <p className="text-xs text-muted-foreground">Add files in one batch and track per-file upload status</p>
                   </div>
                 </label>
@@ -502,6 +522,11 @@ export function DualFileUploadZone() {
 
               {compareBatchFiles.length > 0 && (
                 <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <Badge variant="outline">Queued: {compareQueuedCount}</Badge>
+                    <Badge variant="outline">Uploading: {compareUploadingCount}</Badge>
+                    <Badge variant={compareFailedCount > 0 ? "destructive" : "outline"}>Failed: {compareFailedCount}</Badge>
+                  </div>
                   {compareBatchFiles.map((item) => (
                     <div key={item.key} className="flex items-center gap-2 rounded-lg border p-2 text-xs">
                       <FileText className="h-4 w-4 text-muted-foreground" />
@@ -509,11 +534,17 @@ export function DualFileUploadZone() {
                       {item.status === "uploading" && (
                         <Badge variant="outline" className="gap-1"><Loader2 className="h-3 w-3 animate-spin" />Uploading</Badge>
                       )}
-                      {item.status === "success" && (
+                      {item.status === "uploaded" && (
+                        <Badge variant="outline" className="gap-1">Uploaded</Badge>
+                      )}
+                      {item.status === "session_added" && (
                         <Badge variant="secondary" className="gap-1"><CheckCircle2 className="h-3 w-3" />{item.sampleId || "Added"}</Badge>
                       )}
-                      {item.status === "error" && (
-                        <Badge variant="destructive" className="gap-1" title={item.error}><AlertCircle className="h-3 w-3" />Error</Badge>
+                      {item.status === "upload_failed" && (
+                        <Badge variant="destructive" className="gap-1" title={item.error}><AlertCircle className="h-3 w-3" />Upload Error</Badge>
+                      )}
+                      {item.status === "session_add_failed" && (
+                        <Badge variant="destructive" className="gap-1" title={item.error}><AlertCircle className="h-3 w-3" />Session Error</Badge>
                       )}
                       {item.status === "queued" && <Badge variant="outline">Queued</Badge>}
                       <Button
@@ -533,10 +564,10 @@ export function DualFileUploadZone() {
                   className="flex-1"
                   variant="secondary"
                   onClick={handleUploadCompareBatch}
-                  disabled={!apiConnected || compareBatchFiles.length === 0 || compareBatchFiles.some((item) => item.status === "uploading")}
+                  disabled={!apiConnected || compareUploadableCount === 0 || compareBatchFiles.some((item) => item.status === "uploading")}
                 >
                   <Upload className="h-4 w-4 mr-2" />
-                  Upload to Compare Session ({compareBatchFiles.length})
+                  Upload to Compare Session ({compareUploadableCount})
                 </Button>
                 <Button variant="outline" onClick={clearCompareBatch} disabled={compareBatchFiles.length === 0}>
                   Clear

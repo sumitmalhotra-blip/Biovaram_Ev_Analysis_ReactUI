@@ -1,0 +1,68 @@
+{
+  "timestamp": "2026-04-08T08:50:50.233Z",
+  "test": "rapid-primary-visibility-axis-toggles",
+  "cycles": [
+    {
+      "cycle": 1,
+      "activePrimary": "S1",
+      "visibleCount": 6,
+      "selectedCount": 7,
+      "axisMode": "unified",
+      "hadErrorBoundary": false
+    },
+    {
+      "cycle": 2,
+      "activePrimary": "S1",
+      "visibleCount": 6,
+      "selectedCount": 7,
+      "axisMode": "unified",
+      "hadErrorBoundary": false
+    },
+    {
+      "cycle": 3,
+      "activePrimary": "S1",
+      "visibleCount": 6,
+      "selectedCount": 7,
+      "axisMode": "unified",
+      "hadErrorBoundary": false
+    },
+    {
+      "cycle": 4,
+      "activePrimary": "S1",
+      "visibleCount": 6,
+      "selectedCount": 7,
+      "axisMode": "unified",
+      "hadErrorBoundary": false
+    },
+    {
+      "cycle": 5,
+      "activePrimary": "S1",
+      "visibleCount": 6,
+      "selectedCount": 7,
+      "axisMode": "unified",
+      "hadErrorBoundary": false
+    },
+    {
+      "cycle": 6,
+      "activePrimary": "S1",
+      "visibleCount": 6,
+      "selectedCount": 7,
+      "axisMode": "unified",
+      "hadErrorBoundary": false
+    }
+  ],
+  "summary": {
+    "totalCycles": 6,
+    "cyclesWithoutErrorBoundary": 6,
+    "cyclesWithValidPrimary": 6,
+    "cyclesWithVisibleSamples": 6,
+    "cyclesWithSelectedSamples": 6
+  },
+  "passFail": {
+    "noErrorBoundary": true,
+    "primaryAlwaysPresent": true,
+    "visibleNeverEmpty": true,
+    "selectedStable": true,
+    "axisModeStable": true
+  }
+}

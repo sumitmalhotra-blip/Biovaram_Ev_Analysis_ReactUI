@@ -85,12 +85,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 84115,
+                  "duration": 29360,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-04-06T09:46:00.198Z",
+                  "startTime": "2026-04-08T09:54:12.751Z",
                   "annotations": [],
                   "attachments": []
                 }
@@ -100,91 +100,7 @@
           ],
           "id": "5df7fdf556ad68653cf4-b590461f57b9363abee9",
           "file": "perf/fcs-compare-controls-verification.spec.ts",
-          "line": 70,
-          "column": 5
-        }
-      ]
-    },
-    {
-      "title": "perf\\fcs-compare-gates.spec.ts",
-      "file": "perf/fcs-compare-gates.spec.ts",
-      "column": 0,
-      "line": 0,
-      "specs": [
-        {
-          "title": "FCS compare gate badges produce reproducible pass/fail evidence",
-          "ok": true,
-          "tags": [],
-          "tests": [
-            {
-              "timeout": 30000,
-              "annotations": [],
-              "expectedStatus": "passed",
-              "projectId": "chromium",
-              "projectName": "chromium",
-              "results": [
-                {
-                  "workerIndex": 0,
-                  "parallelIndex": 0,
-                  "status": "passed",
-                  "duration": 5261,
-                  "errors": [],
-                  "stdout": [],
-                  "stderr": [],
-                  "retry": 0,
-                  "startTime": "2026-04-06T09:47:24.458Z",
-                  "annotations": [],
-                  "attachments": []
-                }
-              ],
-              "status": "expected"
-            }
-          ],
-          "id": "f95301acfbcaac0d4caf-0d13307f5343f3c2e6d5",
-          "file": "perf/fcs-compare-gates.spec.ts",
-          "line": 57,
-          "column": 5
-        }
-      ]
-    },
-    {
-      "title": "perf\\fcs-compare-uat-evidence.spec.ts",
-      "file": "perf/fcs-compare-uat-evidence.spec.ts",
-      "column": 0,
-      "line": 0,
-      "specs": [
-        {
-          "title": "FCS compare UAT evidence pack (8 scenarios)",
-          "ok": true,
-          "tags": [],
-          "tests": [
-            {
-              "timeout": 180000,
-              "annotations": [],
-              "expectedStatus": "passed",
-              "projectId": "chromium",
-              "projectName": "chromium",
-              "results": [
-                {
-                  "workerIndex": 0,
-                  "parallelIndex": 0,
-                  "status": "passed",
-                  "duration": 135617,
-                  "errors": [],
-                  "stdout": [],
-                  "stderr": [],
-                  "retry": 0,
-                  "startTime": "2026-04-06T09:47:29.753Z",
-                  "annotations": [],
-                  "attachments": []
-                }
-              ],
-              "status": "expected"
-            }
-          ],
-          "id": "6589ef798d5fa2ddbf8b-7e017aba730711224e57",
-          "file": "perf/fcs-compare-uat-evidence.spec.ts",
-          "line": 54,
+          "line": 73,
           "column": 5
         }
       ]
@@ -192,9 +108,9 @@
   ],
   "errors": [],
   "stats": {
-    "startTime": "2026-04-06T09:45:49.892Z",
-    "duration": 238001.828,
-    "expected": 3,
+    "startTime": "2026-04-08T09:54:11.105Z",
+    "duration": 33048.376000000004,
+    "expected": 1,
     "skipped": 0,
     "unexpected": 0,
     "flaky": 0

@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-04-08T08:52:29.159Z",
+  "uploadCallCount": 3,
+  "retryTriggered": true,
+  "checks": {
+    "initialTransientFailureObserved": true,
+    "retryRecoveredFailedFile": true,
+    "compareSessionRetainedSuccessfulUpload": true
+  }
+}

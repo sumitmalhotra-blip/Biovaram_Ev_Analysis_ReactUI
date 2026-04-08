@@ -1,0 +1,516 @@
+{
+  "timestamp": "2026-04-07T12:49:27.361Z",
+  "test": "fcs-compare-five-file-live-backend-checklist",
+  "mode": "live-backend-non-mocked-uploader",
+  "uploadResponses": [
+    {
+      "index": 1,
+      "ok": true,
+      "status": 200,
+      "sample_id": "Nano_Vis_High",
+      "id": 34,
+      "fcs_results": {
+        "total_events": 124189,
+        "event_count": 124189,
+        "channels": [
+          "VFSC-H",
+          "VFSC-A",
+          "VSSC1-H",
+          "VSSC1-A",
+          "VSSC2-H",
+          "VSSC2-A",
+          "BSSC-H",
+          "BSSC-A",
+          "YSSC-H",
+          "YSSC-A",
+          "RSSC-H",
+          "RSSC-A",
+          "V447-H",
+          "V447-A",
+          "B531-H",
+          "B531-A",
+          "Y595-H",
+          "Y595-A",
+          "R670-H",
+          "R670-A",
+          "R710-H",
+          "R710-A",
+          "R792-H",
+          "R792-A",
+          "VSSC1-Width",
+          "Time"
+        ],
+        "fsc_mean": 481858.09375,
+        "fsc_median": 876.5,
+        "ssc_mean": null,
+        "ssc_median": null,
+        "particle_size_median_nm": 87.02140428085616,
+        "size_statistics": {
+          "d10": 59,
+          "d50": 86,
+          "d90": 452,
+          "mean": 178.0135819987837,
+          "std": 155.62303462319667,
+          "method": "multi_solution_mie"
+        },
+        "debris_pct": 0,
+        "cd81_positive_pct": null,
+        "size_filtering": {
+          "total_input": 6839,
+          "valid_count": 6839,
+          "display_count": 6839,
+          "excluded_below": 0,
+          "excluded_above": 0,
+          "exclusion_pct": 0
+        },
+        "excluded_particles_pct": 0,
+        "size_range": {
+          "valid_min": 20,
+          "valid_max": 1100,
+          "display_min": 30,
+          "display_max": 1050
+        },
+        "vssc_max_used": true,
+        "vssc_selection": {
+          "vssc1_channel": "VSSC1-H",
+          "vssc2_channel": "VSSC2-H",
+          "vssc1_selected_count": 124189,
+          "vssc2_selected_count": 0,
+          "vssc1_selected_pct": 100,
+          "vssc2_selected_pct": 0
+        },
+        "ssc_channel_used": "VSSC_MAX",
+        "multi_solution_mie": {
+          "available": true,
+          "used": true,
+          "vssc_channel": "VSSC1-H",
+          "bssc_channel": "BSSC-H",
+          "stats": {
+            "events_analyzed": 9866,
+            "events_with_1_solution": 6821,
+            "events_with_2_solutions": 242,
+            "events_with_3plus_solutions": 2803,
+            "avg_solutions_per_event": 1.5927427528887086,
+            "vssc_channel": "VSSC1-H",
+            "bssc_channel": "BSSC-H"
+          }
+        },
+        "id": 34,
+        "sample_id": "Nano_Vis_High"
+      }
+    },
+    {
+      "index": 2,
+      "ok": true,
+      "status": 200,
+      "sample_id": "Nano_Vis_High",
+      "id": 34,
+      "fcs_results": {
+        "total_events": 124189,
+        "event_count": 124189,
+        "channels": [
+          "VFSC-H",
+          "VFSC-A",
+          "VSSC1-H",
+          "VSSC1-A",
+          "VSSC2-H",
+          "VSSC2-A",
+          "BSSC-H",
+          "BSSC-A",
+          "YSSC-H",
+          "YSSC-A",
+          "RSSC-H",
+          "RSSC-A",
+          "V447-H",
+          "V447-A",
+          "B531-H",
+          "B531-A",
+          "Y595-H",
+          "Y595-A",
+          "R670-H",
+          "R670-A",
+          "R710-H",
+          "R710-A",
+          "R792-H",
+          "R792-A",
+          "VSSC1-Width",
+          "Time"
+        ],
+        "fsc_mean": 481858.09375,
+        "fsc_median": 876.5,
+        "ssc_mean": null,
+        "ssc_median": null,
+        "particle_size_median_nm": 87.02140428085616,
+        "size_statistics": {
+          "d10": 59,
+          "d50": 86,
+          "d90": 452,
+          "mean": 178.0135819987837,
+          "std": 155.62303462319667,
+          "method": "multi_solution_mie"
+        },
+        "debris_pct": 0,
+        "cd81_positive_pct": null,
+        "size_filtering": {
+          "total_input": 6839,
+          "valid_count": 6839,
+          "display_count": 6839,
+          "excluded_below": 0,
+          "excluded_above": 0,
+          "exclusion_pct": 0
+        },
+        "excluded_particles_pct": 0,
+        "size_range": {
+          "valid_min": 20,
+          "valid_max": 1100,
+          "display_min": 30,
+          "display_max": 1050
+        },
+        "vssc_max_used": true,
+        "vssc_selection": {
+          "vssc1_channel": "VSSC1-H",
+          "vssc2_channel": "VSSC2-H",
+          "vssc1_selected_count": 124189,
+          "vssc2_selected_count": 0,
+          "vssc1_selected_pct": 100,
+          "vssc2_selected_pct": 0
+        },
+        "ssc_channel_used": "VSSC_MAX",
+        "multi_solution_mie": {
+          "available": true,
+          "used": true,
+          "vssc_channel": "VSSC1-H",
+          "bssc_channel": "BSSC-H",
+          "stats": {
+            "events_analyzed": 9866,
+            "events_with_1_solution": 6821,
+            "events_with_2_solutions": 242,
+            "events_with_3plus_solutions": 2803,
+            "avg_solutions_per_event": 1.5927427528887086,
+            "vssc_channel": "VSSC1-H",
+            "bssc_channel": "BSSC-H"
+          }
+        },
+        "id": 34,
+        "sample_id": "Nano_Vis_High"
+      }
+    },
+    {
+      "index": 3,
+      "ok": true,
+      "status": 200,
+      "sample_id": "Nano_Vis_Low",
+      "id": 33,
+      "fcs_results": {
+        "total_events": 179465,
+        "event_count": 179465,
+        "channels": [
+          "VFSC-H",
+          "VFSC-A",
+          "VSSC1-H",
+          "VSSC1-A",
+          "VSSC2-H",
+          "VSSC2-A",
+          "BSSC-H",
+          "BSSC-A",
+          "YSSC-H",
+          "YSSC-A",
+          "RSSC-H",
+          "RSSC-A",
+          "V447-H",
+          "V447-A",
+          "B531-H",
+          "B531-A",
+          "Y595-H",
+          "Y595-A",
+          "R670-H",
+          "R670-A",
+          "R710-H",
+          "R710-A",
+          "R792-H",
+          "R792-A",
+          "VSSC1-Width",
+          "Time"
+        ],
+        "fsc_mean": 903.0100708007812,
+        "fsc_median": 755,
+        "ssc_mean": null,
+        "ssc_median": null,
+        "particle_size_median_nm": 99.11982396479296,
+        "size_statistics": {
+          "d10": 64,
+          "d50": 98,
+          "d90": 352,
+          "mean": 153.77776660970952,
+          "std": 102.27312503256873,
+          "method": "multi_solution_mie"
+        },
+        "debris_pct": 0,
+        "cd81_positive_pct": null,
+        "size_filtering": {
+          "total_input": 9311,
+          "valid_count": 9311,
+          "display_count": 9311,
+          "excluded_below": 0,
+          "excluded_above": 0,
+          "exclusion_pct": 0
+        },
+        "excluded_particles_pct": 0,
+        "size_range": {
+          "valid_min": 20,
+          "valid_max": 1100,
+          "display_min": 30,
+          "display_max": 1050
+        },
+        "vssc_max_used": true,
+        "vssc_selection": {
+          "vssc1_channel": "VSSC1-H",
+          "vssc2_channel": "VSSC2-H",
+          "vssc1_selected_count": 179465,
+          "vssc2_selected_count": 0,
+          "vssc1_selected_pct": 100,
+          "vssc2_selected_pct": 0
+        },
+        "ssc_channel_used": "VSSC_MAX",
+        "multi_solution_mie": {
+          "available": true,
+          "used": true,
+          "vssc_channel": "VSSC1-H",
+          "bssc_channel": "BSSC-H",
+          "stats": {
+            "events_analyzed": 9949,
+            "events_with_1_solution": 6457,
+            "events_with_2_solutions": 2149,
+            "events_with_3plus_solutions": 1343,
+            "avg_solutions_per_event": 1.4859784903005326,
+            "vssc_channel": "VSSC1-H",
+            "bssc_channel": "BSSC-H"
+          }
+        },
+        "id": 33,
+        "sample_id": "Nano_Vis_Low"
+      }
+    },
+    {
+      "index": 4,
+      "ok": true,
+      "status": 200,
+      "sample_id": "Nano_Vis_Low",
+      "id": 33,
+      "fcs_results": {
+        "total_events": 179465,
+        "event_count": 179465,
+        "channels": [
+          "VFSC-H",
+          "VFSC-A",
+          "VSSC1-H",
+          "VSSC1-A",
+          "VSSC2-H",
+          "VSSC2-A",
+          "BSSC-H",
+          "BSSC-A",
+          "YSSC-H",
+          "YSSC-A",
+          "RSSC-H",
+          "RSSC-A",
+          "V447-H",
+          "V447-A",
+          "B531-H",
+          "B531-A",
+          "Y595-H",
+          "Y595-A",
+          "R670-H",
+          "R670-A",
+          "R710-H",
+          "R710-A",
+          "R792-H",
+          "R792-A",
+          "VSSC1-Width",
+          "Time"
+        ],
+        "fsc_mean": 903.0100708007812,
+        "fsc_median": 755,
+        "ssc_mean": null,
+        "ssc_median": null,
+        "particle_size_median_nm": 99.11982396479296,
+        "size_statistics": {
+          "d10": 64,
+          "d50": 98,
+          "d90": 352,
+          "mean": 153.77776660970952,
+          "std": 102.27312503256873,
+          "method": "multi_solution_mie"
+        },
+        "debris_pct": 0,
+        "cd81_positive_pct": null,
+        "size_filtering": {
+          "total_input": 9311,
+          "valid_count": 9311,
+          "display_count": 9311,
+          "excluded_below": 0,
+          "excluded_above": 0,
+          "exclusion_pct": 0
+        },
+        "excluded_particles_pct": 0,
+        "size_range": {
+          "valid_min": 20,
+          "valid_max": 1100,
+          "display_min": 30,
+          "display_max": 1050
+        },
+        "vssc_max_used": true,
+        "vssc_selection": {
+          "vssc1_channel": "VSSC1-H",
+          "vssc2_channel": "VSSC2-H",
+          "vssc1_selected_count": 179465,
+          "vssc2_selected_count": 0,
+          "vssc1_selected_pct": 100,
+          "vssc2_selected_pct": 0
+        },
+        "ssc_channel_used": "VSSC_MAX",
+        "multi_solution_mie": {
+          "available": true,
+          "used": true,
+          "vssc_channel": "VSSC1-H",
+          "bssc_channel": "BSSC-H",
+          "stats": {
+            "events_analyzed": 9949,
+            "events_with_1_solution": 6457,
+            "events_with_2_solutions": 2149,
+            "events_with_3plus_solutions": 1343,
+            "avg_solutions_per_event": 1.4859784903005326,
+            "vssc_channel": "VSSC1-H",
+            "bssc_channel": "BSSC-H"
+          }
+        },
+        "id": 33,
+        "sample_id": "Nano_Vis_Low"
+      }
+    },
+    {
+      "index": 5,
+      "ok": true,
+      "status": 200,
+      "sample_id": "Nano_Vis_High",
+      "id": 34,
+      "fcs_results": {
+        "total_events": 124189,
+        "event_count": 124189,
+        "channels": [
+          "VFSC-H",
+          "VFSC-A",
+          "VSSC1-H",
+          "VSSC1-A",
+          "VSSC2-H",
+          "VSSC2-A",
+          "BSSC-H",
+          "BSSC-A",
+          "YSSC-H",
+          "YSSC-A",
+          "RSSC-H",
+          "RSSC-A",
+          "V447-H",
+          "V447-A",
+          "B531-H",
+          "B531-A",
+          "Y595-H",
+          "Y595-A",
+          "R670-H",
+          "R670-A",
+          "R710-H",
+          "R710-A",
+          "R792-H",
+          "R792-A",
+          "VSSC1-Width",
+          "Time"
+        ],
+        "fsc_mean": 481858.09375,
+        "fsc_median": 876.5,
+        "ssc_mean": null,
+        "ssc_median": null,
+        "particle_size_median_nm": 87.02140428085616,
+        "size_statistics": {
+          "d10": 59,
+          "d50": 86,
+          "d90": 452,
+          "mean": 178.0135819987837,
+          "std": 155.62303462319667,
+          "method": "multi_solution_mie"
+        },
+        "debris_pct": 0,
+        "cd81_positive_pct": null,
+        "size_filtering": {
+          "total_input": 6839,
+          "valid_count": 6839,
+          "display_count": 6839,
+          "excluded_below": 0,
+          "excluded_above": 0,
+          "exclusion_pct": 0
+        },
+        "excluded_particles_pct": 0,
+        "size_range": {
+          "valid_min": 20,
+          "valid_max": 1100,
+          "display_min": 30,
+          "display_max": 1050
+        },
+        "vssc_max_used": true,
+        "vssc_selection": {
+          "vssc1_channel": "VSSC1-H",
+          "vssc2_channel": "VSSC2-H",
+          "vssc1_selected_count": 124189,
+          "vssc2_selected_count": 0,
+          "vssc1_selected_pct": 100,
+          "vssc2_selected_pct": 0
+        },
+        "ssc_channel_used": "VSSC_MAX",
+        "multi_solution_mie": {
+          "available": true,
+          "used": true,
+          "vssc_channel": "VSSC1-H",
+          "bssc_channel": "BSSC-H",
+          "stats": {
+            "events_analyzed": 9866,
+            "events_with_1_solution": 6821,
+            "events_with_2_solutions": 242,
+            "events_with_3plus_solutions": 2803,
+            "avg_solutions_per_event": 1.5927427528887086,
+            "vssc_channel": "VSSC1-H",
+            "bssc_channel": "BSSC-H"
+          }
+        },
+        "id": 34,
+        "sample_id": "Nano_Vis_High"
+      }
+    }
+  ],
+  "snapshot": {
+    "selectedSampleIds": [
+      "cmp-1",
+      "cmp-2",
+      "cmp-3",
+      "cmp-4",
+      "cmp-5"
+    ],
+    "selectedCount": 5,
+    "compareItemMetaCount": 5,
+    "backendSampleIds": [
+      "Nano_Vis_High",
+      "Nano_Vis_High",
+      "Nano_Vis_Low",
+      "Nano_Vis_Low",
+      "Nano_Vis_High"
+    ],
+    "duplicateBackendSampleIds": [
+      "Nano_Vis_High",
+      "Nano_Vis_Low"
+    ],
+    "duplicateBackendCount": 2
+  },
+  "checks": {
+    "allFiveLiveUploadsSucceeded": true,
+    "fiveCompareItemsRetained": true,
+    "compareMetaAligned": true,
+    "duplicateBackendIdsObserved": true
+  }
+}
