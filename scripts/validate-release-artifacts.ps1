@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory = $true)]
-    [string]$Version
+    [string]$Version,
+    [string]$ArtifactsDir = "dist-electron"
 )
 
 $ErrorActionPreference = "Stop"
@@ -26,9 +27,9 @@ Write-Host "Validating release artifacts for v$Version" -ForegroundColor Yellow
 
 $backendExe = Join-Path $ProjectRoot "dist/BioVaram/BioVaram.exe"
 $frontendIndex = Join-Path $ProjectRoot "out/index.html"
-$installerExe = Join-Path $ProjectRoot "dist-electron/BioVaram-Setup-$Version.exe"
-$latestYml = Join-Path $ProjectRoot "dist-electron/latest.yml"
-$installerBlockmap = Join-Path $ProjectRoot "dist-electron/BioVaram-Setup-$Version.exe.blockmap"
+$installerExe = Join-Path $ProjectRoot "$ArtifactsDir/BioVaram-Setup-$Version.exe"
+$latestYml = Join-Path $ProjectRoot "$ArtifactsDir/latest.yml"
+$installerBlockmap = Join-Path $ProjectRoot "$ArtifactsDir/BioVaram-Setup-$Version.exe.blockmap"
 
 Assert-Exists -Path $backendExe -Label "Backend desktop binary"
 Assert-Exists -Path $frontendIndex -Label "Frontend static export"

@@ -4,12 +4,17 @@ param(
     [switch]$BuildBackend,
     [switch]$SkipBuild,
     [switch]$SkipValidate,
+    [string]$ElectronOutputDir = "",
     [string]$ReleaseNotesPath = "scripts/release-notes-template.md"
 )
 
 $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $ProjectRoot
+
+if (-not $ElectronOutputDir) {
+    $ElectronOutputDir = "dist-electron-$Version"
+}
 
 function Assert-LastExitCode {
     param(
@@ -22,11 +27,41 @@ function Assert-LastExitCode {
     }
 }
 
+function Stop-LockingDesktopProcesses {
+    # Ensure no running desktop/build processes keep app.asar locked.
+    $processNames = @("BioVaram", "electron", "app-builder", "electron-builder")
+    foreach ($name in $processNames) {
+        Get-Process -Name $name -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    }
+
+    $winUnpackedPath = (Join-Path $ProjectRoot "$ElectronOutputDir\win-unpacked").ToLowerInvariant()
+    Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+    Where-Object { $_.ExecutablePath -and $_.ExecutablePath.ToLowerInvariant().StartsWith($winUnpackedPath) } |
+    ForEach-Object {
+        Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Clear-ElectronOutput {
+    $electronOutputPath = Join-Path $ProjectRoot $ElectronOutputDir
+    if (Test-Path $electronOutputPath) {
+        try {
+            Remove-Item $electronOutputPath -Recurse -Force -ErrorAction Stop
+        }
+        catch {
+            Write-Host "Could not fully clear $ElectronOutputDir (likely file lock). Continuing with retry flow..." -ForegroundColor DarkYellow
+        }
+    }
+}
+
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     throw "Required command not found: git"
 }
 if (-not (Get-Command npm.cmd -ErrorAction SilentlyContinue)) {
     throw "Required command not found: npm.cmd"
+}
+if (-not (Get-Command npx.cmd -ErrorAction SilentlyContinue)) {
+    throw "Required command not found: npx.cmd"
 }
 
 if (-not $env:GITHUB_TOKEN) {
@@ -74,12 +109,30 @@ if (-not (Test-Path "$ProjectRoot\out\index.html")) {
 }
 
 Write-Host "[4/7] Building Electron installer and publishing update artifacts" -ForegroundColor Yellow
-npm.cmd run desktop:dist:publish
-Assert-LastExitCode -Step "Electron packaging/publish"
+Stop-LockingDesktopProcesses
+Clear-ElectronOutput
+
+$publishAttempts = 0
+$maxPublishAttempts = 2
+do {
+    $publishAttempts++
+    npx.cmd electron-builder --win nsis --publish always --config.directories.output=$ElectronOutputDir
+    if ($LASTEXITCODE -eq 0) {
+        break
+    }
+
+    if ($publishAttempts -ge $maxPublishAttempts) {
+        Assert-LastExitCode -Step "Electron packaging/publish"
+    }
+
+    Write-Host "Electron packaging failed (attempt $publishAttempts/$maxPublishAttempts). Retrying after cleanup..." -ForegroundColor DarkYellow
+    Stop-LockingDesktopProcesses
+    Clear-ElectronOutput
+} while ($true)
 
 if (-not $SkipValidate) {
     Write-Host "[5/7] Validating published release artifacts" -ForegroundColor Yellow
-    & "$ProjectRoot\scripts\validate-release-artifacts.ps1" -Version $Version
+    & "$ProjectRoot\scripts\validate-release-artifacts.ps1" -Version $Version -ArtifactsDir $ElectronOutputDir
 }
 else {
     Write-Host "[5/7] Skipping post-build artifact validation" -ForegroundColor DarkGray
@@ -101,4 +154,4 @@ git push origin "v$Version"
 Assert-LastExitCode -Step "Git push (tag)"
 
 Write-Host "Release build complete. Upload release notes from: $ReleaseNotesPath" -ForegroundColor Green
-Write-Host "Artifacts directory: dist-electron" -ForegroundColor Green
+Write-Host "Artifacts directory: $ElectronOutputDir" -ForegroundColor Green
