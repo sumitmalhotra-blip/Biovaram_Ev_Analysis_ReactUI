@@ -108,6 +108,39 @@ try {
         throw "PyInstaller not found. Install with: pip install pyinstaller"
     }
 
+    # Ensure backend runtime dependencies exist in the same environment
+    # used by PyInstaller, otherwise packaged EXE can fail at runtime.
+    $pythonCmd = $null
+    $pyinstallerDir = Split-Path -Parent $pyinstallerCmd
+    $candidatePython = Join-Path $pyinstallerDir "python.exe"
+
+    if (Test-Path $candidatePython) {
+        $pythonCmd = $candidatePython
+    } else {
+        $pythonCmd = "python"
+    }
+
+    $requirementsPath = Join-Path $ProjectRoot "backend\requirements.txt"
+    if (-not (Test-Path $requirementsPath)) {
+        throw "Backend requirements file not found: $requirementsPath"
+    }
+
+    $dependencyProbe = "import fastapi, uvicorn, sqlalchemy, pydantic, anyio, starlette"
+    & $pythonCmd -c $dependencyProbe 2>$null
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  Installing backend requirements into build environment..." -ForegroundColor DarkYellow
+        & $pythonCmd -m pip install -r $requirementsPath
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to install backend requirements into build environment"
+        }
+
+        & $pythonCmd -c $dependencyProbe
+        if ($LASTEXITCODE -ne 0) {
+            throw "Backend dependency verification failed after installation"
+        }
+    }
+
     & $pyinstallerCmd packaging\biovaram.spec --noconfirm --clean
     
     if ($LASTEXITCODE -ne 0) {
