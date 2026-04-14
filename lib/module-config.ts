@@ -76,7 +76,38 @@ export function isSingleModule(): boolean {
  *   3. Module-specific port on localhost (dev mode fallback)
  */
 export function getApiBaseUrl(): string {
-  // Explicit override always wins
+  const browserOrigin =
+    typeof window !== "undefined" ? window.location.origin : null
+  const browserPort =
+    typeof window !== "undefined"
+      ? parseInt(window.location.port || "", 10)
+      : NaN
+
+  // In browser non-dev mode (anything except Next.js dev on :3000),
+  // prefer same-origin so desktop builds don't keep stale localhost ports.
+  if (browserOrigin && browserPort !== 3000) {
+    const envUrl = process.env.NEXT_PUBLIC_API_URL
+    if (envUrl) {
+      const normalized = envUrl.replace(/\/api\/v1$/, "")
+
+      // Preserve explicit remote API hosts (non-localhost).
+      if (/^https?:\/\//i.test(normalized)) {
+        try {
+          const parsed = new URL(normalized)
+          const host = parsed.hostname.toLowerCase()
+          if (host !== "localhost" && host !== "127.0.0.1") {
+            return normalized
+          }
+        } catch {
+          // Fall through to same-origin for invalid URL values.
+        }
+      }
+    }
+
+    return browserOrigin
+  }
+
+  // Explicit override always wins in dev/server environments.
   const envUrl = process.env.NEXT_PUBLIC_API_URL
   if (envUrl) {
     const normalized = envUrl.replace(/\/api\/v1$/, "")

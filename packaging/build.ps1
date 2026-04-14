@@ -29,7 +29,7 @@ if (-not (Test-Path (Join-Path $ProjectRoot "package.json"))) {
 
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Cyan
-Write-Host "  BioVaram EV Analysis Platform — Desktop Build" -ForegroundColor Cyan
+Write-Host "  BioVaram EV Analysis Platform - Desktop Build" -ForegroundColor Cyan
 Write-Host "============================================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  Project root: $ProjectRoot"
@@ -53,7 +53,7 @@ try {
         pnpm build
         
         if (-not (Test-Path "out\index.html")) {
-            throw "Frontend build failed — out/index.html not found!"
+            throw "Frontend build failed - out/index.html not found!"
         }
         
         $fileCount = (Get-ChildItem -Path "out" -Recurse -File).Count
@@ -129,21 +129,21 @@ try {
     
     $exePath = "dist\BioVaram\BioVaram.exe"
     if (-not (Test-Path $exePath)) {
-        throw "Build validation failed — BioVaram.exe not found!"
+        throw "Build validation failed - BioVaram.exe not found!"
     }
     
     $checks = @(
-        @{ Path = "dist\BioVaram\BioVaram.exe";           Label = "Executable" },
-        @{ Path = "dist\BioVaram\frontend\index.html";     Label = "Frontend" },
-        @{ Path = "dist\BioVaram\config\channel_config.json"; Label = "Config" }
+        @{ Path = "dist\BioVaram\BioVaram.exe"; Label = "Executable" },
+        @{ Path = "dist\BioVaram\_internal\frontend\index.html"; Label = "Frontend" },
+        @{ Path = "dist\BioVaram\_internal\config\channel_config.json"; Label = "Config" }
     )
     
     $allPassed = $true
     foreach ($check in $checks) {
         if (Test-Path $check.Path) {
-            Write-Host "  ✅ $($check.Label): $($check.Path)" -ForegroundColor Green
+            Write-Host "  [OK] $($check.Label): $($check.Path)" -ForegroundColor Green
         } else {
-            Write-Host "  ❌ $($check.Label): $($check.Path) NOT FOUND" -ForegroundColor Red
+            Write-Host "  [MISSING] $($check.Label): $($check.Path) NOT FOUND" -ForegroundColor Red
             $allPassed = $false
         }
     }
@@ -164,7 +164,7 @@ try {
     Write-Host ""
     
     if (-not $allPassed) {
-        Write-Host "  ⚠️  Some files missing — check the build output above." -ForegroundColor Yellow
+        Write-Host "  [WARN] Some files missing - check the build output above." -ForegroundColor Yellow
     }
     
 } finally {

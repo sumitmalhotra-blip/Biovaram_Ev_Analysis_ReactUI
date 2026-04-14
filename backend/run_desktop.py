@@ -22,6 +22,31 @@ import threading
 import time
 from pathlib import Path
 
+
+def _parse_env_int(name: str, default: int) -> int:
+    """Parse integer environment variable with safe fallback."""
+    raw = os.getenv(name)
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+        if 1 <= value <= 65535:
+            return value
+    except ValueError:
+        pass
+    return default
+
+
+def _should_open_browser() -> bool:
+    """Allow embedding hosts (Electron) to disable browser auto-open."""
+    no_browser = os.getenv("CRMIT_NO_BROWSER", "").strip().lower()
+    return no_browser not in {"1", "true", "yes", "on"}
+
+
+def _is_truthy_env(name: str) -> bool:
+    """Interpret common truthy environment variable values."""
+    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
 # =============================================================================
 # Path Setup
 # =============================================================================
@@ -328,8 +353,11 @@ def main():
     import uvicorn
     import signal
     
-    # Find available port
-    port = find_available_port(8000)
+    # Resolve port strategy.
+    # CRMIT_PORT_STRICT=1 forces exact binding to CRMIT_PORT.
+    # This is useful for Electron, which does deterministic health probes.
+    preferred_port = _parse_env_int("CRMIT_PORT", 8000)
+    port = preferred_port if _is_truthy_env("CRMIT_PORT_STRICT") else find_available_port(preferred_port)
     
     # Print banner
     print_banner(port)
@@ -337,8 +365,9 @@ def main():
     # Create the app
     app = create_desktop_app()
     
-    # Open browser
-    open_browser(port)
+    # Open browser only when not embedded by a desktop shell
+    if _should_open_browser():
+        open_browser(port)
     
     # Graceful shutdown handler
     shutdown_event = threading.Event()

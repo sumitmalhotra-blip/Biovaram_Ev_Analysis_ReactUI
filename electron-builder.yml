@@ -1,0 +1,27 @@
+appId: com.biovaram.evanalysis
+productName: BioVaram EV Analysis
+artifactName: BioVaram-Setup-${version}.${ext}
+directories:
+  output: dist-electron
+files:
+  - electron/**/*
+  - package.json
+  - out/**/*
+extraResources:
+  - from: dist/BioVaram
+    to: backend
+    filter:
+      - '**/*'
+win:
+  signAndEditExecutable: false
+  target:
+    - nsis
+  icon: packaging/biovaram.ico
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+publish:
+  provider: github
+  owner: sumitmalhotra-blip
+  repo: Biovaram_Ev_Analysis_ReactUI
