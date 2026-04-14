@@ -1,8 +1,98 @@
-const { BrowserWindow, dialog, ipcMain } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain } = require("electron");
 const { autoUpdater } = require("electron-updater");
+const fs = require("fs");
+const path = require("path");
 
 let progressWindow = null;
 let isDownloadingUpdate = false;
+let lastKnownUpdateVersion = null;
+
+function getStatePath() {
+  return path.join(app.getPath("userData"), "updater-state.json");
+}
+
+function readUpdateState() {
+  try {
+    const statePath = getStatePath();
+    if (!fs.existsSync(statePath)) {
+      return null;
+    }
+    return JSON.parse(fs.readFileSync(statePath, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function writeUpdateState(patch) {
+  const existing = readUpdateState() || {};
+  const next = {
+    ...existing,
+    ...patch,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const statePath = getStatePath();
+  fs.mkdirSync(path.dirname(statePath), { recursive: true });
+  fs.writeFileSync(statePath, JSON.stringify(next, null, 2), "utf8");
+}
+
+function clearUpdateState() {
+  try {
+    const statePath = getStatePath();
+    if (fs.existsSync(statePath)) {
+      fs.unlinkSync(statePath);
+    }
+  } catch {
+    // Ignore state cleanup issues; they are non-fatal.
+  }
+}
+
+async function checkPreviousUpdateAttempt({ mainWindow, currentVersion }) {
+  const state = readUpdateState();
+  if (!state) {
+    return;
+  }
+
+  // If install was attempted but version did not advance, we are still on last good build.
+  if (state.stage === "install-started" && state.targetVersion && state.targetVersion !== currentVersion) {
+    await dialog.showMessageBox(mainWindow, {
+      type: "warning",
+      buttons: ["OK"],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+      title: "Update Failed - Reverted",
+      message: `Update to v${state.targetVersion} failed.`,
+      detail:
+        `The app is running the last successful version (v${currentVersion}).\n\n` +
+        `Failure stage: install\n` +
+        `Last known detail: ${state.lastError || "Installer did not complete."}`,
+    });
+    clearUpdateState();
+    return;
+  }
+
+  // Successful version transition after previously started install.
+  if (state.stage === "install-started" && state.targetVersion === currentVersion) {
+    clearUpdateState();
+    return;
+  }
+
+  // Surface prior download/check failures once.
+  if (state.stage === "error" && state.lastError) {
+    await dialog.showMessageBox(mainWindow, {
+      type: "warning",
+      buttons: ["OK"],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+      title: "Update Error",
+      message: "The previous update attempt failed.",
+      detail: `Failure stage: ${state.failedStage || "unknown"}\nError: ${state.lastError}`,
+    });
+    clearUpdateState();
+  }
+}
 
 function createProgressWindow(mainWindow) {
   if (progressWindow && !progressWindow.isDestroyed()) {
@@ -87,6 +177,12 @@ async function startMandatoryDownload(mainWindow, logger) {
   }
 
   isDownloadingUpdate = true;
+  writeUpdateState({
+    stage: "download-started",
+    targetVersion: lastKnownUpdateVersion,
+    failedStage: null,
+    lastError: null,
+  });
   createProgressWindow(mainWindow);
 
   try {
@@ -96,6 +192,12 @@ async function startMandatoryDownload(mainWindow, logger) {
     closeProgressWindow();
     mainWindow?.setProgressBar(-1);
     logger.error(`Update download failed: ${err?.message || err}`);
+    writeUpdateState({
+      stage: "error",
+      targetVersion: lastKnownUpdateVersion,
+      failedStage: "download",
+      lastError: err?.message || String(err),
+    });
     dialog.showErrorBox("Update Download Failed", `Could not download the update.\n\n${err?.message || err}`);
   }
 }
@@ -128,6 +230,7 @@ function registerUpdater({ mainWindow, logger }) {
 
   autoUpdater.on("checking-for-update", () => {
     logger.info("Checking for updates...");
+    writeUpdateState({ stage: "check-started", failedStage: null, lastError: null });
     mainWindow?.webContents.send("updater:event", {
       type: "checking-for-update",
     });
@@ -135,6 +238,8 @@ function registerUpdater({ mainWindow, logger }) {
 
   autoUpdater.on("update-available", (info) => {
     logger.info(`Update available: ${info.version}`);
+    lastKnownUpdateVersion = info.version;
+    writeUpdateState({ stage: "available", targetVersion: info.version, failedStage: null, lastError: null });
     mainWindow?.webContents.send("updater:event", {
       type: "update-available",
       payload: info,
@@ -163,6 +268,7 @@ function registerUpdater({ mainWindow, logger }) {
 
   autoUpdater.on("update-not-available", (info) => {
     logger.info("No updates available");
+    clearUpdateState();
     mainWindow?.webContents.send("updater:event", {
       type: "update-not-available",
       payload: info,
@@ -195,6 +301,7 @@ function registerUpdater({ mainWindow, logger }) {
   autoUpdater.on("update-downloaded", async (info) => {
     isDownloadingUpdate = false;
     logger.info(`Update downloaded: ${info.version}`);
+    writeUpdateState({ stage: "downloaded", targetVersion: info.version, failedStage: null, lastError: null });
     closeProgressWindow();
     mainWindow?.setProgressBar(-1);
     mainWindow?.webContents.send("updater:event", {
@@ -214,6 +321,13 @@ function registerUpdater({ mainWindow, logger }) {
     });
 
     if (choice.response === 0) {
+      writeUpdateState({
+        stage: "install-started",
+        targetVersion: info.version,
+        attemptedFromVersion: app.getVersion(),
+        failedStage: null,
+        lastError: null,
+      });
       autoUpdater.quitAndInstall(false, true);
     }
   });
@@ -223,6 +337,12 @@ function registerUpdater({ mainWindow, logger }) {
     closeProgressWindow();
     mainWindow?.setProgressBar(-1);
     logger.error(`Updater error: ${err?.message || err}`);
+    writeUpdateState({
+      stage: "error",
+      targetVersion: lastKnownUpdateVersion,
+      failedStage: isDownloadingUpdate ? "download" : "check-or-install",
+      lastError: err?.message || String(err),
+    });
     mainWindow?.webContents.send("updater:event", {
       type: "error",
       payload: {
@@ -252,4 +372,5 @@ function registerUpdater({ mainWindow, logger }) {
 
 module.exports = {
   registerUpdater,
+  checkPreviousUpdateAttempt,
 };

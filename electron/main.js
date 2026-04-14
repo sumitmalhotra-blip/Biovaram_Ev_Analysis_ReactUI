@@ -65,8 +65,13 @@ async function boot() {
 
     if (app.isPackaged || allowDevUpdates) {
       try {
-        const { registerUpdater } = require("./updater");
+        const { registerUpdater, checkPreviousUpdateAttempt } = require("./updater");
         updater = registerUpdater({ mainWindow, logger });
+
+        await checkPreviousUpdateAttempt({
+          mainWindow,
+          currentVersion: app.getVersion(),
+        });
 
         // Trigger a passive startup check; renderer can trigger manual checks too.
         updater.checkForUpdates().catch((err) => {
