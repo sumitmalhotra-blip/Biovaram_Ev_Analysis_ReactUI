@@ -3,6 +3,7 @@ param(
     [string]$Version,
     [switch]$BuildBackend,
     [switch]$SkipBuild,
+    [switch]$SkipValidate,
     [string]$ReleaseNotesPath = "scripts/release-notes-template.md"
 )
 
@@ -25,7 +26,7 @@ if (-not (Test-Path $ReleaseNotesPath)) {
     throw "Release notes file not found: $ReleaseNotesPath"
 }
 
-Write-Host "[1/6] Updating app version to $Version" -ForegroundColor Yellow
+Write-Host "[1/7] Updating app version to $Version" -ForegroundColor Yellow
 npm.cmd version $Version --no-git-tag-version | Out-Null
 
 if ($BuildBackend) {
@@ -51,15 +52,23 @@ if (-not (Test-Path "$ProjectRoot\out\index.html")) {
     throw "Missing static frontend output: out/index.html"
 }
 
-Write-Host "[4/6] Building Electron installer and publishing update artifacts" -ForegroundColor Yellow
+Write-Host "[4/7] Building Electron installer and publishing update artifacts" -ForegroundColor Yellow
 npm.cmd run desktop:dist:publish
 
-Write-Host "[5/6] Creating git commit and tag" -ForegroundColor Yellow
+if (-not $SkipValidate) {
+    Write-Host "[5/7] Validating published release artifacts" -ForegroundColor Yellow
+    & "$ProjectRoot\scripts\validate-release-artifacts.ps1" -Version $Version
+}
+else {
+    Write-Host "[5/7] Skipping post-build artifact validation" -ForegroundColor DarkGray
+}
+
+Write-Host "[6/7] Creating git commit and tag" -ForegroundColor Yellow
 git add package.json package-lock.json
 git commit -m "release: v$Version" | Out-Null
 git tag "v$Version"
 
-Write-Host "[6/6] Pushing commit/tag and publishing release" -ForegroundColor Yellow
+Write-Host "[7/7] Pushing commit/tag and publishing release" -ForegroundColor Yellow
 git push
 git push origin "v$Version"
 

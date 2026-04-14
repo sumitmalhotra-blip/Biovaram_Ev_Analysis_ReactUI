@@ -9,6 +9,9 @@
 
 ## Remaining Steps to Complete
 
+Use this checklist together with:
+- docs/DESKTOP_ROLLOUT_EXECUTION_RUNBOOK_APR14_2026.md
+
 ### 1. Build artifacts
 1. Build backend desktop executable:
    powershell -ExecutionPolicy Bypass -File packaging/build.ps1 -SkipFrontend -Version 1.0.0
@@ -16,6 +19,8 @@
    npm.cmd run build
 3. Build Electron installer and update artifacts:
    npm.cmd run desktop:dist
+4. Validate release artifacts:
+   powershell -ExecutionPolicy Bypass -File scripts/validate-release-artifacts.ps1 -Version 1.0.0
 
 ### 2. First release publish (v1.0.0)
 1. Ensure GITHUB_TOKEN is set in terminal environment.
@@ -53,3 +58,10 @@ Release is handover-ready only if all are true:
 3. Release notes are shown in popup.
 4. Install-and-restart applies update successfully.
 5. No blocking error during startup or update flow.
+
+## Exact Next Steps (Execution Order)
+1. Complete Phase 1 in docs/DESKTOP_ROLLOUT_EXECUTION_RUNBOOK_APR14_2026.md.
+2. Publish v1.0.0 and verify assets on GitHub Releases.
+3. Execute v1.0.0 -> v1.0.1 update simulation.
+4. Record pass/fail evidence for every gate above.
+5. Proceed to client rollout only after all gates are green.
