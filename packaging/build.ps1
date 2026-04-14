@@ -126,7 +126,11 @@ try {
     }
 
     $dependencyProbe = "import fastapi, uvicorn, sqlalchemy, pydantic, anyio, starlette"
-    & $pythonCmd -c $dependencyProbe 2>$null
+    try {
+        & $pythonCmd -c $dependencyProbe *> $null
+    } catch {
+        # Expected when required packages are missing; handled below.
+    }
 
     if ($LASTEXITCODE -ne 0) {
         Write-Host "  Installing backend requirements into build environment..." -ForegroundColor DarkYellow
