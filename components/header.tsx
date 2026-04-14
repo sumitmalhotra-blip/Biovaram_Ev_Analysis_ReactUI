@@ -95,9 +95,14 @@ export function Header() {
             <span className="font-bold text-lg bg-linear-to-r from-orange-500 via-purple-500 to-green-500 bg-clip-text text-transparent">
               BioVaram
             </span>
-            <span className="text-xs text-muted-foreground">
-              {isSingleModule() ? getModuleName() : "EV Analysis Platform"}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">
+                {isSingleModule() ? getModuleName() : "EV Analysis Platform"}
+              </span>
+              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 border border-emerald-500/30">
+                v0.1.1
+              </span>
+            </div>
           </div>
         </div>
       </div>
