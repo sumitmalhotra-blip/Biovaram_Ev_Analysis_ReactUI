@@ -11,6 +11,17 @@ $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $ProjectRoot
 
+function Assert-LastExitCode {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Step
+    )
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Step failed with exit code $LASTEXITCODE"
+    }
+}
+
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     throw "Required command not found: git"
 }
@@ -28,6 +39,15 @@ if (-not (Test-Path $ReleaseNotesPath)) {
 
 Write-Host "[1/7] Updating app version to $Version" -ForegroundColor Yellow
 npm.cmd version $Version --no-git-tag-version | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    $currentVersion = (Get-Content "$ProjectRoot\package.json" -Raw | ConvertFrom-Json).version
+    if ($currentVersion -eq $Version) {
+        Write-Host "Version already set to $Version, continuing." -ForegroundColor DarkGray
+    }
+    else {
+        throw "Failed to set package version to $Version"
+    }
+}
 
 if ($BuildBackend) {
     Write-Host "[2/6] Building backend desktop executable" -ForegroundColor Yellow
@@ -40,6 +60,7 @@ else {
 if (-not $SkipBuild) {
     Write-Host "[3/6] Building static frontend" -ForegroundColor Yellow
     npm.cmd run build
+    Assert-LastExitCode -Step "Frontend build"
 }
 else {
     Write-Host "[3/6] Skipping frontend build" -ForegroundColor DarkGray
@@ -54,6 +75,7 @@ if (-not (Test-Path "$ProjectRoot\out\index.html")) {
 
 Write-Host "[4/7] Building Electron installer and publishing update artifacts" -ForegroundColor Yellow
 npm.cmd run desktop:dist:publish
+Assert-LastExitCode -Step "Electron packaging/publish"
 
 if (-not $SkipValidate) {
     Write-Host "[5/7] Validating published release artifacts" -ForegroundColor Yellow
@@ -66,11 +88,17 @@ else {
 Write-Host "[6/7] Creating git commit and tag" -ForegroundColor Yellow
 git add package.json package-lock.json
 git commit -m "release: v$Version" | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "No version file changes to commit for release v$Version." -ForegroundColor DarkGray
+}
 git tag "v$Version"
+Assert-LastExitCode -Step "Tag creation"
 
 Write-Host "[7/7] Pushing commit/tag and publishing release" -ForegroundColor Yellow
 git push
+Assert-LastExitCode -Step "Git push (branch)"
 git push origin "v$Version"
+Assert-LastExitCode -Step "Git push (tag)"
 
 Write-Host "Release build complete. Upload release notes from: $ReleaseNotesPath" -ForegroundColor Green
 Write-Host "Artifacts directory: dist-electron" -ForegroundColor Green
