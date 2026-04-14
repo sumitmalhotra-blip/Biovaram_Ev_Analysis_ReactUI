@@ -89,13 +89,26 @@ try {
     # =============================================
     Write-Host "[3/4] Running PyInstaller..." -ForegroundColor Yellow
     
-    # Verify PyInstaller is available
-    $pyinstaller = Get-Command pyinstaller -ErrorAction SilentlyContinue
-    if (-not $pyinstaller) {
+    # Verify PyInstaller is available (prefer project venv)
+    $pyinstallerCmd = $null
+    $venvPyInstaller = Join-Path $ProjectRoot ".venv\Scripts\pyinstaller.exe"
+
+    if (Test-Path $venvPyInstaller) {
+        $pyinstallerCmd = $venvPyInstaller
+        Write-Host "  Using venv PyInstaller: $pyinstallerCmd" -ForegroundColor DarkGray
+    } else {
+        $pyinstaller = Get-Command pyinstaller -ErrorAction SilentlyContinue
+        if ($pyinstaller) {
+            $pyinstallerCmd = $pyinstaller.Source
+            Write-Host "  Using system PyInstaller: $pyinstallerCmd" -ForegroundColor DarkGray
+        }
+    }
+
+    if (-not $pyinstallerCmd) {
         throw "PyInstaller not found. Install with: pip install pyinstaller"
     }
 
-    pyinstaller packaging\biovaram.spec --noconfirm --clean
+    & $pyinstallerCmd packaging\biovaram.spec --noconfirm --clean
     
     if ($LASTEXITCODE -ne 0) {
         throw "PyInstaller build failed with exit code $LASTEXITCODE"
