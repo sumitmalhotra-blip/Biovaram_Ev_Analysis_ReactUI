@@ -12,15 +12,15 @@ Status legend:
 - [x] Backend launch from Electron implemented.
 - [x] Mandatory updater flow implemented (download progress + install and restart).
 - [x] Release publishing scripts implemented and hardened.
-- [x] Releases v0.1.0, v0.1.1, v0.1.2 published with updater assets.
-- [ ] Release v0.1.3 pending (contains runtime version-badge fix).
+- [x] Releases v0.1.0 through v0.1.4 published with updater assets.
+- [x] Runtime version-badge fix rolled out in v0.1.4 with backend/frontend asset sync.
 
 ### Open Rollout Gaps
 - [~] Clean-profile E2E validation recorded for latest candidate release (detection/download evidence captured; final interactive install-restart proof pending).
 - [ ] Rollback drill execution evidence captured and documented.
 - [ ] Code-signing setup for client-wide rollout.
-- [ ] Final handover bundle completion (user guide + known issues finalization).
-- [ ] Plan text cleanup to fully match mandatory-update behavior and current version line.
+- [~] Final handover bundle completion (final review and sign-off pending).
+- [x] Plan text cleanup aligned to mandatory-update behavior and current version line.
 
 ## 1) Goal
 Deliver a handover-ready desktop application with automatic update detection and install flow, so client users do not need manual EXE sharing for every release.
@@ -31,7 +31,7 @@ Deliver a handover-ready desktop application with automatic update detection and
 3. If update exists, app shows popup with:
    - version number
    - release notes/changelog
-   - actions: Download, Later
+   - action: Download Update (mandatory flow, no defer option)
 4. App downloads update and installs on restart.
 5. Team can publish new version remotely and clients receive it automatically.
 
@@ -122,8 +122,7 @@ updater.js should:
    - error
 4. Fetch release notes and show in popup.
 5. Provide actions:
-   - Download now
-   - Remind me later
+   - Download Update
    - Install and restart
 
 ### 6.4 Backend Integration
@@ -204,7 +203,7 @@ Every release publishes:
 2. [x] UI loads without blank screen.
 3. [~] Upload and processing still work (smoke-tested only in desktop mode; full regression pending).
 4. [x] Update check triggers at startup.
-5. [~] Update popup shows correct version and notes (core path works; runtime version badge fix pending release v0.1.3 rollout).
+5. [x] Update popup shows correct version and notes.
 6. [x] Update downloads successfully.
 7. [x] Install-and-restart moves to new version.
 
@@ -230,9 +229,9 @@ If new release is bad:
 ## 12) Handover Package Content
 1. [x] Desktop installer (current stable).
 2. [x] Release notes for current version.
-3. [ ] One-page user update behavior guide.
+3. [x] One-page user update behavior guide.
 4. [x] Internal release runbook for your team.
-5. [~] Known issues and mitigations (partially captured; needs final rollout-facing version).
+5. [x] Known issues and mitigations.
 
 ## 13) Risks and Mitigations
 1. Risk: Electron migration takes longer than expected.
