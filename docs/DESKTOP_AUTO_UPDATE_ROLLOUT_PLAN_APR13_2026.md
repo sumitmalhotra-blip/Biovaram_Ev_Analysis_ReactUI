@@ -1,5 +1,27 @@
 # Desktop Auto-Update Rollout Plan (Electron) - April 13, 2026
 
+## Status Snapshot (Updated: Apr 15, 2026)
+
+Status legend:
+- [x] Completed
+- [ ] Pending
+- [~] In progress / partially validated
+
+### Delivery Progress
+- [x] Electron shell + updater architecture implemented.
+- [x] Backend launch from Electron implemented.
+- [x] Mandatory updater flow implemented (download progress + install and restart).
+- [x] Release publishing scripts implemented and hardened.
+- [x] Releases v0.1.0, v0.1.1, v0.1.2 published with updater assets.
+- [ ] Release v0.1.3 pending (contains runtime version-badge fix).
+
+### Open Rollout Gaps
+- [ ] Clean-profile E2E validation pass recorded for latest candidate release.
+- [ ] Rollback drill execution evidence captured and documented.
+- [ ] Code-signing setup for client-wide rollout.
+- [ ] Final handover bundle completion (user guide + known issues finalization).
+- [ ] Plan text cleanup to fully match mandatory-update behavior and current version line.
+
 ## 1) Goal
 Deliver a handover-ready desktop application with automatic update detection and install flow, so client users do not need manual EXE sharing for every release.
 
@@ -141,7 +163,7 @@ Every release publishes:
 
 ## 8) Tonight Execution Plan (Detailed)
 
-### Phase A - Baseline (60-90 min)
+### Phase A - Baseline (60-90 min) [x]
 1. Create Electron scaffold files.
 2. Configure electron-builder for Windows target.
 3. Add npm scripts:
@@ -150,26 +172,26 @@ Every release publishes:
    - desktop:dist
 4. Confirm app window opens.
 
-### Phase B - Backend Wiring (60-120 min)
+### Phase B - Backend Wiring (60-120 min) [x]
 1. Start backend child process from Electron.
 2. Implement health poll/retry.
 3. Add robust logs for startup failures.
 4. Validate app works with backend in Electron.
 
-### Phase C - Updater Wiring (90-150 min)
+### Phase C - Updater Wiring (90-150 min) [x]
 1. Integrate electron-updater.
 2. Add update dialogs and release notes rendering.
 3. Configure provider feed URL.
 4. Build and publish test release v1.0.0.
 
-### Phase D - E2E Update Test (60-90 min)
+### Phase D - E2E Update Test (60-90 min) [~]
 1. Install v1.0.0 on clean machine/profile.
 2. Publish v1.0.1 with visible small UI change.
 3. Launch app and confirm update popup.
 4. Download, install, restart.
 5. Verify changed behavior is present.
 
-### Phase E - Handover Docs (45-60 min)
+### Phase E - Handover Docs (45-60 min) [~]
 1. Publish runbook for release process.
 2. Add troubleshooting notes.
 3. Add rollback steps.
@@ -178,19 +200,19 @@ Every release publishes:
 ## 9) QA Test Checklist
 
 ### 9.1 Functional
-1. App starts backend reliably.
-2. UI loads without blank screen.
-3. Upload and processing still work.
-4. Update check triggers at startup.
-5. Update popup shows correct version and notes.
-6. Update downloads successfully.
-7. Install-and-restart moves to new version.
+1. [x] App starts backend reliably.
+2. [x] UI loads without blank screen.
+3. [~] Upload and processing still work (smoke-tested only in desktop mode; full regression pending).
+4. [x] Update check triggers at startup.
+5. [~] Update popup shows correct version and notes (core path works; runtime version badge fix pending release v0.1.3 rollout).
+6. [x] Update downloads successfully.
+7. [x] Install-and-restart moves to new version.
 
 ### 9.2 Resilience
-1. No internet during check -> app continues normally.
-2. Corrupt download -> user gets safe retry message.
-3. Backend start failure -> user sees actionable message.
-4. Update server unreachable -> no crash.
+1. [ ] No internet during check -> app continues normally.
+2. [ ] Corrupt download -> user gets safe retry message.
+3. [x] Backend start failure -> user sees actionable message.
+4. [ ] Update server unreachable -> no crash.
 
 ## 10) Rollback Plan
 If new release is bad:
@@ -200,17 +222,17 @@ If new release is bad:
 4. Keep previous stable installer available.
 
 ## 11) Security and Compliance Notes
-1. Sign release binaries before client-wide rollout.
-2. Verify update artifacts with built-in signature checks.
-3. Keep update channel HTTPS-only.
-4. Do not embed sensitive secrets in desktop package.
+1. [ ] Sign release binaries before client-wide rollout.
+2. [ ] Verify update artifacts with built-in signature checks.
+3. [x] Keep update channel HTTPS-only.
+4. [~] Do not embed sensitive secrets in desktop package (design intent enforced; periodic secret scan still recommended).
 
 ## 12) Handover Package Content
-1. Desktop installer (current stable).
-2. Release notes for current version.
-3. One-page user update behavior guide.
-4. Internal release runbook for your team.
-5. Known issues and mitigations.
+1. [x] Desktop installer (current stable).
+2. [x] Release notes for current version.
+3. [ ] One-page user update behavior guide.
+4. [x] Internal release runbook for your team.
+5. [~] Known issues and mitigations (partially captured; needs final rollout-facing version).
 
 ## 13) Risks and Mitigations
 1. Risk: Electron migration takes longer than expected.
@@ -223,11 +245,11 @@ If new release is bad:
    - Mitigation: do first full release test early tonight.
 
 ## 14) Immediate Next Actions (Start Now)
-1. Create Electron scaffolding in repo.
-2. Wire backend child-process startup.
-3. Add updater module with provider config.
-4. Build first installer and run on clean environment.
-5. Publish test update and validate end-to-end update flow.
+1. [x] Create Electron scaffolding in repo.
+2. [x] Wire backend child-process startup.
+3. [x] Add updater module with provider config.
+4. [x] Build first installer and run on clean environment.
+5. [~] Publish test update and validate end-to-end update flow (core path complete; final clean-profile evidence pass pending for latest candidate).
 
 ---
 
