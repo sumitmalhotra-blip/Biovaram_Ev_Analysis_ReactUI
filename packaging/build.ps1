@@ -39,6 +39,9 @@ Write-Host ""
 Push-Location $ProjectRoot
 
 try {
+    $pnpmCmd = Get-Command pnpm -ErrorAction SilentlyContinue
+    $npmCmd = Get-Command npm.cmd -ErrorAction SilentlyContinue
+
     # =============================================
     # Step 1: Build Frontend (unless skipped)
     # =============================================
@@ -47,10 +50,26 @@ try {
         
         if (-not (Test-Path "node_modules")) {
             Write-Host "  Installing dependencies..."
-            pnpm install
+            if ($pnpmCmd) {
+                & $pnpmCmd.Source install
+            } elseif ($npmCmd) {
+                & $npmCmd.Source install
+            } else {
+                throw "Neither pnpm nor npm.cmd is available to install frontend dependencies."
+            }
         }
 
-        pnpm build
+        if ($pnpmCmd) {
+            & $pnpmCmd.Source build
+        } elseif ($npmCmd) {
+            & $npmCmd.Source run build
+        } else {
+            throw "Neither pnpm nor npm.cmd is available to build frontend assets."
+        }
+
+        if ($LASTEXITCODE -ne 0) {
+            throw "Frontend build command failed with exit code $LASTEXITCODE"
+        }
         
         if (-not (Test-Path "out\index.html")) {
             throw "Frontend build failed - out/index.html not found!"
