@@ -18,6 +18,8 @@ class BackendManager {
     this.process = null;
     this.port = Number(process.env.CRMIT_PORT || DEFAULT_BACKEND_PORT);
     this.starting = false;
+    this.lastBackendError = "";
+    this.lastExitInfo = null;
   }
 
   async start() {
@@ -50,11 +52,17 @@ class BackendManager {
       });
 
       this.process.stderr.on("data", (data) => {
-        this.log.error(`[backend] ${String(data).trimEnd()}`);
+        const text = String(data).trimEnd();
+        this.log.error(`[backend] ${text}`);
+        if (text) {
+          // Keep the latest stderr chunk for a clearer startup failure message.
+          this.lastBackendError = text;
+        }
       });
 
       this.process.on("exit", (code, signal) => {
         this.log.info(`Backend exited (code=${code}, signal=${signal})`);
+        this.lastExitInfo = { code, signal };
         this.process = null;
       });
 
@@ -137,7 +145,15 @@ class BackendManager {
       }
 
       if (!this.process) {
-        throw new Error("Backend process exited before becoming healthy");
+        const details = [];
+        if (this.lastExitInfo) {
+          details.push(`exit code=${this.lastExitInfo.code}, signal=${this.lastExitInfo.signal}`);
+        }
+        if (this.lastBackendError) {
+          details.push(`last backend error: ${this.lastBackendError}`);
+        }
+        const suffix = details.length > 0 ? `\n\n${details.join("\n")}` : "";
+        throw new Error(`Backend process exited before becoming healthy${suffix}`);
       }
 
       await new Promise((resolve) => setTimeout(resolve, BACKEND_HEALTH_POLL_MS));
