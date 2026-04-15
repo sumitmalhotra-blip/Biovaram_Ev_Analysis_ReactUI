@@ -6,6 +6,8 @@ const path = require("path");
 let progressWindow = null;
 let isDownloadingUpdate = false;
 let lastKnownUpdateVersion = null;
+const RELEASE_NOTES_FALLBACK =
+  "No release notes were attached to this release. This update includes stability fixes and production rollout improvements.";
 
 function getStatePath() {
   return path.join(app.getPath("userData"), "updater-state.json");
@@ -202,38 +204,78 @@ async function startMandatoryDownload(mainWindow, logger) {
   }
 }
 
+function decodeHtmlEntities(text) {
+  return text
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"');
+}
+
+function extractReleaseNoteLines(rawText) {
+  if (!rawText) {
+    return [];
+  }
+
+  const withBreaks = String(rawText)
+    .replace(/<\s*br\s*\/?>/gi, "\n")
+    .replace(/<\s*\/\s*p\s*>/gi, "\n")
+    .replace(/<\s*p[^>]*>/gi, "\n")
+    .replace(/<\s*\/\s*li\s*>/gi, "\n")
+    .replace(/<\s*li[^>]*>/gi, "- ")
+    .replace(/<\s*\/\s*code\s*>/gi, "")
+    .replace(/<\s*code[^>]*>/gi, "")
+    .replace(/<[^>]+>/g, " ");
+
+  const decoded = decodeHtmlEntities(withBreaks).replace(/\r/g, "");
+
+  return decoded
+    .split("\n")
+    .map((line) => line.trim())
+    .map((line) => line.replace(/^[-*]\s*/, "").replace(/^\d+\.\s*/, "").trim())
+    .filter((line) => line.length > 0)
+    .filter((line) => !/^what changed:?$/i.test(line))
+    .filter((line) => !/^version\s+\S+\s+is\s+required/i.test(line));
+}
+
 function normalizeReleaseNotes(releaseNotes) {
   if (!releaseNotes) {
-    return "No release notes were attached to this release. This update includes stability fixes and production rollout improvements.";
+    return RELEASE_NOTES_FALLBACK;
   }
+
+  const lines = [];
 
   if (typeof releaseNotes === "string") {
-    const text = releaseNotes.trim();
-    return text.length > 0
-      ? text
-      : "No release notes were attached to this release. This update includes stability fixes and production rollout improvements.";
+    lines.push(...extractReleaseNoteLines(releaseNotes));
+  } else if (Array.isArray(releaseNotes)) {
+    releaseNotes.forEach((entry) => {
+      const versionLabel = entry?.version ? `Version ${entry.version}` : null;
+      if (versionLabel) {
+        lines.push(versionLabel);
+      }
+      lines.push(...extractReleaseNoteLines(entry?.note || ""));
+    });
+  } else {
+    lines.push(...extractReleaseNoteLines(String(releaseNotes)));
   }
 
-  if (Array.isArray(releaseNotes)) {
-    if (releaseNotes.length === 0) {
-      return "No release notes were attached to this release. This update includes stability fixes and production rollout improvements.";
+  const uniqueLines = [];
+  const seen = new Set();
+  lines.forEach((line) => {
+    const key = line.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      uniqueLines.push(line);
     }
+  });
 
-    const combined = releaseNotes
-      .map((entry) => {
-        const version = entry?.version ? `v${entry.version}` : "version update";
-        const note = entry?.note || "No details provided.";
-        return `${version}\n${note}`;
-      })
-      .join("\n\n")
-      .trim();
-
-    return combined.length > 0
-      ? combined
-      : "No release notes were attached to this release. This update includes stability fixes and production rollout improvements.";
+  if (uniqueLines.length === 0) {
+    return RELEASE_NOTES_FALLBACK;
   }
 
-  return String(releaseNotes);
+  return uniqueLines.slice(0, 10).map((line) => `- ${line}`).join("\n");
 }
 
 function registerUpdater({ mainWindow, logger }) {

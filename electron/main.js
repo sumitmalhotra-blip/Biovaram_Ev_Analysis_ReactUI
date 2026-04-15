@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, session } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, session, Menu, shell } = require("electron");
 const fs = require("fs");
 const path = require("path");
 const { BackendManager } = require("./backend-manager");
@@ -7,6 +7,8 @@ const { APP_NAME } = require("./constants");
 let mainWindow = null;
 let backendManager = null;
 let updater = null;
+const BUG_REPORT_FORM_URL =
+  "https://docs.google.com/forms/d/e/1FAIpQLSdL7m2B3IB5RawcL_LSFlUuGfp-qm5p4U7ydUM0iMSHZBf3mg/viewform?usp=preview";
 
 const isDev = process.env.ELECTRON_DEV === "1";
 const allowDevUpdates = process.env.ELECTRON_ENABLE_DEV_UPDATES === "1";
@@ -47,6 +49,42 @@ function createWindow(backendBaseUrl) {
 
   logger.info(`Loading renderer: ${url}`);
   mainWindow.loadURL(url);
+}
+
+function configureApplicationMenu() {
+  const baseTemplate = [];
+
+  if (process.platform === "darwin") {
+    baseTemplate.push({ role: "appMenu" });
+  }
+
+  baseTemplate.push(
+    { role: "fileMenu" },
+    { role: "editMenu" },
+    { role: "viewMenu" },
+    { role: "windowMenu" },
+    {
+      label: "Bug Report",
+      submenu: [
+        {
+          label: "Report an Issue",
+          click: () => {
+            shell.openExternal(BUG_REPORT_FORM_URL).catch((err) => {
+              logger.error(`Failed to open bug report form: ${err?.message || err}`);
+              dialog.showErrorBox(
+                "Bug Report Link Failed",
+                `Could not open the bug report form.\n\n${err?.message || err}`
+              );
+            });
+          },
+        },
+      ],
+    },
+    { role: "help" }
+  );
+
+  const menu = Menu.buildFromTemplate(baseTemplate);
+  Menu.setApplicationMenu(menu);
 }
 
 function getRendererCacheStatePath() {
@@ -112,6 +150,7 @@ async function boot() {
   try {
     await backendManager.start();
     await ensureRendererCacheFresh();
+    configureApplicationMenu();
     createWindow(backendManager.getBaseUrl());
 
     ipcMain.handle("backend:status", async () => ({
