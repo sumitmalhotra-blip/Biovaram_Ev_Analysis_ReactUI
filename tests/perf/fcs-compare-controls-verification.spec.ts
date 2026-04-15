@@ -48,6 +48,9 @@ function buildMockScatter() {
 
 type PersistedStore = {
   state: {
+    fcsCompareSession?: {
+      visibleSampleIds?: string[]
+    }
     fcsCompareGraphInstances?: Array<{
       id: string
       title: string
@@ -59,7 +62,7 @@ type PersistedStore = {
       createdAt: number
     }>
     activeFCSCompareGraphInstanceId?: string | null
-    pinnedCharts?: Array<{ id: string; title: string; data: Array<{ category?: string }> }>
+    pinnedCharts?: Array<{ id: string; title: string; data: Array<{ category?: string; sampleId?: string | null }> }>
   }
 }
 
@@ -198,7 +201,7 @@ test("FCS compare controls verification checklist", async ({ page }) => {
 
   await page.route("**/upload/fcs**", async (route) => {
     uploadCounter += 1
-    const sampleId = uploadCounter === 1 ? "S1" : "S2"
+    const sampleId = uploadCounter === 1 ? "S1" : uploadCounter === 2 ? "S2" : "S3"
     await route.fulfill({
       status: 200,
       json: {
@@ -267,6 +270,7 @@ test("FCS compare controls verification checklist", async ({ page }) => {
   await uploadInput.setInputFiles([
     { name: "peer-a.fcs", mimeType: "application/octet-stream", buffer: Buffer.from("mock-a") },
     { name: "peer-b.fcs", mimeType: "application/octet-stream", buffer: Buffer.from("mock-b") },
+    { name: "peer-c.fcs", mimeType: "application/octet-stream", buffer: Buffer.from("mock-c") },
   ])
   await page.getByRole("button", { name: /Upload to Compare Session/i }).click()
 
@@ -302,6 +306,18 @@ test("FCS compare controls verification checklist", async ({ page }) => {
   await expect(page.getByRole("button", { name: /^Export$/i })).toBeVisible()
   await expect(page.getByText(/Scatter Comparison/i)).toBeVisible({ timeout: 30000 })
 
+  // Pass-2 guard: overlay legend/count should match all visible samples (reference + peers).
+  let state = await getPersistedStore(page)
+  const visibleSampleIds = state.state.fcsCompareSession?.visibleSampleIds ?? []
+  expect(visibleSampleIds.length).toBeGreaterThanOrEqual(3)
+
+  const overlaySeriesBadge = page.getByText(/Overlay\s+\d+\s+series/i).first()
+  await expect(overlaySeriesBadge).toBeVisible({ timeout: 30000 })
+  const overlayBadgeText = (await overlaySeriesBadge.textContent()) || ""
+  const overlaySeriesMatch = overlayBadgeText.match(/Overlay\s+(\d+)\s+series/i)
+  const overlaySeriesCount = overlaySeriesMatch ? Number(overlaySeriesMatch[1]) : 0
+  expect(overlaySeriesCount).toBe(visibleSampleIds.length)
+
   const scatterModeTrigger = page.locator("button").filter({ hasText: /^Scatter:/i }).first()
   const zoomPresetTrigger = page.locator("button").filter({ hasText: /^Zoom:/i }).first()
   await expect(scatterModeTrigger).toBeVisible()
@@ -309,7 +325,7 @@ test("FCS compare controls verification checklist", async ({ page }) => {
 
   // D1: new graph instance creates additional independent graph instance.
   await page.getByRole("button", { name: /^New$/i }).click()
-  let state = await getPersistedStore(page)
+  state = await getPersistedStore(page)
   const countAfterNew = state.state.fcsCompareGraphInstances?.length ?? 0
   expect(countAfterNew).toBeGreaterThanOrEqual(2)
 
@@ -361,6 +377,10 @@ test("FCS compare controls verification checklist", async ({ page }) => {
   expect(pinned.length).toBeGreaterThanOrEqual(1)
   const lastPinned = pinned[pinned.length - 1]
   expect(lastPinned.title).toContain("Scatter Overlay")
+  const pinnedSampleIds = new Set((lastPinned.data || []).map((point) => point.sampleId).filter((value): value is string => typeof value === "string" && value.length > 0))
+  for (const sampleId of visibleSampleIds) {
+    expect(pinnedSampleIds.has(sampleId)).toBeTruthy()
+  }
 
   // D4: maximize/restore toggles instance state.
   await page.keyboard.press("Escape").catch(() => {})
@@ -400,6 +420,14 @@ test("FCS compare controls verification checklist", async ({ page }) => {
   ])
   const suggestedName = download.suggestedFilename()
   expect(suggestedName).toContain("overlay")
+  const downloadedPath = await download.path()
+  expect(downloadedPath).toBeTruthy()
+  if (downloadedPath) {
+    const exportedCsv = fs.readFileSync(downloadedPath, "utf-8")
+    for (const sampleId of visibleSampleIds) {
+      expect(exportedCsv.includes(`,${sampleId},`)).toBeTruthy()
+    }
+  }
 
   // Long-task gate probe: isolate lightweight UI interactions and avoid heavy state introspection.
   await page.evaluate(() => {
@@ -430,8 +458,15 @@ test("FCS compare controls verification checklist", async ({ page }) => {
       d1_graph_instance_created: countAfterNew >= 2,
       d2_duplicate_isolation_axis_mode: Boolean(changed?.axisMode === "per-file" && unchanged?.axisMode === "unified"),
       d3_pin_payload_persisted: pinned.length >= 1,
+      d3_pin_payload_all_visible_samples: visibleSampleIds.every((sampleId) => pinnedSampleIds.has(sampleId)),
       d4_maximize_restore: d4MaximizeRestorePassed,
       d4_export_download: suggestedName.toLowerCase().includes("overlay"),
+      d4_export_contains_all_visible_samples: Boolean(downloadedPath) && visibleSampleIds.every((sampleId) => {
+        if (!downloadedPath) return false
+        const exportedCsv = fs.readFileSync(downloadedPath, "utf-8")
+        return exportedCsv.includes(`,${sampleId},`)
+      }),
+      d5_multi_overlay_series_count_matches_visible_samples: overlaySeriesCount === visibleSampleIds.length,
       e3_density_contour_mode: await densityBadge.isVisible(),
       e4_zoom_presets_and_reset: true,
     },

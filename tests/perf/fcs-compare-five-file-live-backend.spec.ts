@@ -156,6 +156,24 @@ test("FCS compare five-file live-backend checklist", async ({ page, request }) =
 
   await page.goto("/")
 
+  await page.getByText("Upload Mode", { exact: false }).waitFor({ timeout: 30000 })
+  const experimentalModal = page.getByRole("dialog", { name: /Experimental Conditions/i })
+  if (await experimentalModal.isVisible({ timeout: 1500 }).catch(() => false)) {
+    await page.keyboard.press("Escape")
+  }
+
+  const compareTriggers = [
+    page.getByRole("button", { name: /Compare Files/i }).first(),
+    page.getByText(/Compare Files/i).first(),
+    page.getByRole("button", { name: /Compare/i }).first(),
+  ]
+  for (const trigger of compareTriggers) {
+    if (await trigger.isVisible().catch(() => false)) {
+      await trigger.click({ force: true })
+      break
+    }
+  }
+
   const snapshot = await page.evaluate(() => {
     const raw = window.sessionStorage.getItem("ev-analysis-storage-v2")
     const parsed = raw ? JSON.parse(raw) : { state: {} }
@@ -174,6 +192,9 @@ test("FCS compare five-file live-backend checklist", async ({ page, request }) =
 
     return {
       selectedSampleIds: selected,
+      visibleSampleIds: Array.isArray(compareSession.visibleSampleIds) ? compareSession.visibleSampleIds : [],
+      primarySampleId: typeof compareSession.primarySampleId === "string" ? compareSession.primarySampleId : null,
+      fcsPrimarySampleId: typeof parsed.state?.fcsAnalysis?.sampleId === "string" ? parsed.state.fcsAnalysis.sampleId : null,
       selectedCount: selected.length,
       compareItemMetaCount: Object.keys(meta).length,
       backendSampleIds,
@@ -181,6 +202,58 @@ test("FCS compare five-file live-backend checklist", async ({ page, request }) =
       duplicateBackendCount: duplicateBackendSampleIds.length,
     }
   })
+
+  // Pass-2 guard: multi-overlay must render all visible samples as distinct series.
+  const overlayTab = page.getByRole("tab", { name: /^Overlay/i })
+  await expect(overlayTab).toBeVisible({ timeout: 30000 })
+  await overlayTab.click()
+
+  const multiOverlayButton = page.getByRole("button", { name: /Multi-overlay/i }).first()
+  if (await multiOverlayButton.isVisible().catch(() => false)) {
+    await multiOverlayButton.click({ force: true })
+  }
+
+  const overlaySeriesBadge = page.getByText(/Overlay\s+\d+\s+series/i).first()
+  await expect(overlaySeriesBadge).toBeVisible({ timeout: 30000 })
+  const overlayBadgeText = (await overlaySeriesBadge.textContent()) || ""
+  const overlaySeriesMatch = overlayBadgeText.match(/Overlay\s+(\d+)\s+series/i)
+  const overlaySeriesCount = overlaySeriesMatch ? Number(overlaySeriesMatch[1]) : 0
+  const expectedVisibleSeriesCount = snapshot.visibleSampleIds.length
+    + (snapshot.fcsPrimarySampleId && !snapshot.visibleSampleIds.includes(snapshot.fcsPrimarySampleId) ? 1 : 0)
+
+  // Pass-2 guard: pin payload should include all visible sample IDs.
+  await page.getByRole("button", { name: /^Pin$/i }).click()
+  const pinSnapshot = await page.evaluate(() => {
+    const raw = window.sessionStorage.getItem("ev-analysis-storage-v2")
+    const parsed = raw ? JSON.parse(raw) : { state: {} }
+    const visible = Array.isArray(parsed.state?.fcsCompareSession?.visibleSampleIds)
+      ? parsed.state.fcsCompareSession.visibleSampleIds
+      : []
+    const scatterBySampleId = parsed.state?.fcsCompareSession?.scatterBySampleId || {}
+    const visibleWithScatter = visible.filter((sampleId: string) => Array.isArray(scatterBySampleId[sampleId]) && scatterBySampleId[sampleId].length > 0)
+    const pinnedCharts = Array.isArray(parsed.state?.pinnedCharts) ? parsed.state.pinnedCharts : []
+    const lastPinned = pinnedCharts[pinnedCharts.length - 1]
+    const pinnedSampleIds = Array.isArray(lastPinned?.data)
+      ? Array.from(new Set(lastPinned.data.map((point: { sampleId?: string }) => point?.sampleId).filter((value: unknown): value is string => typeof value === "string" && value.length > 0)))
+      : []
+    return {
+      visible,
+      visibleWithScatter,
+      pinnedSampleIds,
+    }
+  })
+
+  // Pass-2 guard: export payload should include all visible sample IDs.
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: /^Export$/i }).click(),
+  ])
+  const downloadPath = await download.path()
+  let exportedCsv = ""
+  if (downloadPath) {
+    exportedCsv = fs.readFileSync(downloadPath, "utf-8")
+  }
+  const exportContainsAllVisible = pinSnapshot.visibleWithScatter.every((sampleId) => exportedCsv.includes(`,${sampleId},`))
 
   const outDir = path.resolve("temp/perf-reports")
   fs.mkdirSync(outDir, { recursive: true })
@@ -197,11 +270,22 @@ test("FCS compare five-file live-backend checklist", async ({ page, request }) =
       compareMetaAligned: snapshot.compareItemMetaCount >= snapshot.selectedCount,
       duplicateBackendIdsObserved: snapshot.duplicateBackendCount > 0,
       normalizationWarningTypesBounded: maxWarningTypeCount <= 4,
+      multiOverlaySeriesCountMatchesVisibleSamples: overlaySeriesCount === expectedVisibleSeriesCount,
+      pinPayloadContainsAllVisibleSamples: pinSnapshot.visibleWithScatter.every((sampleId) => pinSnapshot.pinnedSampleIds.includes(sampleId)),
+      exportContainsAllVisibleSamples: exportContainsAllVisible,
     },
     warningGuard: {
       threshold: 4,
       warningTypeCountsByStep,
       maxWarningTypeCount,
+    },
+    pass2OverlayGuards: {
+      overlaySeriesCount,
+      expectedVisibleSeriesCount,
+      pinVisibleSampleIds: pinSnapshot.visible,
+      pinVisibleWithScatter: pinSnapshot.visibleWithScatter,
+      pinPayloadSampleIds: pinSnapshot.pinnedSampleIds,
+      exportContainsAllVisible,
     },
   }
 
@@ -223,6 +307,9 @@ test("FCS compare five-file live-backend checklist", async ({ page, request }) =
     `- Duplicate backend sample_id values: ${snapshot.duplicateBackendSampleIds.join(", ") || "none"}`,
     `- Warning type counts by cumulative upload step: ${evidence.warningGuard.warningTypeCountsByStep.join(" -> ")}`,
     `- Max warning type count observed: ${evidence.warningGuard.maxWarningTypeCount} (threshold ${evidence.warningGuard.threshold})`,
+    `- Overlay visible series: ${evidence.pass2OverlayGuards.overlaySeriesCount}/${evidence.pass2OverlayGuards.expectedVisibleSeriesCount}`,
+    `- Pin payload sample parity: ${evidence.checks.pinPayloadContainsAllVisibleSamples}`,
+    `- Export payload sample parity: ${evidence.checks.exportContainsAllVisibleSamples}`,
     "",
     "## Checks",
     `- allFiveLiveUploadsSucceeded: ${evidence.checks.allFiveLiveUploadsSucceeded}`,
@@ -230,6 +317,9 @@ test("FCS compare five-file live-backend checklist", async ({ page, request }) =
     `- compareMetaAligned: ${evidence.checks.compareMetaAligned}`,
     `- duplicateBackendIdsObserved: ${evidence.checks.duplicateBackendIdsObserved}`,
     `- normalizationWarningTypesBounded: ${evidence.checks.normalizationWarningTypesBounded}`,
+    `- multiOverlaySeriesCountMatchesVisibleSamples: ${evidence.checks.multiOverlaySeriesCountMatchesVisibleSamples}`,
+    `- pinPayloadContainsAllVisibleSamples: ${evidence.checks.pinPayloadContainsAllVisibleSamples}`,
+    `- exportContainsAllVisibleSamples: ${evidence.checks.exportContainsAllVisibleSamples}`,
   ].join("\n")
 
   fs.writeFileSync(path.join(outDir, "fcs-compare-five-file-live-backend-evidence.md"), markdown, "utf-8")
@@ -243,4 +333,7 @@ test("FCS compare five-file live-backend checklist", async ({ page, request }) =
   expect(evidence.checks.compareMetaAligned).toBeTruthy()
   expect(evidence.checks.duplicateBackendIdsObserved).toBeTruthy()
   expect(evidence.checks.normalizationWarningTypesBounded).toBeTruthy()
+  expect(evidence.checks.multiOverlaySeriesCountMatchesVisibleSamples).toBeTruthy()
+  expect(evidence.checks.pinPayloadContainsAllVisibleSamples).toBeTruthy()
+  expect(evidence.checks.exportContainsAllVisibleSamples).toBeTruthy()
 })

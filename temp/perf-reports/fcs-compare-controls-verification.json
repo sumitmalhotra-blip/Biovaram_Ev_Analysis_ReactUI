@@ -1,18 +1,21 @@
 {
-  "timestamp": "2026-04-15T20:27:44.495Z",
+  "timestamp": "2026-04-15T20:56:54.633Z",
   "checks": {
     "d1_graph_instance_created": true,
     "d2_duplicate_isolation_axis_mode": true,
     "d3_pin_payload_persisted": true,
+    "d3_pin_payload_all_visible_samples": true,
     "d4_maximize_restore": true,
     "d4_export_download": true,
+    "d4_export_contains_all_visible_samples": true,
+    "d5_multi_overlay_series_count_matches_visible_samples": true,
     "e3_density_contour_mode": true,
     "e4_zoom_presets_and_reset": true
   },
   "evidence": {
     "graphInstanceCount": 3,
     "pinnedCount": 1,
-    "exportedFilename": "S1_overlay_4_series.csv",
+    "exportedFilename": "S1_overlay_5_series.csv",
     "longTaskGate": {
       "thresholdMs": 50,
       "recurringLimit": 1,

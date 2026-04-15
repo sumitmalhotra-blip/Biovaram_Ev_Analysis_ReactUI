@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-04-15T20:28:26.299Z",
+  "timestamp": "2026-04-15T20:58:53.291Z",
   "test": "fcs-compare-five-file-live-backend-checklist",
   "mode": "live-backend-non-mocked-uploader",
   "uploadResponses": [
@@ -492,6 +492,15 @@
       "cmp-4",
       "cmp-5"
     ],
+    "visibleSampleIds": [
+      "cmp-1",
+      "cmp-2",
+      "cmp-3",
+      "cmp-4",
+      "cmp-5"
+    ],
+    "primarySampleId": "cmp-1",
+    "fcsPrimarySampleId": "Nano_Vis_High",
     "selectedCount": 5,
     "compareItemMetaCount": 5,
     "backendSampleIds": [
@@ -512,7 +521,10 @@
     "fiveCompareItemsRetained": true,
     "compareMetaAligned": true,
     "duplicateBackendIdsObserved": true,
-    "normalizationWarningTypesBounded": true
+    "normalizationWarningTypesBounded": true,
+    "multiOverlaySeriesCountMatchesVisibleSamples": true,
+    "pinPayloadContainsAllVisibleSamples": true,
+    "exportContainsAllVisibleSamples": true
   },
   "warningGuard": {
     "threshold": 4,
@@ -524,5 +536,25 @@
       0
     ],
     "maxWarningTypeCount": 0
+  },
+  "pass2OverlayGuards": {
+    "overlaySeriesCount": 6,
+    "expectedVisibleSeriesCount": 6,
+    "pinVisibleSampleIds": [
+      "cmp-1",
+      "cmp-2",
+      "cmp-3",
+      "cmp-4",
+      "cmp-5"
+    ],
+    "pinVisibleWithScatter": [],
+    "pinPayloadSampleIds": [
+      "Nano_Vis_High",
+      "cmp-1",
+      "cmp-2",
+      "cmp-3",
+      "cmp-4"
+    ],
+    "exportContainsAllVisible": true
   }
 }

@@ -64,6 +64,48 @@
   },
   "suites": [
     {
+      "title": "perf\\fcs-compare-controls-verification.spec.ts",
+      "file": "perf/fcs-compare-controls-verification.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "FCS compare controls verification checklist",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 53086,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-04-15T20:56:02.089Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "5df7fdf556ad68653cf4-b590461f57b9363abee9",
+          "file": "perf/fcs-compare-controls-verification.spec.ts",
+          "line": 76,
+          "column": 5
+        }
+      ]
+    },
+    {
       "title": "perf\\fcs-compare-five-file-live-backend.spec.ts",
       "file": "perf/fcs-compare-five-file-live-backend.spec.ts",
       "column": 0,
@@ -85,12 +127,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 17337,
+                  "duration": 125054,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-04-15T20:28:09.852Z",
+                  "startTime": "2026-04-15T20:56:55.310Z",
                   "annotations": [],
                   "attachments": []
                 }
@@ -108,9 +150,9 @@
   ],
   "errors": [],
   "stats": {
-    "startTime": "2026-04-15T20:28:08.915Z",
-    "duration": 18464.276,
-    "expected": 1,
+    "startTime": "2026-04-15T20:56:00.978Z",
+    "duration": 179686.862,
+    "expected": 2,
     "skipped": 0,
     "unexpected": 0,
     "flaky": 0
