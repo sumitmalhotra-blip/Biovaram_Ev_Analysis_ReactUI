@@ -27,6 +27,7 @@ export function Header() {
   const { apiConnected, apiChecking, lastHealthCheck } = useApiConnectionState()
   const { isDarkMode, toggleDarkMode } = useUIState()
   const { checkHealth, startHealthCheck } = useApi()
+  const [appVersion, setAppVersion] = useState("0.1.2")
 
   // DESKTOP MODE: Auto-login with real JWT token exchange
   const [currentUser, setCurrentUser] = useState<DesktopUser>({
@@ -45,6 +46,20 @@ export function Header() {
     const cleanup = startHealthCheck()
     return cleanup
   }, [startHealthCheck])
+
+  // Resolve desktop runtime version from Electron main process.
+  useEffect(() => {
+    const desktopApi = (window as any)?.desktop
+    desktopApi?.app?.getVersion?.()
+      .then((result: { version?: string }) => {
+        if (result?.version) {
+          setAppVersion(result.version)
+        }
+      })
+      .catch(() => {
+        // Keep fallback version if desktop bridge is unavailable.
+      })
+  }, [])
 
   const formatLastCheck = () => {
     if (!lastHealthCheck) return "Never"
@@ -100,7 +115,7 @@ export function Header() {
                 {isSingleModule() ? getModuleName() : "EV Analysis Platform"}
               </span>
               <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 border border-emerald-500/30">
-                v0.1.1
+                v{appVersion}
               </span>
             </div>
           </div>

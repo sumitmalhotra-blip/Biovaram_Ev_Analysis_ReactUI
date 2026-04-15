@@ -63,6 +63,10 @@ async function boot() {
       baseUrl: backendManager.getBaseUrl(),
     }));
 
+    ipcMain.handle("app:getVersion", async () => ({
+      version: app.getVersion(),
+    }));
+
     if (app.isPackaged || allowDevUpdates) {
       try {
         const { registerUpdater, checkPreviousUpdateAttempt } = require("./updater");

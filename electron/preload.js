@@ -14,4 +14,7 @@ contextBridge.exposeInMainWorld("desktop", {
   backend: {
     getStatus: () => ipcRenderer.invoke("backend:status"),
   },
+  app: {
+    getVersion: () => ipcRenderer.invoke("app:getVersion"),
+  },
 });
