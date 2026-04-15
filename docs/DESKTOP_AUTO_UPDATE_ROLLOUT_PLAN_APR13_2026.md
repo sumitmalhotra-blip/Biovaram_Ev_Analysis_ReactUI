@@ -16,7 +16,7 @@ Status legend:
 - [ ] Release v0.1.3 pending (contains runtime version-badge fix).
 
 ### Open Rollout Gaps
-- [ ] Clean-profile E2E validation pass recorded for latest candidate release.
+- [~] Clean-profile E2E validation recorded for latest candidate release (detection/download evidence captured; final interactive install-restart proof pending).
 - [ ] Rollback drill execution evidence captured and documented.
 - [ ] Code-signing setup for client-wide rollout.
 - [ ] Final handover bundle completion (user guide + known issues finalization).
@@ -209,10 +209,10 @@ Every release publishes:
 7. [x] Install-and-restart moves to new version.
 
 ### 9.2 Resilience
-1. [ ] No internet during check -> app continues normally.
+1. [~] No internet during check -> app continues normally (proxy-based simulation run; deterministic offline assertion still pending).
 2. [ ] Corrupt download -> user gets safe retry message.
 3. [x] Backend start failure -> user sees actionable message.
-4. [ ] Update server unreachable -> no crash.
+4. [~] Update server unreachable -> no crash (initial simulation inconclusive; controlled firewall test pending).
 
 ## 10) Rollback Plan
 If new release is bad:
