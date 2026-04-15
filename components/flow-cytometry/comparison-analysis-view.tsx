@@ -37,7 +37,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { cn } from "@/lib/utils"
 import { resolveFCSAxes } from "@/lib/fcs-axis-utils"
 import { deriveCompareSampleStatus } from "@/lib/fcs-compare-acceptance-helpers"
-import { apiClient } from "@/lib/api-client"
+import { apiClient, type FCSResult } from "@/lib/api-client"
 import {
   buildNormalizationSummary,
   buildReplicateGroups,
@@ -63,6 +63,56 @@ type CompareMode = "pairwise" | "multi-overlay"
 
 const DENSITY_TRIGGER_POINTS = 1400
 const COMPARE_OVERLAY_PALETTE = ["#F97316", "#0EA5E9", "#22C55E", "#EAB308", "#EF4444", "#14B8A6", "#F43F5E"]
+
+function resolvePeerColor(index: number, secondaryColor: string): string {
+  const safeSecondaryColor = typeof secondaryColor === "string" && secondaryColor.trim().length > 0
+    ? secondaryColor
+    : "#F97316"
+
+  if (index === 0) {
+    return safeSecondaryColor
+  }
+
+  const normalizedSecondary = safeSecondaryColor.trim().toLowerCase()
+  const dedupedPalette = COMPARE_OVERLAY_PALETTE.filter((color) => color.trim().toLowerCase() !== normalizedSecondary)
+  const palette = dedupedPalette.length > 0 ? dedupedPalette : COMPARE_OVERLAY_PALETTE
+  return palette[(index - 1) % palette.length]
+}
+
+function getResultEventCount(result: FCSResult | null | undefined): number {
+  return result?.total_events ?? result?.event_count ?? 0
+}
+
+function getResultD50(result: FCSResult | null | undefined): number | null {
+  if (!result) return null
+  if (typeof result.particle_size_median_nm === "number" && Number.isFinite(result.particle_size_median_nm)) {
+    return result.particle_size_median_nm
+  }
+  const d50 = result.size_statistics?.d50
+  return typeof d50 === "number" && Number.isFinite(d50) ? d50 : null
+}
+
+function getResultDebrisPct(result: FCSResult | null | undefined): number | null {
+  if (!result) return null
+  if (typeof result.debris_pct === "number" && Number.isFinite(result.debris_pct)) {
+    return result.debris_pct
+  }
+  if (typeof result.excluded_particles_pct === "number" && Number.isFinite(result.excluded_particles_pct)) {
+    return result.excluded_particles_pct
+  }
+  return null
+}
+
+function getResultFscMedian(result: FCSResult | null | undefined): number | null {
+  if (!result) return null
+  if (typeof result.fsc_median === "number" && Number.isFinite(result.fsc_median)) {
+    return result.fsc_median
+  }
+  if (typeof result.fsc_mean === "number" && Number.isFinite(result.fsc_mean)) {
+    return result.fsc_mean
+  }
+  return null
+}
 
 function getQuantile(sorted: number[], q: number): number {
   if (sorted.length === 0) return 0
@@ -1683,13 +1733,54 @@ function OverlayAnalysisPanel({
   const comparisonColorBySampleId = useMemo(() => {
     const map: Record<string, string> = {}
     comparisonSampleIds.forEach((sampleId, index) => {
-      map[sampleId] = index === 0
-        ? overlayConfig.secondaryColor
-        : COMPARE_OVERLAY_PALETTE[(index - 1) % COMPARE_OVERLAY_PALETTE.length]
+      map[sampleId] = resolvePeerColor(index, overlayConfig.secondaryColor)
     })
     return map
   }, [comparisonSampleIds, overlayConfig.secondaryColor])
+  const findResultBySharedBackendId = useCallback((sampleId: string) => {
+    const compareMetaById = fcsCompareSession.compareItemMetaById ?? {}
+    const backendSampleId = compareMetaById[sampleId]?.backendSampleId
+    if (!backendSampleId) {
+      return null
+    }
+
+    const directByBackend = fcsCompareSession.resultsBySampleId[backendSampleId]
+    if (directByBackend) {
+      return directByBackend
+    }
+
+    const siblingWithSameBackend = Object.entries(compareMetaById).find(([compareId, meta]) => {
+      if (!meta || meta.backendSampleId !== backendSampleId || compareId === sampleId) {
+        return false
+      }
+      return Boolean(fcsCompareSession.resultsBySampleId[compareId])
+    })
+
+    if (siblingWithSameBackend) {
+      return fcsCompareSession.resultsBySampleId[siblingWithSameBackend[0]] || null
+    }
+
+    if (secondaryFcsAnalysis.sampleId === backendSampleId && secondaryFcsAnalysis.results) {
+      return secondaryFcsAnalysis.results
+    }
+    if (fcsAnalysis.sampleId === backendSampleId && fcsAnalysis.results) {
+      return fcsAnalysis.results
+    }
+
+    return null
+  }, [
+    fcsCompareSession.compareItemMetaById,
+    fcsCompareSession.resultsBySampleId,
+    secondaryFcsAnalysis.sampleId,
+    secondaryFcsAnalysis.results,
+    fcsAnalysis.sampleId,
+    fcsAnalysis.results,
+  ])
   const getScatterDataForSample = useCallback((sampleId: string) => {
+    const ensureScatterArray = (value: unknown) => {
+      return Array.isArray(value) ? value : EMPTY_SCATTER_POINTS
+    }
+
     const direct = compareScatterBySampleId[sampleId]
     if (Array.isArray(direct) && direct.length > 0) {
       return direct
@@ -1697,10 +1788,27 @@ function OverlayAnalysisPanel({
 
     const backendSampleId = fcsCompareSession.compareItemMetaById?.[sampleId]?.backendSampleId
     if (!backendSampleId) {
-      return direct || EMPTY_SCATTER_POINTS
+      return ensureScatterArray(direct)
     }
 
-    return compareScatterBySampleId[backendSampleId] || direct || EMPTY_SCATTER_POINTS
+    const directByBackend = compareScatterBySampleId[backendSampleId]
+    if (Array.isArray(directByBackend) && directByBackend.length > 0) {
+      return directByBackend
+    }
+
+    const siblingWithSameBackend = Object.entries(fcsCompareSession.compareItemMetaById ?? {}).find(([compareId, meta]) => {
+      if (!meta || meta.backendSampleId !== backendSampleId || compareId === sampleId) {
+        return false
+      }
+      const siblingScatter = compareScatterBySampleId[compareId]
+      return Array.isArray(siblingScatter) && siblingScatter.length > 0
+    })
+
+    if (siblingWithSameBackend) {
+      return ensureScatterArray(compareScatterBySampleId[siblingWithSameBackend[0]])
+    }
+
+    return ensureScatterArray(directByBackend) || ensureScatterArray(direct)
   }, [compareScatterBySampleId, fcsCompareSession.compareItemMetaById])
   const [primaryScatterData, setPrimaryScatterData] = useState<Array<{ x: number; y: number; index?: number; diameter?: number }>>([])
   const [secondaryScatterData, setSecondaryScatterData] = useState<Array<{ x: number; y: number; index?: number; diameter?: number }>>([])
@@ -2054,10 +2162,11 @@ function OverlayAnalysisPanel({
     const map: Record<string, ReturnType<typeof useAnalysisStore.getState>["fcsCompareSession"]["resultsBySampleId"][string] | null> = {}
     comparisonSampleIds.forEach((sampleId) => {
       map[sampleId] = fcsCompareSession.resultsBySampleId[sampleId]
+        || findResultBySharedBackendId(sampleId)
         || (sampleId === secondaryFcsAnalysis.sampleId ? secondaryFcsAnalysis.results : null)
     })
     return map
-  }, [comparisonSampleIds, fcsCompareSession.resultsBySampleId, secondaryFcsAnalysis.results, secondaryFcsAnalysis.sampleId])
+  }, [comparisonSampleIds, fcsCompareSession.resultsBySampleId, findResultBySharedBackendId, secondaryFcsAnalysis.results, secondaryFcsAnalysis.sampleId])
 
   const multiOverlayDifferences = useMemo(() => {
     if (!effectivePrimaryResults) {
@@ -2066,13 +2175,22 @@ function OverlayAnalysisPanel({
 
     return comparisonSampleIds.map((sampleId) => {
       const sampleResults = comparisonResultsBySampleId[sampleId]
+      const primaryEvents = getResultEventCount(effectivePrimaryResults)
+      const sampleEvents = getResultEventCount(sampleResults)
+      const primaryD50 = getResultD50(effectivePrimaryResults)
+      const sampleD50 = getResultD50(sampleResults)
+      const primaryFsc = getResultFscMedian(effectivePrimaryResults)
+      const sampleFsc = getResultFscMedian(sampleResults)
+      const primaryDebris = getResultDebrisPct(effectivePrimaryResults)
+      const sampleDebris = getResultDebrisPct(sampleResults)
+
       return {
         sampleId,
         label: sampleLabelsById[sampleId] || sampleId,
-        eventDiff: (sampleResults?.total_events || 0) - (effectivePrimaryResults.total_events || 0),
-        d50Diff: (sampleResults?.size_statistics?.d50 || 0) - (effectivePrimaryResults.size_statistics?.d50 || 0),
-        fscMedianDiff: (sampleResults?.fsc_median || 0) - (effectivePrimaryResults.fsc_median || 0),
-        debrisDiff: (sampleResults?.debris_pct || 0) - (effectivePrimaryResults.debris_pct || 0),
+        eventDiff: sampleEvents - primaryEvents,
+        d50Diff: (sampleD50 != null && primaryD50 != null) ? (sampleD50 - primaryD50) : null,
+        fscMedianDiff: (sampleFsc != null && primaryFsc != null) ? (sampleFsc - primaryFsc) : null,
+        debrisDiff: (sampleDebris != null && primaryDebris != null) ? (sampleDebris - primaryDebris) : null,
       }
     })
   }, [comparisonResultsBySampleId, comparisonSampleIds, effectivePrimaryResults, sampleLabelsById])
@@ -2196,7 +2314,7 @@ function OverlayAnalysisPanel({
             <CardContent className="grid grid-cols-2 gap-2 text-sm">
               <div>
                 <p className="text-muted-foreground text-xs">Events</p>
-                <p className="font-mono font-medium">{effectivePrimaryResults.total_events?.toLocaleString()}</p>
+                <p className="font-mono font-medium">{getResultEventCount(effectivePrimaryResults).toLocaleString()}</p>
               </div>
               <div>
                 <p className="text-muted-foreground text-xs">Rendered</p>
@@ -2204,11 +2322,11 @@ function OverlayAnalysisPanel({
               </div>
               <div>
                 <p className="text-muted-foreground text-xs">D50</p>
-                <p className="font-mono font-medium">{effectivePrimaryResults.size_statistics?.d50?.toFixed(1) || "N/A"} nm</p>
+                <p className="font-mono font-medium">{getResultD50(effectivePrimaryResults)?.toFixed(1) || "N/A"} nm</p>
               </div>
               <div>
                 <p className="text-muted-foreground text-xs">Debris %</p>
-                <p className="font-mono font-medium">{effectivePrimaryResults.debris_pct?.toFixed(1) || "N/A"}%</p>
+                <p className="font-mono font-medium">{getResultDebrisPct(effectivePrimaryResults)?.toFixed(1) || "N/A"}%</p>
               </div>
             </CardContent>
           </Card>
@@ -2216,11 +2334,18 @@ function OverlayAnalysisPanel({
           {comparisonSampleIds.map((sampleId) => {
             const result = comparisonResultsBySampleId[sampleId]
             const displayed = comparisonDisplayedBySampleId[sampleId] || 0
-            const total = result?.total_events || 0
+            const total = getResultEventCount(result)
             const downsampled = total > displayed && displayed > 0
             const color = comparisonColorBySampleId[sampleId] || overlayConfig.secondaryColor
             return (
-              <Card key={sampleId} className="border-orange-500/20 bg-orange-500/5">
+              <Card
+                key={sampleId}
+                className="border"
+                style={{
+                  borderColor: `${color}40`,
+                  backgroundColor: `${color}10`,
+                }}
+              >
                 <CardHeader className="pb-2">
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
@@ -2240,11 +2365,11 @@ function OverlayAnalysisPanel({
                   </div>
                   <div>
                     <p className="text-muted-foreground text-xs">D50</p>
-                    <p className="font-mono font-medium">{result?.size_statistics?.d50?.toFixed(1) || "N/A"} nm</p>
+                    <p className="font-mono font-medium">{getResultD50(result)?.toFixed(1) || "N/A"} nm</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground text-xs">Debris %</p>
-                    <p className="font-mono font-medium">{result?.debris_pct?.toFixed(1) || "N/A"}%</p>
+                    <p className="font-mono font-medium">{getResultDebrisPct(result)?.toFixed(1) || "N/A"}%</p>
                   </div>
                 </CardContent>
                 {downsampled && (
@@ -2269,24 +2394,24 @@ function OverlayAnalysisPanel({
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <DifferenceMetric
                 label="Event Count Diff"
-                primary={effectivePrimaryResults.total_events || 0}
-                secondary={effectiveSecondaryResults.total_events || 0}
+                primary={getResultEventCount(effectivePrimaryResults)}
+                secondary={getResultEventCount(effectiveSecondaryResults)}
               />
               <DifferenceMetric
                 label="D50 Size Diff"
-                primary={effectivePrimaryResults.size_statistics?.d50 || 0}
-                secondary={effectiveSecondaryResults.size_statistics?.d50 || 0}
+                primary={getResultD50(effectivePrimaryResults) || 0}
+                secondary={getResultD50(effectiveSecondaryResults) || 0}
                 unit="nm"
               />
               <DifferenceMetric
                 label="FSC Median Diff"
-                primary={effectivePrimaryResults.fsc_median || 0}
-                secondary={effectiveSecondaryResults.fsc_median || 0}
+                primary={getResultFscMedian(effectivePrimaryResults) || 0}
+                secondary={getResultFscMedian(effectiveSecondaryResults) || 0}
               />
               <DifferenceMetric
                 label="Debris % Diff"
-                primary={effectivePrimaryResults.debris_pct || 0}
-                secondary={effectiveSecondaryResults.debris_pct || 0}
+                primary={getResultDebrisPct(effectivePrimaryResults) || 0}
+                secondary={getResultDebrisPct(effectiveSecondaryResults) || 0}
                 unit="%"
                 isPercentage
               />
@@ -2306,9 +2431,9 @@ function OverlayAnalysisPanel({
               <div key={item.sampleId} className="grid grid-cols-2 md:grid-cols-5 gap-2 rounded-lg border p-2 text-xs">
                 <div className="font-medium truncate" title={item.label}>{item.label}</div>
                 <div>Events: {item.eventDiff >= 0 ? "+" : ""}{item.eventDiff.toLocaleString()}</div>
-                <div>D50: {item.d50Diff >= 0 ? "+" : ""}{item.d50Diff.toFixed(1)} nm</div>
-                <div>FSC: {item.fscMedianDiff >= 0 ? "+" : ""}{item.fscMedianDiff.toFixed(1)}</div>
-                <div>Debris: {item.debrisDiff >= 0 ? "+" : ""}{item.debrisDiff.toFixed(1)}%</div>
+                <div>D50: {item.d50Diff == null ? "N/A" : `${item.d50Diff >= 0 ? "+" : ""}${item.d50Diff.toFixed(1)} nm`}</div>
+                <div>FSC: {item.fscMedianDiff == null ? "N/A" : `${item.fscMedianDiff >= 0 ? "+" : ""}${item.fscMedianDiff.toFixed(1)}`}</div>
+                <div>Debris: {item.debrisDiff == null ? "N/A" : `${item.debrisDiff >= 0 ? "+" : ""}${item.debrisDiff.toFixed(1)}%`}</div>
               </div>
             ))}
           </CardContent>

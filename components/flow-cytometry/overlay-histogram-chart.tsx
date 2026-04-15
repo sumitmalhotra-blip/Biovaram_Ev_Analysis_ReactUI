@@ -47,6 +47,21 @@ const COMPARISON_PALETTE = [
   "#F43F5E",
 ]
 
+function resolvePeerColor(index: number, secondaryColor: string): string {
+  const safeSecondaryColor = typeof secondaryColor === "string" && secondaryColor.trim().length > 0
+    ? secondaryColor
+    : "#F97316"
+
+  if (index === 0) {
+    return safeSecondaryColor
+  }
+
+  const normalizedSecondary = safeSecondaryColor.trim().toLowerCase()
+  const dedupedPalette = COMPARISON_PALETTE.filter((color) => color.trim().toLowerCase() !== normalizedSecondary)
+  const palette = dedupedPalette.length > 0 ? dedupedPalette : COMPARISON_PALETTE
+  return palette[(index - 1) % palette.length]
+}
+
 function extractHistogramValue(point: { x: number; y: number; diameter?: number }, parameter: string): number | null {
   if (parameter === "FSC-A") return point.x
   if (parameter === "SSC-A") return point.y
@@ -304,6 +319,7 @@ export function OverlayHistogramChart({
   const secondarySampleId = secondaryFcsAnalysis.sampleId
   const resolveScatterSeries = useMemo(() => {
     const compareMetaById = fcsCompareSession.compareItemMetaById ?? {}
+    const ensureScatterArray = (value: unknown) => (Array.isArray(value) ? value : [])
     return (sampleId: string) => {
       const direct = compareScatterBySampleId[sampleId]
       if (Array.isArray(direct) && direct.length > 0) {
@@ -312,10 +328,27 @@ export function OverlayHistogramChart({
 
       const backendSampleId = compareMetaById[sampleId]?.backendSampleId
       if (!backendSampleId) {
-        return direct || []
+        return ensureScatterArray(direct)
       }
 
-      return compareScatterBySampleId[backendSampleId] || direct || []
+      const directByBackend = compareScatterBySampleId[backendSampleId]
+      if (Array.isArray(directByBackend) && directByBackend.length > 0) {
+        return directByBackend
+      }
+
+      const siblingWithSameBackend = Object.entries(compareMetaById).find(([compareId, meta]) => {
+        if (!meta || meta.backendSampleId !== backendSampleId || compareId === sampleId) {
+          return false
+        }
+        const siblingScatter = compareScatterBySampleId[compareId]
+        return Array.isArray(siblingScatter) && siblingScatter.length > 0
+      })
+
+      if (siblingWithSameBackend) {
+        return ensureScatterArray(compareScatterBySampleId[siblingWithSameBackend[0]])
+      }
+
+      return ensureScatterArray(directByBackend) || ensureScatterArray(direct)
     }
   }, [compareScatterBySampleId, fcsCompareSession.compareItemMetaById])
   const comparisonSampleIds = useMemo(
@@ -326,11 +359,7 @@ export function OverlayHistogramChart({
   const sampleColorMap = useMemo(() => {
     const map: Record<string, string> = {}
     comparisonSampleIds.forEach((sampleId, index) => {
-      if (index === 0) {
-        map[sampleId] = overlayConfig.secondaryColor
-      } else {
-        map[sampleId] = COMPARISON_PALETTE[(index - 1) % COMPARISON_PALETTE.length]
-      }
+      map[sampleId] = resolvePeerColor(index, overlayConfig.secondaryColor)
     })
     return map
   }, [comparisonSampleIds, overlayConfig.secondaryColor])
@@ -579,7 +608,8 @@ export function OverlayHistogramChart({
   ])
 
   const hasOverlay = overlayConfig.enabled && comparisonSampleIds.length > 0
-  const { data: chartData, isApproximate } = histogramData
+  const chartData = Array.isArray(histogramData.data) ? histogramData.data : []
+  const isApproximate = Boolean(histogramData.isApproximate)
   const primaryTotalEvents = primaryResults?.total_events || 0
   const secondaryTotalEvents = secondaryResults?.total_events || 0
   const primaryRenderedEvents = primaryScatter.length

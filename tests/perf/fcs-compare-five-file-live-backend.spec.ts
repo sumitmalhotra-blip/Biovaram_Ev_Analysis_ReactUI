@@ -208,9 +208,19 @@ test("FCS compare five-file live-backend checklist", async ({ page, request }) =
   await expect(overlayTab).toBeVisible({ timeout: 30000 })
   await overlayTab.click()
 
-  const multiOverlayButton = page.getByRole("button", { name: /Multi-overlay/i }).first()
-  if (await multiOverlayButton.isVisible().catch(() => false)) {
-    await multiOverlayButton.click({ force: true })
+  const multiOverlayActiveBadge = page.getByText(/Multi-overlay Active/i).first()
+  if (!(await multiOverlayActiveBadge.isVisible().catch(() => false))) {
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const multiOverlayButton = page.getByRole("button", { name: /Multi-overlay/i }).first()
+      if (!(await multiOverlayButton.isVisible().catch(() => false))) {
+        continue
+      }
+
+      await multiOverlayButton.click({ force: true, timeout: 5000 }).catch(() => {})
+      if (await multiOverlayActiveBadge.isVisible().catch(() => false)) {
+        break
+      }
+    }
   }
 
   const overlaySeriesBadge = page.getByText(/Overlay\s+\d+\s+series/i).first()
