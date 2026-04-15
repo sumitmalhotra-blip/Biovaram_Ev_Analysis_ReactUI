@@ -83,6 +83,10 @@ foreach ($file in $requiredFiles) {
 Write-Host "Resolving release for $tag..." -ForegroundColor Yellow
 $release = Get-ReleaseByTag -Tag $tag
 
+if ($release -is [System.Array]) {
+    $release = $release | Select-Object -First 1
+}
+
 if (-not $release) {
     Write-Host "Release not found, creating published release for $tag..." -ForegroundColor Yellow
     $release = Invoke-GitHubJson -Method POST -Uri "https://api.github.com/repos/$Owner/$Repo/releases" -Body @{
@@ -102,7 +106,7 @@ if ($release.draft) {
     }
 }
 
-$uploadBase = ($release.upload_url -replace '\{\?name,label\}$', '')
+$uploadBase = ((@($release.upload_url)[0]).Split('{')[0]).Trim()
 if (-not $uploadBase) {
     throw "Could not resolve upload URL from release object."
 }
