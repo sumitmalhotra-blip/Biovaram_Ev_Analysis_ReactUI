@@ -227,6 +227,12 @@ export function ComparisonAnalysisView() {
     [compareSampleIds, replicateGroupingMode]
   )
   const primarySampleId = fcsAnalysis.sampleId
+  const primaryCompareSampleId = useMemo(() => {
+    if (fcsCompareSession.primarySampleId && compareSampleIds.includes(fcsCompareSession.primarySampleId)) {
+      return fcsCompareSession.primarySampleId
+    }
+    return compareSampleIds[0] ?? null
+  }, [fcsCompareSession.primarySampleId, compareSampleIds])
   const comparisonSampleId = secondaryFcsAnalysis.sampleId
   const canShowOverlay = compareSampleIds.length > 1
   const sessionCardSampleIds = useMemo(() => {
@@ -240,19 +246,16 @@ export function ComparisonAnalysisView() {
   }, [compareSampleIds, fcsAnalysis.sampleId, secondaryFcsAnalysis.sampleId])
 
   const peerOptions = useMemo(
-    () => compareSampleIds.filter((id) => id !== primarySampleId),
-    [compareSampleIds, primarySampleId]
+    () => compareSampleIds.filter((id) => id !== primaryCompareSampleId),
+    [compareSampleIds, primaryCompareSampleId]
   )
 
   const effectivePeerSampleId = useMemo(() => {
-    if (activePeerSampleId && activePeerSampleId !== primarySampleId && compareSampleIds.includes(activePeerSampleId)) {
+    if (activePeerSampleId && activePeerSampleId !== primaryCompareSampleId && compareSampleIds.includes(activePeerSampleId)) {
       return activePeerSampleId
     }
-    if (secondaryFcsAnalysis.sampleId && secondaryFcsAnalysis.sampleId !== primarySampleId && compareSampleIds.includes(secondaryFcsAnalysis.sampleId)) {
-      return secondaryFcsAnalysis.sampleId
-    }
     return peerOptions[0] ?? null
-  }, [activePeerSampleId, compareSampleIds, peerOptions, primarySampleId, secondaryFcsAnalysis.sampleId])
+  }, [activePeerSampleId, compareSampleIds, peerOptions, primaryCompareSampleId])
 
   const canUseMultiOverlay = canShowOverlay
 
@@ -775,8 +778,8 @@ export function ComparisonAnalysisView() {
       const error = compareErrorsBySampleId[sampleId] || fcsCompareSession.errorBySampleId[sampleId]
       const hasResult = Boolean(
         fcsCompareSession.resultsBySampleId[sampleId] ||
-        (sampleId === primarySampleId && hasPrimaryResults) ||
-        (sampleId === comparisonSampleId && hasComparisonResults)
+        (sampleId === primaryCompareSampleId && hasPrimaryResults) ||
+        (sampleId === effectivePeerSampleId && hasComparisonResults)
       )
 
       if (isLoading) {
@@ -798,8 +801,8 @@ export function ComparisonAnalysisView() {
     fcsCompareSession.loadingBySampleId,
     fcsCompareSession.errorBySampleId,
     fcsCompareSession.resultsBySampleId,
-    primarySampleId,
-    comparisonSampleId,
+    primaryCompareSampleId,
+    effectivePeerSampleId,
     hasPrimaryResults,
     hasComparisonResults,
   ])
@@ -866,14 +869,14 @@ export function ComparisonAnalysisView() {
   }, [resetSecondaryFCSAnalysis, setOverlayConfig, toast])
 
   const primaryStatus = deriveCompareSampleStatus({
-    sampleId: primarySampleId,
+    sampleId: primaryCompareSampleId,
     loadingBySampleId: compareLoadingBySampleId,
     errorsBySampleId: compareErrorsBySampleId,
     hasResults: hasPrimaryResults,
   })
 
   const comparisonStatus = deriveCompareSampleStatus({
-    sampleId: comparisonSampleId,
+    sampleId: effectivePeerSampleId,
     loadingBySampleId: compareLoadingBySampleId,
     errorsBySampleId: compareErrorsBySampleId,
     hasResults: hasComparisonResults,
@@ -1311,7 +1314,7 @@ export function ComparisonAnalysisView() {
           replicateGroups={replicateGroups}
           visibleSampleIds={visibleSampleIds}
           compareScatterBySampleId={fcsCompareSession.scatterBySampleId}
-          primarySampleId={primarySampleId}
+          primaryCompareSampleId={primaryCompareSampleId}
           sampleLabelsById={Object.fromEntries(
             compareSampleIds.map((id) => [id, getCompareDisplayLabel(id)])
           )}
@@ -1614,7 +1617,7 @@ function OverlayAnalysisPanel({
   replicateGroups,
   visibleSampleIds,
   compareScatterBySampleId,
-  primarySampleId,
+  primaryCompareSampleId,
   sampleLabelsById,
   scatterPointCap,
 }: {
@@ -1662,7 +1665,7 @@ function OverlayAnalysisPanel({
   replicateGroups: Array<{ id: string; label: string; sampleIds: string[] }>
   visibleSampleIds: string[]
   compareScatterBySampleId: Record<string, Array<{ x: number; y: number; index?: number; diameter?: number }>>
-  primarySampleId: string | null
+  primaryCompareSampleId: string | null
   sampleLabelsById: Record<string, string>
   scatterPointCap: number
 }) {
@@ -1673,8 +1676,8 @@ function OverlayAnalysisPanel({
   const effectivePrimaryResults = primaryResults ?? secondaryResults
   const effectiveSecondaryResults = secondaryResults ?? primaryResults
   const comparisonSampleIds = useMemo(
-    () => visibleSampleIds.filter((sampleId) => sampleId && sampleId !== primarySampleId),
-    [visibleSampleIds, primarySampleId]
+    () => visibleSampleIds.filter((sampleId) => sampleId && sampleId !== primaryCompareSampleId),
+    [visibleSampleIds, primaryCompareSampleId]
   )
   const isMultiOverlay = overlayConfig.enabled && comparisonSampleIds.length > 1
   const comparisonColorBySampleId = useMemo(() => {
@@ -1686,6 +1689,19 @@ function OverlayAnalysisPanel({
     })
     return map
   }, [comparisonSampleIds, overlayConfig.secondaryColor])
+  const getScatterDataForSample = useCallback((sampleId: string) => {
+    const direct = compareScatterBySampleId[sampleId]
+    if (Array.isArray(direct) && direct.length > 0) {
+      return direct
+    }
+
+    const backendSampleId = fcsCompareSession.compareItemMetaById?.[sampleId]?.backendSampleId
+    if (!backendSampleId) {
+      return direct || EMPTY_SCATTER_POINTS
+    }
+
+    return compareScatterBySampleId[backendSampleId] || direct || EMPTY_SCATTER_POINTS
+  }, [compareScatterBySampleId, fcsCompareSession.compareItemMetaById])
   const [primaryScatterData, setPrimaryScatterData] = useState<Array<{ x: number; y: number; index?: number; diameter?: number }>>([])
   const [secondaryScatterData, setSecondaryScatterData] = useState<Array<{ x: number; y: number; index?: number; diameter?: number }>>([])
   const [scatterDensityMode, setScatterDensityMode] = useState<ScatterDensityMode>("auto")
@@ -1773,16 +1789,17 @@ function OverlayAnalysisPanel({
     }
 
     const merged = visibleSampleIds
-      .filter((sampleId) => sampleId !== primarySampleId)
-      .flatMap((sampleId) => compareScatterBySampleId[sampleId] || [])
+      .filter((sampleId) => sampleId !== primaryCompareSampleId)
+      .flatMap((sampleId) => getScatterDataForSample(sampleId))
       .slice(0, scatterPointCap)
 
     return merged.length > 0 ? merged : secondaryScatterData
   }, [
     replicateRenderMode,
     visibleSampleIds,
-    primarySampleId,
+    primaryCompareSampleId,
     compareScatterBySampleId,
+    getScatterDataForSample,
     scatterPointCap,
     secondaryScatterData,
   ])
@@ -1876,7 +1893,7 @@ function OverlayAnalysisPanel({
       if (sampleId === secondaryFcsAnalysis.sampleId && secondaryScatterData.length > 0) {
         comparisonScatterBySampleId[sampleId] = secondaryScatterData
       } else {
-        comparisonScatterBySampleId[sampleId] = compareScatterBySampleId[sampleId] || []
+        comparisonScatterBySampleId[sampleId] = getScatterDataForSample(sampleId)
       }
     })
 
@@ -1884,9 +1901,9 @@ function OverlayAnalysisPanel({
       ...primaryScatterData.map((point) => ({
         x: point.x,
         y: point.y,
-        label: sampleLabelsById[primarySampleId || ""] || fcsAnalysis.file?.name || "Reference",
+        label: sampleLabelsById[primaryCompareSampleId || ""] || fcsAnalysis.file?.name || "Reference",
         category: "primary",
-        sampleId: primarySampleId,
+        sampleId: primaryCompareSampleId,
       })),
       ...(isMultiOverlay
         ? comparisonSampleIds.flatMap((sampleId) =>
@@ -1940,12 +1957,13 @@ function OverlayAnalysisPanel({
   }, [
     compareScatterBySampleId,
     comparisonSampleIds,
+    getScatterDataForSample,
     graphTitle,
     isMultiOverlay,
     overlayConfig.primaryColor,
     overlayConfig.secondaryColor,
     pinChart,
-    primarySampleId,
+    primaryCompareSampleId,
     primaryAxisResolution.resolvedX,
     primaryAxisResolution.resolvedY,
     primaryScatterData,
@@ -1961,7 +1979,7 @@ function OverlayAnalysisPanel({
       ? comparisonSampleIds.flatMap((sampleId) => {
           const points = (sampleId === secondaryFcsAnalysis.sampleId && secondaryScatterData.length > 0)
             ? secondaryScatterData
-            : (compareScatterBySampleId[sampleId] || [])
+            : getScatterDataForSample(sampleId)
           return points.map((point) =>
             `${sampleLabelsById[sampleId] || sampleId},${sampleId},${comparisonAxisResolution.resolvedX},${comparisonAxisResolution.resolvedY},${point.x},${point.y},${point.index ?? ""},${point.diameter ?? ""}`
           )
@@ -1973,7 +1991,7 @@ function OverlayAnalysisPanel({
     const rows = [
       "series,sample_id,x_channel,y_channel,x,y,index,diameter",
       ...primaryScatterData.map((point) =>
-        `primary,${fcsAnalysis.sampleId || ""},${primaryAxisResolution.resolvedX},${primaryAxisResolution.resolvedY},${point.x},${point.y},${point.index ?? ""},${point.diameter ?? ""}`
+        `primary,${primaryCompareSampleId || fcsAnalysis.sampleId || ""},${primaryAxisResolution.resolvedX},${primaryAxisResolution.resolvedY},${point.x},${point.y},${point.index ?? ""},${point.diameter ?? ""}`
       ),
       ...comparisonRows,
     ]
@@ -2001,6 +2019,8 @@ function OverlayAnalysisPanel({
     comparisonSampleIds,
     fcsAnalysis.sampleId,
     graphTitle,
+    primaryCompareSampleId,
+    getScatterDataForSample,
     isMultiOverlay,
     mergedComparisonScatterData,
     primaryAxisResolution.resolvedX,
@@ -2024,11 +2044,11 @@ function OverlayAnalysisPanel({
       if (sampleId === secondaryFcsAnalysis.sampleId && secondaryScatterData.length > 0) {
         map[sampleId] = secondaryScatterData.length
       } else {
-        map[sampleId] = (compareScatterBySampleId[sampleId] || []).length
+        map[sampleId] = getScatterDataForSample(sampleId).length
       }
     })
     return map
-  }, [compareScatterBySampleId, comparisonSampleIds, secondaryFcsAnalysis.sampleId, secondaryScatterData.length])
+  }, [compareScatterBySampleId, comparisonSampleIds, getScatterDataForSample, secondaryFcsAnalysis.sampleId, secondaryScatterData.length])
 
   const comparisonResultsBySampleId = useMemo(() => {
     const map: Record<string, ReturnType<typeof useAnalysisStore.getState>["fcsCompareSession"]["resultsBySampleId"][string] | null> = {}
@@ -2170,7 +2190,7 @@ function OverlayAnalysisPanel({
             <CardHeader className="pb-2">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full" style={{ backgroundColor: overlayConfig.primaryColor }} />
-                <CardTitle className="text-sm">{sampleLabelsById[primarySampleId || ""] || fcsAnalysis.file?.name || "Reference"}</CardTitle>
+                <CardTitle className="text-sm">{sampleLabelsById[primaryCompareSampleId || ""] || fcsAnalysis.file?.name || "Reference"}</CardTitle>
               </div>
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-2 text-sm">
@@ -2304,7 +2324,8 @@ function OverlayAnalysisPanel({
         onRetrySample={onRetrySample}
         replicateRenderMode={replicateRenderMode}
         visibleSampleIds={visibleSampleIds}
-        primarySampleId={primarySampleId}
+        primaryCompareSampleId={primaryCompareSampleId}
+        primarySampleId={fcsAnalysis.sampleId}
         compareScatterBySampleId={compareScatterBySampleId}
         sampleLabelsById={sampleLabelsById}
       />
@@ -2502,7 +2523,7 @@ function OverlayAnalysisPanel({
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full" style={{ backgroundColor: overlayConfig.primaryColor }} />
-                  <span className="text-sm font-medium">{sampleLabelsById[primarySampleId || ""] || fcsAnalysis.file?.name || "Reference"}</span>
+                  <span className="text-sm font-medium">{sampleLabelsById[primaryCompareSampleId || ""] || fcsAnalysis.file?.name || "Reference"}</span>
                   <Badge variant="outline" className="text-xs">{primaryDisplayed.toLocaleString()} rendered</Badge>
                   {primaryDownsampled && <Badge variant="secondary" className="text-xs">Downsampled</Badge>}
                 </div>
@@ -2526,7 +2547,7 @@ function OverlayAnalysisPanel({
               {comparisonSampleIds.map((sampleId) => {
                 const samplePoints = sampleId === secondaryFcsAnalysis.sampleId && secondaryScatterData.length > 0
                   ? secondaryScatterData
-                  : (compareScatterBySampleId[sampleId] || [])
+                  : getScatterDataForSample(sampleId)
                 const sampleResult = comparisonResultsBySampleId[sampleId]
                 const displayed = comparisonDisplayedBySampleId[sampleId] || 0
                 const total = sampleResult?.total_events || 0
@@ -2576,7 +2597,8 @@ function OverlayAnalysisPanel({
         onRetrySample={onRetrySample}
         replicateRenderMode={replicateRenderMode}
         visibleSampleIds={visibleSampleIds}
-        primarySampleId={primarySampleId}
+        primaryCompareSampleId={primaryCompareSampleId}
+        primarySampleId={fcsAnalysis.sampleId}
         compareScatterBySampleId={compareScatterBySampleId}
         sampleLabelsById={sampleLabelsById}
       />
@@ -2588,7 +2610,8 @@ function OverlayAnalysisPanel({
         onRetrySample={onRetrySample}
         replicateRenderMode={replicateRenderMode}
         visibleSampleIds={visibleSampleIds}
-        primarySampleId={primarySampleId}
+        primaryCompareSampleId={primaryCompareSampleId}
+        primarySampleId={fcsAnalysis.sampleId}
         compareScatterBySampleId={compareScatterBySampleId}
         sampleLabelsById={sampleLabelsById}
       />

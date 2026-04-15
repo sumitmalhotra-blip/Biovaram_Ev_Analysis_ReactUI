@@ -21,6 +21,7 @@ interface OverlayHistogramChartProps {
   onRetrySample?: (sampleId: string) => void
   replicateRenderMode?: "standard" | "histogram-average" | "merged-points"
   visibleSampleIds?: string[]
+  primaryCompareSampleId?: string | null
   primarySampleId?: string | null
   compareScatterBySampleId?: Record<string, Array<{ x: number; y: number; diameter?: number }>>
   sampleLabelsById?: Record<string, string>
@@ -253,6 +254,7 @@ export function OverlayHistogramChart({
   onRetrySample,
   replicateRenderMode = "standard",
   visibleSampleIds = [],
+  primaryCompareSampleId: primaryCompareSampleIdProp = null,
   primarySampleId: primarySampleIdProp = null,
   compareScatterBySampleId = {},
   sampleLabelsById = {},
@@ -261,6 +263,7 @@ export function OverlayHistogramChart({
     fcsAnalysis,
     secondaryFcsAnalysis,
     overlayConfig,
+    fcsCompareSession,
     getFCSSeriesCacheEntry,
     setFCSSeriesCacheEntry,
   } = useAnalysisStore()
@@ -276,14 +279,15 @@ export function OverlayHistogramChart({
   // Fetch primary scatter data on-demand (not stored in global state)
   const [primaryScatter, setPrimaryScatter] = useState<Array<{ x: number; y: number; diameter?: number }>>([])
   const primarySampleIdFromAnalysis = fcsAnalysis.sampleId
-  const effectivePrimarySampleId = primarySampleIdProp || primarySampleIdFromAnalysis
+  const effectivePrimaryBackendSampleId = primarySampleIdProp || primarySampleIdFromAnalysis
+  const effectivePrimaryCompareSampleId = primaryCompareSampleIdProp || primarySampleIdProp || primarySampleIdFromAnalysis
 
   useEffect(() => {
-    if (!effectivePrimarySampleId) return
+    if (!effectivePrimaryBackendSampleId) return
     let cancelled = false
     const fetchPrimaryScatter = async () => {
       try {
-        const result = await apiClient.getScatterData(effectivePrimarySampleId, 10000)
+        const result = await apiClient.getScatterData(effectivePrimaryBackendSampleId, 10000)
         if (!cancelled && result?.data) {
           setPrimaryScatter(result.data)
         }
@@ -293,14 +297,30 @@ export function OverlayHistogramChart({
     }
     fetchPrimaryScatter()
     return () => { cancelled = true }
-  }, [effectivePrimarySampleId])
+  }, [effectivePrimaryBackendSampleId])
 
   const primaryResults = fcsAnalysis.results
   const secondaryResults = secondaryFcsAnalysis.results
   const secondarySampleId = secondaryFcsAnalysis.sampleId
+  const resolveScatterSeries = useMemo(() => {
+    const compareMetaById = fcsCompareSession.compareItemMetaById ?? {}
+    return (sampleId: string) => {
+      const direct = compareScatterBySampleId[sampleId]
+      if (Array.isArray(direct) && direct.length > 0) {
+        return direct
+      }
+
+      const backendSampleId = compareMetaById[sampleId]?.backendSampleId
+      if (!backendSampleId) {
+        return direct || []
+      }
+
+      return compareScatterBySampleId[backendSampleId] || direct || []
+    }
+  }, [compareScatterBySampleId, fcsCompareSession.compareItemMetaById])
   const comparisonSampleIds = useMemo(
-    () => visibleSampleIds.filter((id) => id && id !== effectivePrimarySampleId),
-    [visibleSampleIds, effectivePrimarySampleId]
+    () => visibleSampleIds.filter((id) => id && id !== effectivePrimaryCompareSampleId),
+    [visibleSampleIds, effectivePrimaryCompareSampleId]
   )
   const isMultiOverlay = overlayConfig.enabled && comparisonSampleIds.length > 1
   const sampleColorMap = useMemo(() => {
@@ -316,7 +336,7 @@ export function OverlayHistogramChart({
   }, [comparisonSampleIds, overlayConfig.secondaryColor])
   const seriesDescriptors = useMemo<HistogramSeriesDescriptor[]>(() => {
     const descriptors: HistogramSeriesDescriptor[] = []
-    const resolvedPrimarySampleId = effectivePrimarySampleId || "primary"
+    const resolvedPrimarySampleId = effectivePrimaryCompareSampleId || "primary"
 
     descriptors.push({
       key: "primary",
@@ -361,7 +381,7 @@ export function OverlayHistogramChart({
     return descriptors
   }, [
     comparisonSampleIds,
-    effectivePrimarySampleId,
+    effectivePrimaryCompareSampleId,
     fcsAnalysis.file?.name,
     fcsAnalysis.sampleId,
     isMultiOverlay,
@@ -386,9 +406,11 @@ export function OverlayHistogramChart({
       return next
     })
   }, [seriesDescriptors])
-  const primaryLoading = !!(effectivePrimarySampleId && loadingBySampleId[effectivePrimarySampleId])
-  const secondaryLoading = !!(secondarySampleId && loadingBySampleId[secondarySampleId])
-  const primaryError = effectivePrimarySampleId ? errorsBySampleId[effectivePrimarySampleId] : undefined
+  const primaryLoadingSampleId = effectivePrimaryCompareSampleId || effectivePrimaryBackendSampleId
+  const secondaryLoadingSampleId = comparisonSampleIds[0] || secondarySampleId
+  const primaryLoading = !!(primaryLoadingSampleId && loadingBySampleId[primaryLoadingSampleId])
+  const secondaryLoading = !!(secondaryLoadingSampleId && loadingBySampleId[secondaryLoadingSampleId])
+  const primaryError = primaryLoadingSampleId ? errorsBySampleId[primaryLoadingSampleId] : undefined
   const secondaryError = secondarySampleId ? errorsBySampleId[secondarySampleId] : undefined
 
   useEffect(() => {
@@ -399,7 +421,7 @@ export function OverlayHistogramChart({
       return
     }
 
-    const mergedComparisonScatter = comparisonSampleIds.flatMap((sampleId) => compareScatterBySampleId[sampleId] || [])
+    const mergedComparisonScatter = comparisonSampleIds.flatMap((sampleId) => resolveScatterSeries(sampleId))
     const secondaryScatter = replicateRenderMode === "merged-points"
       ? mergedComparisonScatter
       : (secondaryFcsAnalysis.scatterData ?? [])
@@ -434,7 +456,7 @@ export function OverlayHistogramChart({
       }
 
       comparisonSampleIds.forEach((sampleId) => {
-        const sampleValues = (compareScatterBySampleId[sampleId] || [])
+        const sampleValues = resolveScatterSeries(sampleId)
           .map((point) => extractHistogramValue(point, parameter))
           .filter((value): value is number => value !== null && Number.isFinite(value))
         seriesValuesByKey[sampleId] = sampleValues
@@ -451,7 +473,7 @@ export function OverlayHistogramChart({
 
     if (replicateRenderMode === "histogram-average" && comparisonSampleIds.length > 0) {
       const comparisonReplicateValues = comparisonSampleIds
-        .map((sampleId) => (compareScatterBySampleId[sampleId] || [])
+        .map((sampleId) => resolveScatterSeries(sampleId)
           .map((point) => extractHistogramValue(point, parameter))
           .filter((value): value is number => value !== null && Number.isFinite(value)))
         .filter((values) => values.length > 0)
@@ -479,7 +501,7 @@ export function OverlayHistogramChart({
     }
 
     const histogramCacheKey = buildOverlayHistogramCacheKey({
-      primarySampleId: effectivePrimarySampleId,
+      primarySampleId: effectivePrimaryBackendSampleId,
       secondarySampleId,
       parameter,
       bins: workerPayload.bins,
@@ -545,12 +567,13 @@ export function OverlayHistogramChart({
     primaryScatter,
     secondaryFcsAnalysis.scatterData,
     parameter,
-    effectivePrimarySampleId,
-      secondarySampleId,
-      isMultiOverlay,
+    effectivePrimaryBackendSampleId,
+    secondarySampleId,
+    isMultiOverlay,
     replicateRenderMode,
     comparisonSampleIds,
     compareScatterBySampleId,
+    resolveScatterSeries,
     getFCSSeriesCacheEntry,
     setFCSSeriesCacheEntry,
   ])
@@ -561,7 +584,7 @@ export function OverlayHistogramChart({
   const secondaryTotalEvents = secondaryResults?.total_events || 0
   const primaryRenderedEvents = primaryScatter.length
   const secondaryRenderedEvents = (replicateRenderMode === "merged-points"
-    ? comparisonSampleIds.reduce((sum, sampleId) => sum + (compareScatterBySampleId[sampleId]?.length || 0), 0)
+    ? comparisonSampleIds.reduce((sum, sampleId) => sum + resolveScatterSeries(sampleId).length, 0)
     : (secondaryFcsAnalysis.scatterData?.length || 0))
   const downsampledPrimary = primaryTotalEvents > primaryRenderedEvents && primaryRenderedEvents > 0
   const downsampledSecondary = !isMultiOverlay && hasOverlay && secondaryTotalEvents > secondaryRenderedEvents && secondaryRenderedEvents > 0
@@ -606,8 +629,8 @@ export function OverlayHistogramChart({
             <AlertTitle>Failed to load reference sample</AlertTitle>
             <AlertDescription>{primaryError}</AlertDescription>
           </Alert>
-          {onRetrySample && effectivePrimarySampleId && (
-            <Button variant="outline" size="sm" onClick={() => onRetrySample(effectivePrimarySampleId)} className="gap-1">
+          {onRetrySample && primaryLoadingSampleId && (
+            <Button variant="outline" size="sm" onClick={() => onRetrySample(primaryLoadingSampleId)} className="gap-1">
               <RefreshCw className="h-3 w-3" />
               Retry Reference
             </Button>

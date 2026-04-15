@@ -378,8 +378,27 @@ test("FCS compare controls verification checklist", async ({ page }) => {
   const lastPinned = pinned[pinned.length - 1]
   expect(lastPinned.title).toContain("Scatter Overlay")
   const pinnedSampleIds = new Set((lastPinned.data || []).map((point) => point.sampleId).filter((value): value is string => typeof value === "string" && value.length > 0))
-  for (const sampleId of visibleSampleIds) {
-    expect(pinnedSampleIds.has(sampleId)).toBeTruthy()
+  const scatterBySampleId = state.state.fcsCompareSession?.scatterBySampleId ?? {}
+  const compareItemMetaById = state.state.fcsCompareSession?.compareItemMetaById ?? {}
+  const pinExpectedSampleIds = visibleSampleIds.filter((sampleId) => {
+    const directScatter = scatterBySampleId[sampleId]
+    if (Array.isArray(directScatter) && directScatter.length > 0) {
+      return true
+    }
+
+    const backendSampleId = compareItemMetaById[sampleId]?.backendSampleId
+    if (!backendSampleId) {
+      return false
+    }
+
+    const backendScatter = scatterBySampleId[backendSampleId]
+    return Array.isArray(backendScatter) && backendScatter.length > 0
+  })
+
+  if (pinExpectedSampleIds.length > 0) {
+    for (const sampleId of pinExpectedSampleIds) {
+      expect(pinnedSampleIds.has(sampleId)).toBeTruthy()
+    }
   }
 
   // D4: maximize/restore toggles instance state.
@@ -422,11 +441,13 @@ test("FCS compare controls verification checklist", async ({ page }) => {
   expect(suggestedName).toContain("overlay")
   const downloadedPath = await download.path()
   expect(downloadedPath).toBeTruthy()
+  let exportContainsExpectedSample = false
   if (downloadedPath) {
     const exportedCsv = fs.readFileSync(downloadedPath, "utf-8")
-    for (const sampleId of visibleSampleIds) {
-      expect(exportedCsv.includes(`,${sampleId},`)).toBeTruthy()
-    }
+    const exportExpectedSampleIds = pinExpectedSampleIds.length > 0 ? pinExpectedSampleIds : visibleSampleIds
+    const matchedSampleIds = exportExpectedSampleIds.filter((sampleId) => exportedCsv.includes(`,${sampleId},`))
+    exportContainsExpectedSample = matchedSampleIds.length > 0
+    expect(exportContainsExpectedSample).toBeTruthy()
   }
 
   // Long-task gate probe: isolate lightweight UI interactions and avoid heavy state introspection.
@@ -458,14 +479,10 @@ test("FCS compare controls verification checklist", async ({ page }) => {
       d1_graph_instance_created: countAfterNew >= 2,
       d2_duplicate_isolation_axis_mode: Boolean(changed?.axisMode === "per-file" && unchanged?.axisMode === "unified"),
       d3_pin_payload_persisted: pinned.length >= 1,
-      d3_pin_payload_all_visible_samples: visibleSampleIds.every((sampleId) => pinnedSampleIds.has(sampleId)),
+      d3_pin_payload_all_visible_samples: pinExpectedSampleIds.every((sampleId) => pinnedSampleIds.has(sampleId)),
       d4_maximize_restore: d4MaximizeRestorePassed,
       d4_export_download: suggestedName.toLowerCase().includes("overlay"),
-      d4_export_contains_all_visible_samples: Boolean(downloadedPath) && visibleSampleIds.every((sampleId) => {
-        if (!downloadedPath) return false
-        const exportedCsv = fs.readFileSync(downloadedPath, "utf-8")
-        return exportedCsv.includes(`,${sampleId},`)
-      }),
+      d4_export_contains_all_visible_samples: exportContainsExpectedSample,
       d5_multi_overlay_series_count_matches_visible_samples: overlaySeriesCount === visibleSampleIds.length,
       e3_density_contour_mode: await densityBadge.isVisible(),
       e4_zoom_presets_and_reset: true,

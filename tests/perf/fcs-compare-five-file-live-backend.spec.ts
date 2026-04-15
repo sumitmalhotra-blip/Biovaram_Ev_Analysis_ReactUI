@@ -219,7 +219,7 @@ test("FCS compare five-file live-backend checklist", async ({ page, request }) =
   const overlaySeriesMatch = overlayBadgeText.match(/Overlay\s+(\d+)\s+series/i)
   const overlaySeriesCount = overlaySeriesMatch ? Number(overlaySeriesMatch[1]) : 0
   const expectedVisibleSeriesCount = snapshot.visibleSampleIds.length
-    + (snapshot.fcsPrimarySampleId && !snapshot.visibleSampleIds.includes(snapshot.fcsPrimarySampleId) ? 1 : 0)
+    + (snapshot.primarySampleId && !snapshot.visibleSampleIds.includes(snapshot.primarySampleId) ? 1 : 0)
 
   // Pass-2 guard: pin payload should include all visible sample IDs.
   await page.getByRole("button", { name: /^Pin$/i }).click()
