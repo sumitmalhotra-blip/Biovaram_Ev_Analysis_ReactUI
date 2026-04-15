@@ -26,6 +26,7 @@ import { useShallow } from "zustand/shallow"
 import { useToast } from "@/hooks/use-toast"
 import type { FCSResult } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
+import { captureChartAsImage } from "@/components/dashboard/saved-images-gallery"
 
 interface FullAnalysisDashboardProps {
   results: FCSResult
@@ -126,11 +127,64 @@ export const FullAnalysisDashboard = memo(function FullAnalysisDashboard({
   const [expandedChart, setExpandedChart] = useState<ChartType | null>(null)
   const [highlightAnomalies, setHighlightAnomalies] = useState(true)
   const [isCompactMode, setIsCompactMode] = useState(false)
+  const chartRefs = useRef<Partial<Record<ChartType, HTMLDivElement | null>>>({})
 
   // Check if overlay mode is enabled and we have secondary data
   const hasOverlay = overlayConfig.enabled && secondaryResults !== null
 
-  const handlePin = (chartId: ChartType, chartTitle: string, chartType: "histogram" | "scatter" | "line") => {
+  const setChartRef = useCallback((chartId: ChartType, el: HTMLDivElement | null) => {
+    chartRefs.current[chartId] = el
+  }, [])
+
+  const buildChartContext = useCallback((
+    chartId: ChartType,
+    chartTitle: string,
+    chartType: "histogram" | "scatter" | "line",
+    data: Array<{ x: number; y: number; label?: string }>
+  ) => {
+    const xVals = data.map((d) => d.x).filter((v) => Number.isFinite(v))
+    const yVals = data.map((d) => d.y).filter((v) => Number.isFinite(v))
+    const xMin = xVals.length > 0 ? Math.min(...xVals) : null
+    const xMax = xVals.length > 0 ? Math.max(...xVals) : null
+    const yMin = yVals.length > 0 ? Math.min(...yVals) : null
+    const yMax = yVals.length > 0 ? Math.max(...yVals) : null
+
+    const fmt = (v: number | null) => (v == null ? "N/A" : Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 }))
+
+    const lines = [
+      `Chart: ${chartTitle}`,
+      `Chart Id: ${chartId}`,
+      `Chart Type: ${chartType}`,
+      `Sample Id: ${sampleId || "Unknown"}`,
+      `Point Count: ${data.length.toLocaleString()}`,
+      `X Range: ${fmt(xMin)} to ${fmt(xMax)}`,
+      `Y Range: ${fmt(yMin)} to ${fmt(yMax)}`,
+      `Overlay Active: ${hasOverlay ? "Yes" : "No"}`,
+      `Anomaly Highlighting: ${highlightAnomalies ? "On" : "Off"}`,
+      `Primary Axes: ${xChannel} vs ${yChannel}`,
+      `Total Events: ${(results.total_events || results.event_count || 0).toLocaleString()}`,
+    ]
+
+    if (results.particle_size_median_nm != null) {
+      lines.push(`Median Particle Size: ${results.particle_size_median_nm.toFixed(2)} nm`)
+    }
+
+    if (anomalyData?.total_anomalies != null) {
+      lines.push(`Anomalies: ${anomalyData.total_anomalies.toLocaleString()} (${anomalyData.anomaly_percentage.toFixed(2)}%)`)
+    }
+
+    return lines.join("\n")
+  }, [
+    anomalyData,
+    hasOverlay,
+    highlightAnomalies,
+    results,
+    sampleId,
+    xChannel,
+    yChannel,
+  ])
+
+  const handlePin = async (chartId: ChartType, chartTitle: string, chartType: "histogram" | "scatter" | "line") => {
     let pinData: Array<{ x: number; y: number; label?: string }> = []
     let pinConfig: { xAxisLabel?: string; yAxisLabel?: string; color?: string; secondaryColor?: string } = {}
 
@@ -238,6 +292,19 @@ export const FullAnalysisDashboard = memo(function FullAnalysisDashboard({
       return
     }
 
+    let snapshotDataUrl: string | undefined
+    let snapshotThumbnailUrl: string | undefined
+    const chartElement = chartRefs.current[chartId]
+    if (chartElement) {
+      const captured = await captureChartAsImage(chartElement, chartTitle, "Flow Cytometry", chartType)
+      if (captured) {
+        snapshotDataUrl = captured.dataUrl
+        snapshotThumbnailUrl = captured.thumbnailUrl
+      }
+    }
+
+    const chartContext = buildChartContext(chartId, chartTitle, chartType, pinData)
+
     pinChart({
       id: crypto.randomUUID(),
       title: chartTitle,
@@ -246,6 +313,12 @@ export const FullAnalysisDashboard = memo(function FullAnalysisDashboard({
       type: chartType,
       data: pinData,
       config: pinConfig,
+      snapshotDataUrl,
+      snapshotThumbnailUrl,
+      chartContext,
+      sourceData: {
+        fcsResults: results,
+      },
     })
     toast({
       title: "Pinned to Dashboard",
@@ -283,6 +356,14 @@ export const FullAnalysisDashboard = memo(function FullAnalysisDashboard({
     [scatterData]
   )
 
+  // If caller does not provide secondarySizeData, derive it from secondary scatter diameters.
+  const effectiveSecondarySizeData = useMemo(() => {
+    if ((secondarySizeData?.length || 0) > 0) return secondarySizeData
+    return secondaryScatterData
+      ?.filter((p) => p.diameter != null && p.diameter > 0)
+      .map((p) => p.diameter as number)
+  }, [secondarySizeData, secondaryScatterData])
+
   // Memoize theory chart data
   const theoryPrimaryData = useMemo(() => 
     scatterData.length > 0
@@ -314,7 +395,7 @@ export const FullAnalysisDashboard = memo(function FullAnalysisDashboard({
             d10={results.size_statistics?.d10}
             d50={results.size_statistics?.d50}
             d90={results.size_statistics?.d90}
-            secondarySizeData={hasOverlay ? secondarySizeData : undefined}
+            secondarySizeData={hasOverlay ? effectiveSecondarySizeData : undefined}
             secondaryD10={hasOverlay ? secondaryResults?.size_statistics?.d10 : undefined}
             secondaryD50={hasOverlay ? secondaryResults?.size_statistics?.d50 : undefined}
             secondaryD90={hasOverlay ? secondaryResults?.size_statistics?.d90 : undefined}
@@ -434,7 +515,11 @@ export const FullAnalysisDashboard = memo(function FullAnalysisDashboard({
             </div>
           </div>
         </CardHeader>
-        <CardContent>{renderChart(expandedChart)}</CardContent>
+        <CardContent>
+          <div ref={(el) => setChartRef(expandedChart, el)} data-chart-id={expandedChart}>
+            {renderChart(expandedChart)}
+          </div>
+        </CardContent>
       </Card>
     )
   }
@@ -540,9 +625,14 @@ export const FullAnalysisDashboard = memo(function FullAnalysisDashboard({
 
               {/* Chart — lazy-rendered when scrolled into view */}
               <div className="cursor-pointer" onClick={() => handleExpand(config.id)}>
-                <LazyChart fallbackHeight={isCompactMode ? 200 : 320}>
-                  {renderChart(config.id, isCompactMode)}
-                </LazyChart>
+                <div
+                  ref={(el) => setChartRef(config.id, el)}
+                  data-chart-id={config.id}
+                >
+                  <LazyChart fallbackHeight={isCompactMode ? 200 : 320}>
+                    {renderChart(config.id, isCompactMode)}
+                  </LazyChart>
+                </div>
               </div>
 
               {/* Quick Stats Badge */}

@@ -270,6 +270,27 @@ test("FCS compare controls verification checklist", async ({ page }) => {
   ])
   await page.getByRole("button", { name: /Upload to Compare Session/i }).click()
 
+  // Data visibility guard across compare tabs: ensure charts are fed with real sample/result context.
+  const referenceTab = page.getByRole("tab", { name: /^Reference/i })
+  const sessionPeerTab = page.getByRole("tab", { name: /^Session Peer/i })
+  const sampleDetailTab = page.getByRole("tab", { name: /Sample Detail/i })
+
+  await expect(referenceTab).toBeVisible({ timeout: 30000 })
+  await referenceTab.click()
+  await expect(page.getByText(/0 channels/i)).toHaveCount(0)
+  await expect(page.getByText(/Sample: Unknown/i)).toHaveCount(0)
+
+  await expect(sessionPeerTab).toBeVisible({ timeout: 30000 })
+  await sessionPeerTab.click()
+  await expect(page.getByText(/0 channels/i)).toHaveCount(0)
+  await expect(page.getByText(/Sample: Unknown/i)).toHaveCount(0)
+
+  await expect(sampleDetailTab).toBeVisible({ timeout: 30000 })
+  await sampleDetailTab.click()
+  await expect(page.getByText(/Sample Detail View/i)).toBeVisible({ timeout: 30000 })
+  await expect(page.getByText(/0 channels/i)).toHaveCount(0)
+  await expect(page.getByText(/Sample: Unknown/i)).toHaveCount(0)
+
   const overlayTab = page.getByRole("tab", { name: /^Overlay/i })
   await expect(overlayTab).toBeVisible({ timeout: 30000 })
   await expect(overlayTab).toBeEnabled({ timeout: 30000 })

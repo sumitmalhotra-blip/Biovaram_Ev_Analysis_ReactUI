@@ -334,42 +334,64 @@ export const ScatterPlotChart = memo(function ScatterPlotChart({
 
   // Handle mouse wheel zoom
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    const container = containerRef.current
+    if (!container) return
+
+    const rect = container.getBoundingClientRect()
+    const localX = e.clientX - rect.left
+    const localY = e.clientY - rect.top
+
+    if (!isInsideChartArea(localX, localY, rect)) return
+
     e.preventDefault()
+
     const zoomFactor = e.deltaY > 0 ? 1.2 : 0.8 // Scroll down = zoom out, scroll up = zoom in
-    
     const currentXMin = zoom.xMin ?? dataBounds.minX
     const currentXMax = zoom.xMax ?? dataBounds.maxX
     const currentYMin = zoom.yMin ?? dataBounds.minY
     const currentYMax = zoom.yMax ?? dataBounds.maxY
-    
-    const xCenter = (currentXMin + currentXMax) / 2
-    const yCenter = (currentYMin + currentYMax) / 2
-    const xRange = (currentXMax - currentXMin) * zoomFactor
-    const yRange = (currentYMax - currentYMin) * zoomFactor
-    
-    // Don't zoom out beyond original bounds
-    if (zoomFactor > 1) {
-      const newXMin = Math.max(dataBounds.minX, xCenter - xRange / 2)
-      const newXMax = Math.min(dataBounds.maxX, xCenter + xRange / 2)
-      const newYMin = Math.max(dataBounds.minY, yCenter - yRange / 2)
-      const newYMax = Math.min(dataBounds.maxY, yCenter + yRange / 2)
-      
-      // If we've reached original bounds, reset to null
-      if (newXMin <= dataBounds.minX && newXMax >= dataBounds.maxX) {
-        setZoom({ xMin: null, xMax: null, yMin: null, yMax: null })
-      } else {
-        setZoom({ xMin: newXMin, xMax: newXMax, yMin: newYMin, yMax: newYMax })
-      }
-    } else {
-      // Zooming in
-      setZoom({
-        xMin: xCenter - xRange / 2,
-        xMax: xCenter + xRange / 2,
-        yMin: yCenter - yRange / 2,
-        yMax: yCenter + yRange / 2,
-      })
+
+    const focus = pixelToData(localX, localY, rect)
+
+    let nextXMin = focus.x - (focus.x - currentXMin) * zoomFactor
+    let nextXMax = focus.x + (currentXMax - focus.x) * zoomFactor
+    let nextYMin = focus.y - (focus.y - currentYMin) * zoomFactor
+    let nextYMax = focus.y + (currentYMax - focus.y) * zoomFactor
+
+    const xSpan = nextXMax - nextXMin
+    const ySpan = nextYMax - nextYMin
+    const baseXSpan = dataBounds.maxX - dataBounds.minX
+    const baseYSpan = dataBounds.maxY - dataBounds.minY
+
+    if (xSpan >= baseXSpan && ySpan >= baseYSpan) {
+      setZoom({ xMin: null, xMax: null, yMin: null, yMax: null })
+      return
     }
-  }, [zoom, dataBounds])
+
+    if (nextXMin < dataBounds.minX) {
+      const d = dataBounds.minX - nextXMin
+      nextXMin += d
+      nextXMax += d
+    }
+    if (nextXMax > dataBounds.maxX) {
+      const d = nextXMax - dataBounds.maxX
+      nextXMin -= d
+      nextXMax -= d
+    }
+
+    if (nextYMin < dataBounds.minY) {
+      const d = dataBounds.minY - nextYMin
+      nextYMin += d
+      nextYMax += d
+    }
+    if (nextYMax > dataBounds.maxY) {
+      const d = nextYMax - dataBounds.maxY
+      nextYMin -= d
+      nextYMax -= d
+    }
+
+    setZoom({ xMin: nextXMin, xMax: nextXMax, yMin: nextYMin, yMax: nextYMax })
+  }, [zoom, dataBounds, isInsideChartArea, pixelToData])
 
   // Save current selection as a named gate
   const handleSaveGate = useCallback(() => {

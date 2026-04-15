@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, memo } from "react"
+import { useState, useMemo, useRef, useCallback, memo } from "react"
 import {
   ComposedChart,
   Line,
@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Eye, EyeOff, Layers } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { computeCursorZoomWindow, computePannedWindow, getPlotRatiosFromMouse, type ZoomWindow } from "./wheel-zoom-utils"
 
 interface TheoryVsMeasuredChartProps {
   // Primary data props
@@ -25,6 +26,15 @@ interface TheoryVsMeasuredChartProps {
   // Secondary data props for overlay
   secondaryMeasuredData?: Array<{ diameter: number; intensity: number }>
   height?: number
+}
+
+const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value))
+
+const median = (values: number[]): number => {
+  if (values.length === 0) return 1
+  const sorted = [...values].sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]
 }
 
 // Generate Mie theory curve and measured data
@@ -61,11 +71,40 @@ const generateData = (
   }
   
   const hasPrimaryData = primaryBins.size > 0
+  const hasSecondaryData = secondaryBins.size > 0
+
+  const rawTheoryByDiameter = new Map<number, number>()
+  for (let diameter = 20; diameter <= 500; diameter += 10) {
+    const rawTheory = Math.pow(diameter / 100, 4) * 1000 * Math.exp(-diameter / 300)
+    rawTheoryByDiameter.set(diameter, rawTheory)
+  }
+
+  const scaleRatios: number[] = []
+
+  const pushScaleRatiosFromBins = (bins: Map<number, number[]>) => {
+    for (const [diameter, values] of bins.entries()) {
+      const rawTheory = rawTheoryByDiameter.get(diameter)
+      if (!rawTheory || rawTheory <= 0 || values.length === 0) continue
+      const measuredMedian = median(values)
+      if (measuredMedian > 0) {
+        scaleRatios.push(measuredMedian / rawTheory)
+      }
+    }
+  }
+
+  if (hasPrimaryData) {
+    pushScaleRatiosFromBins(primaryBins)
+  } else if (hasSecondaryData) {
+    pushScaleRatiosFromBins(secondaryBins)
+  }
+
+  const theoryScale = scaleRatios.length > 0 ? clamp(median(scaleRatios), 0.05, 1000) : 1
 
   for (let diameter = 20; diameter <= 500; diameter += 10) {
     // Simplified Mie scattering intensity (theoretical approximation)
     // Uses Rayleigh-Mie transition: intensity ~ d^4 for small particles, with exponential decay for large
-    const theory = Math.pow(diameter / 100, 4) * 1000 * Math.exp(-diameter / 300)
+    const rawTheory = rawTheoryByDiameter.get(diameter) ?? 0
+    const theory = rawTheory * theoryScale
     
     const index = (diameter - 20) / 10
     
@@ -119,6 +158,10 @@ export const TheoryVsMeasuredChart = memo(function TheoryVsMeasuredChart({
   const [showPrimary, setShowPrimary] = useState(true)
   const [showSecondary, setShowSecondary] = useState(true)
   const [showTheory, setShowTheory] = useState(true)
+  const [zoom, setZoom] = useState<ZoomWindow>({ xMin: null, xMax: null, yMin: null, yMax: null })
+  const chartContainerRef = useRef<HTMLDivElement>(null)
+  const [isPanning, setIsPanning] = useState(false)
+  const [lastPanPoint, setLastPanPoint] = useState<{ x: number; y: number } | null>(null)
   
   // Check if overlay is active
   const hasOverlay = overlayConfig.enabled && secondaryFcsAnalysis.results && overlayConfig.showOverlaidTheory
@@ -151,6 +194,86 @@ export const TheoryVsMeasuredChart = memo(function TheoryVsMeasuredChart({
       hasSecondaryData: secondary.length > 0,
     }
   }, [data])
+
+  const chartBounds = useMemo(() => {
+    const diameters = data.map((d) => d.diameter)
+    const values = data.flatMap((d) => [d.theory, d.primaryMeasured ?? 0, d.secondaryMeasured ?? 0])
+
+    const minX = Math.min(...diameters)
+    const maxX = Math.max(...diameters)
+    const maxY = Math.max(1, ...values)
+
+    return {
+      minX,
+      maxX,
+      minY: 0,
+      maxY: maxY * 1.05,
+    }
+  }, [data])
+
+  const handleWheelZoom = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    const container = chartContainerRef.current
+    if (!container) return
+
+    const ratios = getPlotRatiosFromMouse(e.clientX, e.clientY, container.getBoundingClientRect(), {
+      top: 10,
+      right: 30,
+      bottom: 25,
+      left: 10,
+    })
+
+    if (!ratios.inPlot) return
+
+    e.preventDefault()
+    setZoom((prev) => computeCursorZoomWindow(prev, chartBounds, ratios, e.deltaY))
+  }, [chartBounds])
+
+  const hasActiveZoom = zoom.xMin !== null || zoom.yMin !== null
+
+  const handlePanStart = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!hasActiveZoom) return
+    const container = chartContainerRef.current
+    if (!container) return
+
+    const ratios = getPlotRatiosFromMouse(e.clientX, e.clientY, container.getBoundingClientRect(), {
+      top: 10,
+      right: 30,
+      bottom: 25,
+      left: 10,
+    })
+    if (!ratios.inPlot) return
+
+    setIsPanning(true)
+    setLastPanPoint({ x: e.clientX, y: e.clientY })
+  }, [hasActiveZoom])
+
+  const handlePanMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isPanning || !lastPanPoint) return
+
+    const container = chartContainerRef.current
+    if (!container) return
+
+    const rect = container.getBoundingClientRect()
+    const plotWidth = rect.width - 10 - 30
+    const plotHeight = rect.height - 10 - 25
+
+    setZoom((prev) =>
+      computePannedWindow(
+        prev,
+        chartBounds,
+        e.clientX - lastPanPoint.x,
+        e.clientY - lastPanPoint.y,
+        plotWidth,
+        plotHeight
+      )
+    )
+    setLastPanPoint({ x: e.clientX, y: e.clientY })
+  }, [isPanning, lastPanPoint, chartBounds])
+
+  const handlePanEnd = useCallback(() => {
+    setIsPanning(false)
+    setLastPanPoint(null)
+  }, [])
   
   return (
     <Card className="card-3d">
@@ -203,19 +326,33 @@ export const TheoryVsMeasuredChart = memo(function TheoryVsMeasuredChart({
         </div>
       </CardHeader>
       <CardContent>
-        <div style={{ height: `${height}px` }}>
+        <div
+          ref={chartContainerRef}
+          style={{ height: `${height}px`, cursor: hasActiveZoom ? (isPanning ? "grabbing" : "grab") : "default" }}
+          onWheel={handleWheelZoom}
+          onMouseDown={handlePanStart}
+          onMouseMove={handlePanMove}
+          onMouseUp={handlePanEnd}
+          onMouseLeave={handlePanEnd}
+        >
           <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
             <ComposedChart data={data}>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
               <XAxis
                 dataKey="diameter"
+                type="number"
                 stroke="#64748b"
                 tick={{ fontSize: 11 }}
+                domain={zoom.xMin !== null && zoom.xMax !== null ? [zoom.xMin, zoom.xMax] : [chartBounds.minX, chartBounds.maxX]}
+                allowDataOverflow
                 label={{ value: "Diameter (nm)", position: "bottom", offset: -5, fill: "#64748b", fontSize: 12 }}
               />
               <YAxis
+                type="number"
                 stroke="#64748b"
                 tick={{ fontSize: 11 }}
+                domain={zoom.yMin !== null && zoom.yMax !== null ? [zoom.yMin, zoom.yMax] : [chartBounds.minY, chartBounds.maxY]}
+                allowDataOverflow
                 label={{
                   value: "Scattering Intensity (a.u.)",
                   angle: -90,
@@ -237,18 +374,20 @@ export const TheoryVsMeasuredChart = memo(function TheoryVsMeasuredChart({
                 formatter={(value: number, name: string) => [
                   value?.toLocaleString(),
                   name === 'primaryMeasured' 
-                    ? (fcsAnalysis.file?.name?.slice(0, 20) || 'Primary')
+                    ? (fcsAnalysis.file?.name?.slice(0, 24) || 'Primary')
                     : name === 'secondaryMeasured'
-                    ? (secondaryFcsAnalysis.file?.name?.slice(0, 20) || 'Comparison')
-                    : 'Mie Theory'
+                    ? (secondaryFcsAnalysis.file?.name?.slice(0, 24) || 'Comparison')
+                    : 'Scaled Mie Theory'
                 ]}
               />
               <Legend 
+                verticalAlign="top"
+                height={36}
                 wrapperStyle={{ fontSize: "12px" }} 
                 formatter={(value) => {
-                  if (value === 'primaryMeasured') return fcsAnalysis.file?.name?.slice(0, 20) || 'Primary'
-                  if (value === 'secondaryMeasured') return secondaryFcsAnalysis.file?.name?.slice(0, 20) || 'Comparison'
-                  return 'Mie Theory'
+                  if (value === 'primaryMeasured') return fcsAnalysis.file?.name?.slice(0, 24) || 'Primary'
+                  if (value === 'secondaryMeasured') return secondaryFcsAnalysis.file?.name?.slice(0, 24) || 'Comparison'
+                  return 'Scaled Mie Theory'
                 }}
               />
               
@@ -257,10 +396,11 @@ export const TheoryVsMeasuredChart = memo(function TheoryVsMeasuredChart({
                 <Line 
                   type="monotone" 
                   dataKey="theory" 
-                  stroke="#8b5cf6" 
-                  strokeWidth={2} 
+                  stroke="#7c3aed" 
+                  strokeWidth={3}
+                  strokeOpacity={0.95}
                   dot={false} 
-                  name="Mie Theory" 
+                  name="Scaled Mie Theory" 
                 />
               )}
               

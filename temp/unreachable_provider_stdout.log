@@ -1,0 +1,36 @@
+
+> my-v0-project@0.1.7 desktop:start
+> electron .
+
+
+[desktop] Starting backend: D:\CRM IT Project\Biovaram_Ev_Analysis_ReactUI\backend\venv\Scripts\python.exe D:\CRM IT Project\Biovaram_Ev_Analysis_ReactUI\backend\run_desktop.py
+[desktop] Backend is healthy on http://127.0.0.1:18121
+[desktop] Loading renderer: http://127.0.0.1:18121?appVersion=0.1.7
+[desktop] [backend] 
+============================================================
+  BioVaram EV Analysis Platform � Desktop Edition
+  Version 1.0.0 | Build dev
+============================================================
+
+  API Server:  http://localhost:18121
+  API Docs:    http://localhost:18121/docs
+  Application: http://localhost:18121
+
+  Data:        D:\CRM IT Project\Biovaram_Ev_Analysis_ReactUI\data
+  Frontend:    D:\CRM IT Project\Biovaram_Ev_Analysis_ReactUI\out
+
+  Press Ctrl+C to stop the server
+============================================================
+
+  Frontend: Serving static files from D:\CRM IT Project\Biovaram_Ev_Analysis_ReactUI\out
+INFO:     127.0.0.1:63273 - "GET /health HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63274 - "GET /health HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63274 - "POST /api/v1/auth/login HTTP/1.1" 422 Unprocessable Content
+[desktop] [backend] INFO:     127.0.0.1:63274 - "GET /api/v1/alerts?is_acknowledged=false&limit=10&order_by=created_at&order_desc=true HTTP/1.1" 307 Temporary Redirect
+[desktop] [backend] INFO:     127.0.0.1:63276 - "GET /health HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63275 - "GET /api/v1/alerts/counts HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63275 - "GET /api/v1/alerts/?is_acknowledged=false&limit=10&order_by=created_at&order_desc=true HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63275 - "GET /health HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63276 - "GET /api/v1/samples HTTP/1.1" 307 Temporary Redirect
+[desktop] [backend] INFO:     127.0.0.1:63276 - "GET /api/v1/samples/ HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63279 - "GET /health HTTP/1.1" 200 OK

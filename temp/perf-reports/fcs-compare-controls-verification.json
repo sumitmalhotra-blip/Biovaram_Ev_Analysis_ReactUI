@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-04-08T09:54:42.087Z",
+  "timestamp": "2026-04-15T20:27:44.495Z",
   "checks": {
     "d1_graph_instance_created": true,
     "d2_duplicate_isolation_axis_mode": true,
@@ -12,7 +12,7 @@
   "evidence": {
     "graphInstanceCount": 3,
     "pinnedCount": 1,
-    "exportedFilename": "S1_vs_S2_overlay.csv",
+    "exportedFilename": "S1_overlay_4_series.csv",
     "longTaskGate": {
       "thresholdMs": 50,
       "recurringLimit": 1,

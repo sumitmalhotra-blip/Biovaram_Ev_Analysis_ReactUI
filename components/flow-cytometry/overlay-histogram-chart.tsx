@@ -23,10 +23,28 @@ interface OverlayHistogramChartProps {
   visibleSampleIds?: string[]
   primarySampleId?: string | null
   compareScatterBySampleId?: Record<string, Array<{ x: number; y: number; diameter?: number }>>
+  sampleLabelsById?: Record<string, string>
 }
 
-type HistogramSeriesPoint = { bin: string; binValue: number; primary: number; secondary: number }
+type HistogramSeriesPoint = { bin: string; binValue: number; [key: string]: number | string }
+type HistogramSeriesDescriptor = {
+  key: string
+  sampleId: string
+  label: string
+  color: string
+  isPrimary: boolean
+}
 const FIXED_HISTOGRAM_BINS = 50
+
+const COMPARISON_PALETTE = [
+  "#F97316",
+  "#0EA5E9",
+  "#22C55E",
+  "#EAB308",
+  "#EF4444",
+  "#14B8A6",
+  "#F43F5E",
+]
 
 function extractHistogramValue(point: { x: number; y: number; diameter?: number }, parameter: string): number | null {
   if (parameter === "FSC-A") return point.x
@@ -134,6 +152,49 @@ function computeHistogramCounts(values: number[], minVal: number, maxVal: number
   return counts
 }
 
+function buildHistogramDataForSeries(params: {
+  seriesValuesByKey: Record<string, number[]>
+  bins?: number
+}): { data: HistogramSeriesPoint[]; isApproximate: boolean } {
+  const bins = Math.max(10, Math.min(200, params.bins ?? 50))
+  const entries = Object.entries(params.seriesValuesByKey).map(([key, values]) => [
+    key,
+    values.filter((value) => Number.isFinite(value)),
+  ] as const)
+  const allValues = entries.flatMap(([, values]) => values)
+
+  if (allValues.length === 0) {
+    return { data: [], isApproximate: true }
+  }
+
+  const sorted = [...allValues].sort((a, b) => a - b)
+  const minVal = sorted[Math.floor(sorted.length * 0.01)] ?? sorted[0]
+  const maxVal = sorted[Math.floor(sorted.length * 0.99)] ?? sorted[sorted.length - 1]
+  if (!Number.isFinite(minVal) || !Number.isFinite(maxVal) || maxVal <= minVal) {
+    return { data: [], isApproximate: true }
+  }
+
+  const countsByKey: Record<string, number[]> = {}
+  entries.forEach(([key, values]) => {
+    countsByKey[key] = computeHistogramCounts(values, minVal, maxVal, bins)
+  })
+
+  const binSize = (maxVal - minVal) / bins
+  const data = Array.from({ length: bins }, (_, index) => {
+    const binMid = minVal + (index + 0.5) * binSize
+    const row: HistogramSeriesPoint = {
+      bin: binMid.toFixed(0),
+      binValue: binMid,
+    }
+    entries.forEach(([key]) => {
+      row[key] = countsByKey[key]?.[index] ?? 0
+    })
+    return row
+  })
+
+  return { data, isApproximate: false }
+}
+
 function buildHistogramDataWithAveragedReplicates(params: {
   primaryValues: number[]
   replicateValues: number[][]
@@ -194,6 +255,7 @@ export function OverlayHistogramChart({
   visibleSampleIds = [],
   primarySampleId: primarySampleIdProp = null,
   compareScatterBySampleId = {},
+  sampleLabelsById = {},
 }: OverlayHistogramChartProps) {
   const {
     fcsAnalysis,
@@ -202,8 +264,7 @@ export function OverlayHistogramChart({
     getFCSSeriesCacheEntry,
     setFCSSeriesCacheEntry,
   } = useAnalysisStore()
-  const [showPrimary, setShowPrimary] = useState(true)
-  const [showSecondary, setShowSecondary] = useState(true)
+  const [showSeries, setShowSeries] = useState<Record<string, boolean>>({})
   const [histogramData, setHistogramData] = useState<{ data: HistogramSeriesPoint[]; isApproximate: boolean }>({
     data: [],
     isApproximate: true,
@@ -241,6 +302,90 @@ export function OverlayHistogramChart({
     () => visibleSampleIds.filter((id) => id && id !== effectivePrimarySampleId),
     [visibleSampleIds, effectivePrimarySampleId]
   )
+  const isMultiOverlay = overlayConfig.enabled && comparisonSampleIds.length > 1
+  const sampleColorMap = useMemo(() => {
+    const map: Record<string, string> = {}
+    comparisonSampleIds.forEach((sampleId, index) => {
+      if (index === 0) {
+        map[sampleId] = overlayConfig.secondaryColor
+      } else {
+        map[sampleId] = COMPARISON_PALETTE[(index - 1) % COMPARISON_PALETTE.length]
+      }
+    })
+    return map
+  }, [comparisonSampleIds, overlayConfig.secondaryColor])
+  const seriesDescriptors = useMemo<HistogramSeriesDescriptor[]>(() => {
+    const descriptors: HistogramSeriesDescriptor[] = []
+    const resolvedPrimarySampleId = effectivePrimarySampleId || "primary"
+
+    descriptors.push({
+      key: "primary",
+      sampleId: resolvedPrimarySampleId,
+      label:
+        sampleLabelsById[resolvedPrimarySampleId]
+        || fcsAnalysis.file?.name
+        || fcsAnalysis.sampleId
+        || "Reference",
+      color: overlayConfig.primaryColor,
+      isPrimary: true,
+    })
+
+    if (isMultiOverlay) {
+      comparisonSampleIds.forEach((sampleId) => {
+        descriptors.push({
+          key: sampleId,
+          sampleId,
+          label: sampleLabelsById[sampleId] || sampleId,
+          color: sampleColorMap[sampleId] || overlayConfig.secondaryColor,
+          isPrimary: false,
+        })
+      })
+      return descriptors
+    }
+
+    if (comparisonSampleIds.length > 0 || secondarySampleId) {
+      const resolvedSampleId = comparisonSampleIds[0] || secondarySampleId || "secondary"
+      descriptors.push({
+        key: "secondary",
+        sampleId: resolvedSampleId,
+        label:
+          sampleLabelsById[resolvedSampleId]
+          || secondaryFcsAnalysis.file?.name
+          || secondaryFcsAnalysis.sampleId
+          || "Session Peer",
+        color: overlayConfig.secondaryColor,
+        isPrimary: false,
+      })
+    }
+
+    return descriptors
+  }, [
+    comparisonSampleIds,
+    effectivePrimarySampleId,
+    fcsAnalysis.file?.name,
+    fcsAnalysis.sampleId,
+    isMultiOverlay,
+    overlayConfig.primaryColor,
+    overlayConfig.secondaryColor,
+    sampleColorMap,
+    sampleLabelsById,
+    secondaryFcsAnalysis.file?.name,
+    secondaryFcsAnalysis.sampleId,
+    secondarySampleId,
+  ])
+  const seriesDescriptorByKey = useMemo(
+    () => Object.fromEntries(seriesDescriptors.map((descriptor) => [descriptor.key, descriptor])) as Record<string, HistogramSeriesDescriptor>,
+    [seriesDescriptors]
+  )
+  useEffect(() => {
+    setShowSeries((previous) => {
+      const next: Record<string, boolean> = {}
+      seriesDescriptors.forEach((descriptor) => {
+        next[descriptor.key] = previous[descriptor.key] ?? true
+      })
+      return next
+    })
+  }, [seriesDescriptors])
   const primaryLoading = !!(effectivePrimarySampleId && loadingBySampleId[effectivePrimarySampleId])
   const secondaryLoading = !!(secondarySampleId && loadingBySampleId[secondarySampleId])
   const primaryError = effectivePrimarySampleId ? errorsBySampleId[effectivePrimarySampleId] : undefined
@@ -282,6 +427,27 @@ export function OverlayHistogramChart({
         ? (secondaryResults?.ssc_mean || 50)
         : (secondaryResults?.size_statistics?.mean || secondaryResults?.particle_size_median_nm || 100)
     const secondaryStd = secondaryResults?.size_statistics?.std || secondaryMean * 0.3
+
+    if (isMultiOverlay) {
+      const seriesValuesByKey: Record<string, number[]> = {
+        primary: primaryValues,
+      }
+
+      comparisonSampleIds.forEach((sampleId) => {
+        const sampleValues = (compareScatterBySampleId[sampleId] || [])
+          .map((point) => extractHistogramValue(point, parameter))
+          .filter((value): value is number => value !== null && Number.isFinite(value))
+        seriesValuesByKey[sampleId] = sampleValues
+      })
+
+      setHistogramData(buildHistogramDataForSeries({
+        seriesValuesByKey,
+        bins: FIXED_HISTOGRAM_BINS,
+      }))
+      setHistogramLoading(false)
+      setWorkerFallbackActive(false)
+      return
+    }
 
     if (replicateRenderMode === "histogram-average" && comparisonSampleIds.length > 0) {
       const comparisonReplicateValues = comparisonSampleIds
@@ -381,6 +547,7 @@ export function OverlayHistogramChart({
     parameter,
     effectivePrimarySampleId,
       secondarySampleId,
+      isMultiOverlay,
     replicateRenderMode,
     comparisonSampleIds,
     compareScatterBySampleId,
@@ -388,7 +555,7 @@ export function OverlayHistogramChart({
     setFCSSeriesCacheEntry,
   ])
 
-  const hasOverlay = overlayConfig.enabled && secondaryResults
+  const hasOverlay = overlayConfig.enabled && comparisonSampleIds.length > 0
   const { data: chartData, isApproximate } = histogramData
   const primaryTotalEvents = primaryResults?.total_events || 0
   const secondaryTotalEvents = secondaryResults?.total_events || 0
@@ -397,7 +564,9 @@ export function OverlayHistogramChart({
     ? comparisonSampleIds.reduce((sum, sampleId) => sum + (compareScatterBySampleId[sampleId]?.length || 0), 0)
     : (secondaryFcsAnalysis.scatterData?.length || 0))
   const downsampledPrimary = primaryTotalEvents > primaryRenderedEvents && primaryRenderedEvents > 0
-  const downsampledSecondary = hasOverlay && secondaryTotalEvents > secondaryRenderedEvents && secondaryRenderedEvents > 0
+  const downsampledSecondary = !isMultiOverlay && hasOverlay && secondaryTotalEvents > secondaryRenderedEvents && secondaryRenderedEvents > 0
+  const comparisonErrorSampleIds = comparisonSampleIds.filter((sampleId) => !!errorsBySampleId[sampleId])
+  const showAnySeries = seriesDescriptors.some((descriptor) => showSeries[descriptor.key])
   const renderState = deriveOverlayHistogramRenderState({
     primaryLoading: primaryLoading || histogramLoading,
     hasPrimaryResults: !!primaryResults,
@@ -479,32 +648,27 @@ export function OverlayHistogramChart({
                 Loading peer
               </Badge>
             )}
-            {hasOverlay && (
-              <>
-                <Button
-                  variant={showPrimary ? "default" : "outline"}
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={() => setShowPrimary(!showPrimary)}
-                >
-                  {showPrimary ? <Eye className="h-3 w-3 mr-1" /> : <EyeOff className="h-3 w-3 mr-1" />}
-                  Reference
-                </Button>
-                <Button
-                  variant={showSecondary ? "secondary" : "outline"}
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={() => setShowSecondary(!showSecondary)}
-                >
-                  {showSecondary ? <Eye className="h-3 w-3 mr-1" /> : <EyeOff className="h-3 w-3 mr-1" />}
-                  Peer
-                </Button>
-              </>
-            )}
+            {seriesDescriptors.map((descriptor) => (
+              <Button
+                key={descriptor.key}
+                variant={showSeries[descriptor.key] ? (descriptor.isPrimary ? "default" : "secondary") : "outline"}
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => {
+                  setShowSeries((prev) => ({
+                    ...prev,
+                    [descriptor.key]: !prev[descriptor.key],
+                  }))
+                }}
+              >
+                {showSeries[descriptor.key] ? <Eye className="h-3 w-3 mr-1" /> : <EyeOff className="h-3 w-3 mr-1" />}
+                {descriptor.isPrimary ? "Reference" : descriptor.label.slice(0, 24)}
+              </Button>
+            ))}
             {hasOverlay && (
               <Badge variant="secondary">
                 <Layers className="h-3 w-3 mr-1" />
-                Overlay
+                Overlay {seriesDescriptors.length} series
               </Badge>
             )}
             {isApproximate && (
@@ -551,45 +715,73 @@ export function OverlayHistogramChart({
                 }}
                 formatter={(value: number, name: string) => [
                   value,
-                  name === 'primary' 
-                    ? fcsAnalysis.file?.name || 'Reference' 
-                    : secondaryFcsAnalysis.file?.name || 'Session Peer'
+                  seriesDescriptorByKey[name]?.label || name
                 ]}
               />
               <Legend 
                 verticalAlign="top"
                 height={36}
-                formatter={(value) => value === 'primary' 
-                  ? fcsAnalysis.file?.name?.slice(0, 20) || 'Reference' 
-                  : secondaryFcsAnalysis.file?.name?.slice(0, 20) || 'Session Peer'
-                }
+                formatter={(value) => (seriesDescriptorByKey[String(value)]?.label || String(value)).slice(0, 24)}
               />
-              {showPrimary && (
+              {seriesDescriptors.filter((descriptor) => showSeries[descriptor.key]).map((descriptor) => (
                 <Area
+                  key={descriptor.key}
                   type="monotone"
-                  dataKey="primary"
-                  fill={overlayConfig.primaryColor}
-                  fillOpacity={hasOverlay ? 0.4 : 0.6}
-                  stroke={overlayConfig.primaryColor}
+                  dataKey={descriptor.key}
+                  fill={descriptor.color}
+                  fillOpacity={descriptor.isPrimary && !hasOverlay ? 0.6 : 0.35}
+                  stroke={descriptor.color}
                   strokeWidth={2}
                 />
-              )}
-              {hasOverlay && showSecondary && (
-                <Area
-                  type="monotone"
-                  dataKey="secondary"
-                  fill={overlayConfig.secondaryColor}
-                  fillOpacity={0.4}
-                  stroke={overlayConfig.secondaryColor}
-                  strokeWidth={2}
-                />
-              )}
+              ))}
             </ComposedChart>
           </ResponsiveContainer>
         </div>
 
         {/* Statistics comparison */}
-        {hasOverlay && (
+        {comparisonErrorSampleIds.length > 0 && (
+          <div className="mb-3">
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Overlay sample warnings</AlertTitle>
+              <AlertDescription className="space-y-2">
+                {comparisonErrorSampleIds.slice(0, 3).map((sampleId) => (
+                  <div key={sampleId} className="flex items-center justify-between gap-2">
+                    <span>{sampleLabelsById[sampleId] || sampleId}: {errorsBySampleId[sampleId]}</span>
+                    {onRetrySample && (
+                      <Button variant="outline" size="sm" className="h-7" onClick={() => onRetrySample(sampleId)}>
+                        Retry
+                      </Button>
+                    )}
+                  </div>
+                ))}
+                {comparisonErrorSampleIds.length > 3 && (
+                  <div className="text-xs">+{comparisonErrorSampleIds.length - 3} more sample warnings</div>
+                )}
+              </AlertDescription>
+            </Alert>
+          </div>
+        )}
+
+        {!showAnySeries && (
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>All overlay series hidden</AlertTitle>
+            <AlertDescription>Enable at least one series toggle to render the histogram.</AlertDescription>
+          </Alert>
+        )}
+
+        {chartData.length === 0 && !primaryLoading && (
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>No chart data available</AlertTitle>
+            <AlertDescription>
+              No histogram points are currently available for this parameter.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {hasOverlay && !isMultiOverlay && (
           <div className="mt-4 grid grid-cols-2 gap-4">
             <div className="p-3 rounded-lg" style={{ backgroundColor: `${overlayConfig.primaryColor}20` }}>
               <p className="text-xs font-medium mb-2 truncate" title={fcsAnalysis.file?.name}>
@@ -597,34 +789,6 @@ export function OverlayHistogramChart({
               </p>
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div>
-
-                {hasOverlay && secondaryError && (
-                  <div className="mb-3">
-                    <Alert variant="destructive">
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertTitle>Peer sample load warning</AlertTitle>
-                      <AlertDescription className="flex items-center justify-between gap-2">
-                        <span>{secondaryError}</span>
-                        {onRetrySample && secondarySampleId && (
-                          <Button variant="outline" size="sm" className="h-7" onClick={() => onRetrySample(secondarySampleId)}>
-                            Retry
-                          </Button>
-                        )}
-                      </AlertDescription>
-                    </Alert>
-                  </div>
-                )}
-
-                {chartData.length === 0 && !primaryLoading && (
-                  <Alert>
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertTitle>No chart data available</AlertTitle>
-                    <AlertDescription>
-                      No histogram points are currently available for this parameter.
-                    </AlertDescription>
-                  </Alert>
-                )}
-
                   <span className="text-muted-foreground">FSC Mean:</span>
                   <span className="ml-1 font-medium">{primaryResults.fsc_mean?.toFixed(2) || 'N/A'}</span>
                 </div>
@@ -665,6 +829,18 @@ export function OverlayHistogramChart({
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {hasOverlay && isMultiOverlay && (
+          <div className="mt-4">
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Multi-overlay active</AlertTitle>
+              <AlertDescription>
+                Rendering {seriesDescriptors.length} visible series with shared bins. Reference and peer summary cards are suppressed in this mode to avoid two-series bias.
+              </AlertDescription>
+            </Alert>
           </div>
         )}
       </CardContent>

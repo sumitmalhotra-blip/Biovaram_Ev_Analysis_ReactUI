@@ -97,6 +97,77 @@ export function DashboardAIChat({ onMinimize, isMinimized = false }: DashboardAI
     scrollToBottom()
   }, [messages])
 
+  const buildPinnedChartsContext = (mode: "brief" | "full") => {
+    if (pinnedCharts.length === 0) return "Pinned Charts: none"
+
+    if (mode === "brief") {
+      const topTitles = pinnedCharts.slice(0, 5).map((chart) => chart.title)
+      const moreCount = Math.max(0, pinnedCharts.length - topTitles.length)
+      const suffix = moreCount > 0 ? ` (+${moreCount} more)` : ""
+      return `Pinned Charts (${pinnedCharts.length}): ${topTitles.join(", ")}${suffix}`
+    }
+
+    const summaries = pinnedCharts.map((chart, index) => {
+      const pointCount = Array.isArray(chart.data) ? chart.data.length : 0
+      const contextBlock = chart.chartContext ? `\nContext:\n${chart.chartContext}` : ""
+      return `${index + 1}. ${chart.title} (${chart.type}) from ${chart.source}\nPoints: ${pointCount}${contextBlock}`
+    })
+
+    return `Pinned Charts (${pinnedCharts.length}):\n${summaries.join("\n\n")}`
+  }
+
+  const buildDashboardContextForPrompt = (mode: "brief" | "full") => {
+    const sections: string[] = []
+
+    if (fcsAnalysis.results) {
+      if (mode === "brief") {
+        sections.push(
+          "FCS Data:\n" +
+          `- Total Events: ${fcsAnalysis.results.total_events.toLocaleString()}\n` +
+          `- Median Size: ${fcsAnalysis.results.particle_size_median_nm?.toFixed(1) || "N/A"} nm`
+        )
+      } else {
+        sections.push(
+          "FCS Data:\n" +
+          `- Total Events: ${fcsAnalysis.results.total_events.toLocaleString()}\n` +
+          `- Median Size: ${fcsAnalysis.results.particle_size_median_nm?.toFixed(1) || "N/A"} nm\n` +
+          `- FSC Median: ${fcsAnalysis.results.fsc_median?.toLocaleString() || "N/A"}\n` +
+          `- SSC Median: ${fcsAnalysis.results.ssc_median?.toLocaleString() || "N/A"}\n` +
+          `- Debris: ${fcsAnalysis.results.debris_pct?.toFixed(1) || "N/A"}%`
+        )
+      }
+    }
+
+    if (ntaAnalysis.results) {
+      if (mode === "brief") {
+        sections.push(
+          "NTA Data:\n" +
+          `- Total Particles: ${ntaAnalysis.results.total_particles || "N/A"}\n` +
+          `- D50: ${ntaAnalysis.results.d50_nm?.toFixed(1) || "N/A"} nm`
+        )
+      } else {
+        sections.push(
+          "NTA Data:\n" +
+          `- Total Particles: ${ntaAnalysis.results.total_particles || "N/A"}\n` +
+          `- D50: ${ntaAnalysis.results.d50_nm?.toFixed(1) || "N/A"} nm\n` +
+          `- Concentration: ${ntaAnalysis.results.concentration_particles_ml?.toExponential(2) || "N/A"} particles/ml`
+        )
+      }
+    }
+
+    sections.push(buildPinnedChartsContext(mode))
+
+    if (apiSamples.length > 0) {
+      sections.push(`Uploaded Samples: ${apiSamples.length}`)
+    }
+
+    return sections.join("\n\n")
+  }
+
+  const isDeepAnalysisRequest = (message: string) => {
+    return /(deep|detailed|detail|full analysis|comprehensive|thorough|in-depth|in depth|statistical|methodology|step by step|technical breakdown)/i.test(message)
+  }
+
   // Build context information from dashboard
   useEffect(() => {
     const context: string[] = []
@@ -135,46 +206,9 @@ export function DashboardAIChat({ onMinimize, isMinimized = false }: DashboardAI
   const handleSend = async () => {
     if (!inputValue.trim() || isLoading) return
 
-    // Build context-aware message
-    let contextualMessage = inputValue
-
-    // If asking about data, include current analysis state
-    if (inputValue.toLowerCase().includes("data") || 
-        inputValue.toLowerCase().includes("analysis") ||
-        inputValue.toLowerCase().includes("show")) {
-      
-      const contextDetails: string[] = []
-      
-      if (fcsAnalysis.results) {
-        contextDetails.push(
-          `FCS Data Available:\n` +
-          `- Total Events: ${fcsAnalysis.results.total_events.toLocaleString()}\n` +
-          `- Median Size: ${fcsAnalysis.results.particle_size_median_nm?.toFixed(1) || 'N/A'} nm\n` +
-          `- FSC Median: ${fcsAnalysis.results.fsc_median?.toLocaleString() || 'N/A'}\n` +
-          `- SSC Median: ${fcsAnalysis.results.ssc_median?.toLocaleString() || 'N/A'}\n` +
-          `- Debris: ${fcsAnalysis.results.debris_pct?.toFixed(1) || 'N/A'}%`
-        )
-      }
-      
-      if (ntaAnalysis.results) {
-        contextDetails.push(
-          `NTA Data Available:\n` +
-          `- Total Particles: ${ntaAnalysis.results.total_particles || 'N/A'}\n` +
-          `- D50: ${ntaAnalysis.results.d50_nm?.toFixed(1) || 'N/A'} nm\n` +
-          `- Concentration: ${ntaAnalysis.results.concentration_particles_ml?.toExponential(2) || 'N/A'} particles/ml`
-        )
-      }
-      
-      if (pinnedCharts.length > 0) {
-        contextDetails.push(
-          `Pinned Charts: ${pinnedCharts.map(c => c.title).join(", ")}`
-        )
-      }
-      
-      if (contextDetails.length > 0) {
-        contextualMessage += "\n\nCurrent Dashboard Context:\n" + contextDetails.join("\n\n")
-      }
-    }
+    const contextMode: "brief" | "full" = isDeepAnalysisRequest(inputValue) ? "full" : "brief"
+    const dashboardContext = buildDashboardContextForPrompt(contextMode)
+    const contextualMessage = `${inputValue}\n\nCurrent Dashboard Context:\n${dashboardContext}`
 
     await append({
       role: "user",

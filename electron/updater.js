@@ -13,6 +13,10 @@ function getStatePath() {
   return path.join(app.getPath("userData"), "updater-state.json");
 }
 
+function isFaultEnabled(name) {
+  return String(process.env[name] || "").trim() === "1";
+}
+
 function readUpdateState() {
   try {
     const statePath = getStatePath();
@@ -57,6 +61,11 @@ async function checkPreviousUpdateAttempt({ mainWindow, currentVersion }) {
 
   // If install was attempted but version did not advance, we are still on last good build.
   if (state.stage === "install-started" && state.targetVersion && state.targetVersion !== currentVersion) {
+    if (isFaultEnabled("CRMIT_TEST_AUTO_ACK_DIALOGS")) {
+      clearUpdateState();
+      return;
+    }
+
     await dialog.showMessageBox(mainWindow, {
       type: "warning",
       buttons: ["OK"],
@@ -82,6 +91,11 @@ async function checkPreviousUpdateAttempt({ mainWindow, currentVersion }) {
 
   // Surface prior download/check failures once.
   if (state.stage === "error" && state.lastError) {
+    if (isFaultEnabled("CRMIT_TEST_AUTO_ACK_DIALOGS")) {
+      clearUpdateState();
+      return;
+    }
+
     await dialog.showMessageBox(mainWindow, {
       type: "warning",
       buttons: ["OK"],
@@ -188,6 +202,9 @@ async function startMandatoryDownload(mainWindow, logger) {
   createProgressWindow(mainWindow);
 
   try {
+    if (isFaultEnabled("CRMIT_TEST_CORRUPT_DOWNLOAD")) {
+      throw new Error("Simulated corrupt download package for controlled resilience test.");
+    }
     await autoUpdater.downloadUpdate();
   } catch (err) {
     isDownloadingUpdate = false;
@@ -425,7 +442,25 @@ function registerUpdater({ mainWindow, logger }) {
   });
 
   return {
-    checkForUpdates: () => autoUpdater.checkForUpdates(),
+    checkForUpdates: async () => {
+      if (isFaultEnabled("CRMIT_TEST_UNREACHABLE_PROVIDER")) {
+        const simulated = new Error("Simulated unreachable update provider for deterministic resilience test.");
+        writeUpdateState({
+          stage: "error",
+          targetVersion: lastKnownUpdateVersion,
+          failedStage: "check-or-install",
+          lastError: simulated.message,
+        });
+        throw simulated;
+      }
+
+      if (isFaultEnabled("CRMIT_TEST_CORRUPT_DOWNLOAD")) {
+        await startMandatoryDownload(mainWindow, logger);
+        return { status: "simulated-corrupt-download" };
+      }
+
+      return autoUpdater.checkForUpdates();
+    },
   };
 }
 

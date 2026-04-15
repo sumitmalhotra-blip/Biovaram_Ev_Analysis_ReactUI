@@ -1,0 +1,12 @@
+﻿TEST=SIGNING_PROVISIONING_AND_SIGNED_RELEASE_ATTEMPT
+TIMESTAMP=2026-04-15T19:01:57
+GITHUB_TOKEN=missing
+WIN_CSC_LINK=missing
+WIN_CSC_KEY_PASSWORD=missing
+CSC_LINK=missing
+CSC_KEY_PASSWORD=missing
+CSC_NAME=missing
+SIGNED_CANDIDATE_BUILD=blocked
+SIGNED_SMOKE_CYCLE=blocked
+SIGNED_RELEASE_PUBLISH=blocked
+BLOCKER=certificate provisioning + release token not available in current environment

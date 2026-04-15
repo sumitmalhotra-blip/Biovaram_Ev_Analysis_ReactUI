@@ -601,9 +601,6 @@ export function useApi() {
           // Refresh samples list
           fetchSamples()
 
-          // Auto-enable overlay mode when secondary file is uploaded
-          setOverlayConfig({ enabled: true })
-
           toast({
             title: "✅ Comparison file uploaded",
             description: `${file.name} uploaded for comparison. Sample ID: ${response.sample_id}`,
@@ -859,7 +856,6 @@ export function useApi() {
           setSecondaryFCSFile(cappedFiles[1]?.file ?? null)
           setSecondaryFCSSampleId(secondId)
           setSecondaryFCSResults(secondResult)
-          setOverlayConfig({ enabled: true })
         }
 
         if (successfulSampleIds.length > 0) {

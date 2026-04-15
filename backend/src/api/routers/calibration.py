@@ -189,7 +189,8 @@ async def parse_bead_datasheet_endpoint(
         data["success"] = len(result.all_beads) > 0
         
         if not result.all_beads:
-            data["message"] = "No bead populations found. Check file format."
+            warning_msg = result.parse_warnings[0] if result.parse_warnings else "No bead populations found. Check file format."
+            data["message"] = warning_msg
         else:
             data["message"] = f"Parsed {len(result.all_beads)} bead populations from {len(result.subcomponents)} subcomponents"
         

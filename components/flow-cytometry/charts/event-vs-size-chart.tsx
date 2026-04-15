@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, useEffect, memo } from "react"
+import { useMemo, useState, useEffect, useRef, useCallback, memo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -19,6 +19,7 @@ import {
 import { useAnalysisStore } from "@/lib/store"
 import { useShallow } from "zustand/shallow"
 import { useApi } from "@/hooks/use-api"
+import { computeCursorZoomWindow, computePannedWindow, getPlotRatiosFromMouse, type ZoomWindow } from "./wheel-zoom-utils"
 
 interface EventSizeDataPoint {
   eventId: number
@@ -32,6 +33,13 @@ interface EventVsSizeChartProps {
   sampleId: string
   onPin?: () => void
   title?: string
+}
+
+const buildRangeLabel = (name: string, min: number, max: number) => {
+  const baseName = (name || "").trim()
+  if (!baseName) return `${min}-${max}nm`
+  if (baseName.includes("(") && baseName.includes(")")) return baseName
+  return `${baseName} (${min}-${max}nm)`
 }
 
 export const EventVsSizeChart = memo(function EventVsSizeChart({ sampleId, onPin, title = "Event vs Size" }: EventVsSizeChartProps) {
@@ -52,8 +60,11 @@ export const EventVsSizeChart = memo(function EventVsSizeChart({ sampleId, onPin
     validCount: number
     totalCount: number
   } | null>(null)
-  const [zoomDomain, setZoomDomain] = useState<{ min: number; max: number } | null>(null)
+  const [zoom, setZoom] = useState<ZoomWindow>({ xMin: null, xMax: null, yMin: null, yMax: null })
   const [error, setError] = useState<string | null>(null)
+  const chartContainerRef = useRef<HTMLDivElement>(null)
+  const [isPanning, setIsPanning] = useState(false)
+  const [lastPanPoint, setLastPanPoint] = useState<{ x: number; y: number } | null>(null)
 
   // Get size ranges from settings for coloring — stabilize reference with useMemo
   const sizeRanges = useMemo(() => fcsAnalysis.sizeRanges || [
@@ -75,7 +86,7 @@ export const EventVsSizeChart = memo(function EventVsSizeChart({ sampleId, onPin
       wavelength_nm: fcsAnalysisSettings?.laserWavelength || 488,
       n_particle: fcsAnalysisSettings?.particleRI || 1.40,
       n_medium: fcsAnalysisSettings?.mediumRI || 1.33,
-      max_events: 10000, // Sample for performance
+      max_events: 7000,
       include_raw_channels: true,
     })
       .then((result) => {
@@ -134,43 +145,120 @@ export const EventVsSizeChart = memo(function EventVsSizeChart({ sampleId, onPin
 
   // Process data with colors
   const processedData = useMemo(() => {
-    return data
+    const filtered = data
       .filter((d) => d.valid && d.size > 0)
       .map((d) => ({
         ...d,
         fill: getPointColor(d.size),
       }))
+
+    const maxDisplayPoints = 2500
+    if (filtered.length <= maxDisplayPoints) return filtered
+
+    const step = Math.ceil(filtered.length / maxDisplayPoints)
+    return filtered.filter((_, i) => i % step === 0)
   }, [data, sizeRanges])
 
-  // Calculate Y-axis domain
-  const yDomain = useMemo(() => {
-    if (zoomDomain) return [zoomDomain.min, zoomDomain.max]
-    if (processedData.length === 0) return [0, 500]
+  const chartBounds = useMemo(() => {
+    if (processedData.length === 0) {
+      return { minX: 0, maxX: 1, minY: 0, maxY: 500 }
+    }
 
+    const eventIds = processedData.map((d) => d.eventId)
     const sizes = processedData.map((d) => d.size)
-    const min = Math.max(0, Math.min(...sizes) - 10)
-    const max = Math.min(1000, Math.max(...sizes) + 10)
-    return [min, max]
-  }, [processedData, zoomDomain])
+
+    return {
+      minX: Math.min(...eventIds),
+      maxX: Math.max(...eventIds),
+      minY: Math.max(0, Math.min(...sizes) - 10),
+      maxY: Math.min(1000, Math.max(...sizes) + 10),
+    }
+  }, [processedData])
+
+  const xDomain = useMemo<[number, number]>(() => {
+    if (zoom.xMin !== null && zoom.xMax !== null) return [zoom.xMin, zoom.xMax]
+    return [chartBounds.minX, chartBounds.maxX]
+  }, [zoom.xMin, zoom.xMax, chartBounds])
+
+  const yDomain = useMemo<[number, number]>(() => {
+    if (zoom.yMin !== null && zoom.yMax !== null) return [zoom.yMin, zoom.yMax]
+    return [chartBounds.minY, chartBounds.maxY]
+  }, [zoom.yMin, zoom.yMax, chartBounds])
+
+  const handleWheelZoom = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    const container = chartContainerRef.current
+    if (!container) return
+
+    const ratios = getPlotRatiosFromMouse(e.clientX, e.clientY, container.getBoundingClientRect(), {
+      top: 10,
+      right: 30,
+      bottom: 30,
+      left: 10,
+    })
+
+    if (!ratios.inPlot) return
+
+    e.preventDefault()
+    setZoom((prev) => computeCursorZoomWindow(prev, chartBounds, ratios, e.deltaY))
+  }, [chartBounds])
+
+  const hasActiveZoom = zoom.xMin !== null || zoom.yMin !== null
+
+  const handlePanStart = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!hasActiveZoom) return
+    const container = chartContainerRef.current
+    if (!container) return
+
+    const ratios = getPlotRatiosFromMouse(e.clientX, e.clientY, container.getBoundingClientRect(), {
+      top: 10,
+      right: 30,
+      bottom: 30,
+      left: 10,
+    })
+    if (!ratios.inPlot) return
+
+    setIsPanning(true)
+    setLastPanPoint({ x: e.clientX, y: e.clientY })
+  }, [hasActiveZoom])
+
+  const handlePanMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isPanning || !lastPanPoint) return
+
+    const container = chartContainerRef.current
+    if (!container) return
+
+    const rect = container.getBoundingClientRect()
+    const plotWidth = rect.width - 10 - 30
+    const plotHeight = rect.height - 10 - 30
+
+    setZoom((prev) =>
+      computePannedWindow(
+        prev,
+        chartBounds,
+        e.clientX - lastPanPoint.x,
+        e.clientY - lastPanPoint.y,
+        plotWidth,
+        plotHeight
+      )
+    )
+    setLastPanPoint({ x: e.clientX, y: e.clientY })
+  }, [isPanning, lastPanPoint, chartBounds])
+
+  const handlePanEnd = useCallback(() => {
+    setIsPanning(false)
+    setLastPanPoint(null)
+  }, [])
 
   const handleZoomIn = () => {
-    const [min, max] = yDomain
-    const range = max - min
-    const newMin = min + range * 0.1
-    const newMax = max - range * 0.1
-    setZoomDomain({ min: newMin, max: newMax })
+    setZoom((prev) => computeCursorZoomWindow(prev, chartBounds, { xRatio: 0.5, yRatio: 0.5 }, -1))
   }
 
   const handleZoomOut = () => {
-    const [min, max] = yDomain
-    const range = max - min
-    const newMin = Math.max(0, min - range * 0.1)
-    const newMax = max + range * 0.1
-    setZoomDomain({ min: newMin, max: newMax })
+    setZoom((prev) => computeCursorZoomWindow(prev, chartBounds, { xRatio: 0.5, yRatio: 0.5 }, 1))
   }
 
   const handleResetZoom = () => {
-    setZoomDomain(null)
+    setZoom({ xMin: null, xMax: null, yMin: null, yMax: null })
   }
 
   const handleExport = () => {
@@ -286,24 +374,37 @@ export const EventVsSizeChart = memo(function EventVsSizeChart({ sampleId, onPin
       </CardHeader>
 
       <CardContent>
-        <div className="h-[350px] w-full" style={{ minHeight: '350px', minWidth: '300px' }}>
-          <ResponsiveContainer width="100%" height={350} minWidth={1} minHeight={1}>
+        <div
+          ref={chartContainerRef}
+          className="h-[350px] w-full"
+          style={{ minHeight: '350px', minWidth: '300px', cursor: hasActiveZoom ? (isPanning ? "grabbing" : "grab") : "default" }}
+          onWheel={handleWheelZoom}
+          onMouseDown={handlePanStart}
+          onMouseMove={handlePanMove}
+          onMouseUp={handlePanEnd}
+          onMouseLeave={handlePanEnd}
+        >
+          <ResponsiveContainer width="100%" height={350} minWidth={1} minHeight={1} debounce={80}>
             <ScatterChart margin={{ top: 10, right: 30, left: 10, bottom: 30 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#333" opacity={0.3} />
               <XAxis
                 dataKey="eventId"
                 type="number"
                 name="Event #"
+                domain={xDomain}
+                allowDataOverflow
                 tick={{ fill: "#999", fontSize: 10 }}
-                label={{ value: "Event Number", position: "bottom", offset: 10, fill: "#999", fontSize: 11 }}
+                tickFormatter={(v) => Number(v).toLocaleString()}
+                label={{ value: "Event Index", position: "bottom", offset: 10, fill: "#999", fontSize: 11 }}
               />
               <YAxis
                 dataKey="size"
                 type="number"
                 name="Size"
                 domain={yDomain}
+                allowDataOverflow
                 tick={{ fill: "#999", fontSize: 10 }}
-                label={{ value: "Size (nm)", angle: -90, position: "insideLeft", offset: 10, fill: "#999", fontSize: 11 }}
+                label={{ value: "Estimated Diameter (nm)", angle: -90, position: "insideLeft", offset: 10, fill: "#999", fontSize: 11 }}
               />
               <Tooltip
                 content={({ active, payload }) => {
@@ -313,8 +414,8 @@ export const EventVsSizeChart = memo(function EventVsSizeChart({ sampleId, onPin
                       <div className="bg-background/95 border rounded-lg p-2 shadow-lg text-xs">
                         <p className="font-medium">Event #{d.eventId}</p>
                         <p>Size: {d.size.toFixed(1)} nm</p>
-                        {d.fsc && <p>FSC: {d.fsc.toFixed(0)}</p>}
-                        {d.ssc && <p>SSC: {d.ssc.toFixed(0)}</p>}
+                        {d.fsc && <p>FSC: {d.fsc.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>}
+                        {d.ssc && <p>SSC: {d.ssc.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>}
                       </div>
                     )
                   }
@@ -331,15 +432,15 @@ export const EventVsSizeChart = memo(function EventVsSizeChart({ sampleId, onPin
                 </>
               )}
 
-              <Scatter name="Particles" data={processedData} fill="#3b82f6" opacity={0.6} />
+              <Scatter name="Particles" data={processedData} fill="#3b82f6" opacity={0.6} isAnimationActive={false} />
 
               <Legend
                 content={() => (
-                  <div className="flex justify-center gap-4 mt-2 text-xs">
+                  <div className="flex justify-center flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-muted-foreground px-2">
                     {sizeRanges.map((range) => (
                       <div key={range.name} className="flex items-center gap-1">
                         <div className="w-3 h-3 rounded-full" style={{ backgroundColor: range.color }} />
-                        <span>{range.name}</span>
+                        <span>{buildRangeLabel(range.name, range.min, range.max)}</span>
                       </div>
                     ))}
                   </div>
@@ -348,6 +449,9 @@ export const EventVsSizeChart = memo(function EventVsSizeChart({ sampleId, onPin
             </ScatterChart>
           </ResponsiveContainer>
         </div>
+        <p className="mt-2 text-xs text-muted-foreground text-center">
+          Displaying {processedData.length.toLocaleString()} sampled points for smooth interaction.
+        </p>
       </CardContent>
     </Card>
   )

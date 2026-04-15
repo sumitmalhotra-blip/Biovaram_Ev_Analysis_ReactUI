@@ -1,7 +1,7 @@
 {
   "config": {
-    "configFile": "C:\\CRM IT Project\\ev-analysis-platform\\playwright.config.ts",
-    "rootDir": "C:/CRM IT Project/ev-analysis-platform/tests",
+    "configFile": "D:\\CRM IT Project\\Biovaram_Ev_Analysis_ReactUI\\playwright.config.ts",
+    "rootDir": "D:/CRM IT Project/Biovaram_Ev_Analysis_ReactUI/tests",
     "forbidOnly": false,
     "fullyParallel": false,
     "globalSetup": null,
@@ -16,7 +16,7 @@
     "preserveOutput": "always",
     "projects": [
       {
-        "outputDir": "C:/CRM IT Project/ev-analysis-platform/test-results",
+        "outputDir": "D:/CRM IT Project/Biovaram_Ev_Analysis_ReactUI/test-results",
         "repeatEach": 1,
         "retries": 0,
         "metadata": {
@@ -24,7 +24,7 @@
         },
         "id": "chromium",
         "name": "chromium",
-        "testDir": "C:/CRM IT Project/ev-analysis-platform/tests",
+        "testDir": "D:/CRM IT Project/Biovaram_Ev_Analysis_ReactUI/tests",
         "testIgnore": [],
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
@@ -64,18 +64,18 @@
   },
   "suites": [
     {
-      "title": "perf\\fcs-compare-controls-verification.spec.ts",
-      "file": "perf/fcs-compare-controls-verification.spec.ts",
+      "title": "perf\\fcs-compare-five-file-live-backend.spec.ts",
+      "file": "perf/fcs-compare-five-file-live-backend.spec.ts",
       "column": 0,
       "line": 0,
       "specs": [
         {
-          "title": "FCS compare controls verification checklist",
+          "title": "FCS compare five-file live-backend checklist",
           "ok": true,
           "tags": [],
           "tests": [
             {
-              "timeout": 120000,
+              "timeout": 240000,
               "annotations": [],
               "expectedStatus": "passed",
               "projectId": "chromium",
@@ -85,12 +85,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 29360,
+                  "duration": 17337,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-04-08T09:54:12.751Z",
+                  "startTime": "2026-04-15T20:28:09.852Z",
                   "annotations": [],
                   "attachments": []
                 }
@@ -98,9 +98,9 @@
               "status": "expected"
             }
           ],
-          "id": "5df7fdf556ad68653cf4-b590461f57b9363abee9",
-          "file": "perf/fcs-compare-controls-verification.spec.ts",
-          "line": 73,
+          "id": "b6f760e82d93598a304d-c95296124d34a608f32a",
+          "file": "perf/fcs-compare-five-file-live-backend.spec.ts",
+          "line": 16,
           "column": 5
         }
       ]
@@ -108,8 +108,8 @@
   ],
   "errors": [],
   "stats": {
-    "startTime": "2026-04-08T09:54:11.105Z",
-    "duration": 33048.376000000004,
+    "startTime": "2026-04-15T20:28:08.915Z",
+    "duration": 18464.276,
     "expected": 1,
     "skipped": 0,
     "unexpected": 0,

@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, memo } from "react"
+import { useMemo, useState, useRef, useCallback, memo } from "react"
 import {
   ComposedChart,
   Scatter,
@@ -20,6 +20,7 @@ import { Info, Eye, EyeOff, Layers } from "lucide-react"
 import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { CHART_COLORS, useAnalysisStore } from "@/lib/store"
 import { useShallow } from "zustand/shallow"
+import { computeCursorZoomWindow, computePannedWindow, getPlotRatiosFromMouse, type ZoomWindow } from "./wheel-zoom-utils"
 
 export interface DiameterDataPoint {
   diameter: number
@@ -127,6 +128,10 @@ export const DiameterVsSSCChart = memo(function DiameterVsSSCChart({
   // Overlay visibility toggles
   const [showPrimary, setShowPrimary] = useState(true)
   const [showSecondary, setShowSecondary] = useState(true)
+  const [zoom, setZoom] = useState<ZoomWindow>({ xMin: null, xMax: null, yMin: null, yMax: null })
+  const chartContainerRef = useRef<HTMLDivElement>(null)
+  const [isPanning, setIsPanning] = useState(false)
+  const [lastPanPoint, setLastPanPoint] = useState<{ x: number; y: number } | null>(null)
   
   // Check if overlay is active - allow demo data generation when enabled
   const hasRealSecondaryData = (secondaryData?.length || 0) > 0
@@ -374,6 +379,92 @@ export const DiameterVsSSCChart = memo(function DiameterVsSSCChart({
   const totalSecondaryPoints = secondaryNormalData.length + secondaryAnomalyData.length
   const anomalyPercentage = totalPoints > 0 ? ((anomalyData.length / totalPoints) * 100).toFixed(2) : "0.00"
 
+  const chartBounds = useMemo(() => {
+    const primaryDiameters = [...normalData, ...anomalyData].map((p) => p.diameter)
+    const secondaryDiameters = [...secondaryNormalData, ...secondaryAnomalyData].map((p) => p.diameter)
+    const primarySsc = [...normalData, ...anomalyData].map((p) => p.ssc)
+    const secondarySsc = [...secondaryNormalData, ...secondaryAnomalyData].map((p) => p.ssc)
+    const theorySsc = mieTheoryCurve.map((p) => p.mieSSC)
+
+    const allDiameters = [...primaryDiameters, ...secondaryDiameters]
+    const allSsc = [...primarySsc, ...secondarySsc, ...theorySsc]
+
+    const minX = allDiameters.length > 0 ? Math.max(0, Math.min(...allDiameters) - 5) : 0
+    const maxX = allDiameters.length > 0 ? Math.min(500, Math.max(...allDiameters) + 5) : 500
+    const maxY = allSsc.length > 0 ? Math.max(1, Math.max(...allSsc) * 1.05) : 1000
+
+    return {
+      minX,
+      maxX,
+      minY: 0,
+      maxY,
+    }
+  }, [normalData, anomalyData, secondaryNormalData, secondaryAnomalyData, mieTheoryCurve])
+
+  const handleWheelZoom = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    const container = chartContainerRef.current
+    if (!container) return
+
+    const ratios = getPlotRatiosFromMouse(e.clientX, e.clientY, container.getBoundingClientRect(), {
+      top: 10,
+      right: 30,
+      bottom: 25,
+      left: 10,
+    })
+
+    if (!ratios.inPlot) return
+
+    e.preventDefault()
+    setZoom((prev) => computeCursorZoomWindow(prev, chartBounds, ratios, e.deltaY))
+  }, [chartBounds])
+
+  const hasActiveZoom = zoom.xMin !== null || zoom.yMin !== null
+
+  const handlePanStart = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!hasActiveZoom) return
+    const container = chartContainerRef.current
+    if (!container) return
+
+    const ratios = getPlotRatiosFromMouse(e.clientX, e.clientY, container.getBoundingClientRect(), {
+      top: 10,
+      right: 30,
+      bottom: 25,
+      left: 10,
+    })
+    if (!ratios.inPlot) return
+
+    setIsPanning(true)
+    setLastPanPoint({ x: e.clientX, y: e.clientY })
+  }, [hasActiveZoom])
+
+  const handlePanMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isPanning || !lastPanPoint) return
+
+    const container = chartContainerRef.current
+    if (!container) return
+
+    const rect = container.getBoundingClientRect()
+    const plotWidth = rect.width - 10 - 30
+    const plotHeight = rect.height - 10 - 25
+
+    setZoom((prev) =>
+      computePannedWindow(
+        prev,
+        chartBounds,
+        e.clientX - lastPanPoint.x,
+        e.clientY - lastPanPoint.y,
+        plotWidth,
+        plotHeight
+      )
+    )
+    setLastPanPoint({ x: e.clientX, y: e.clientY })
+  }, [isPanning, lastPanPoint, chartBounds])
+
+  const handlePanEnd = useCallback(() => {
+    setIsPanning(false)
+    setLastPanPoint(null)
+  }, [])
+
   return (
     <div className="space-y-3">
       {/* Header with overlay controls */}
@@ -453,15 +544,24 @@ export const DiameterVsSSCChart = memo(function DiameterVsSSCChart({
       </div>
 
       {/* Chart */}
-      <div style={{ height: `${height}px` }}>
-        <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
+      <div
+        ref={chartContainerRef}
+        style={{ height: `${height}px`, cursor: hasActiveZoom ? (isPanning ? "grabbing" : "grab") : "default" }}
+        onWheel={handleWheelZoom}
+        onMouseDown={handlePanStart}
+        onMouseMove={handlePanMove}
+        onMouseUp={handlePanEnd}
+        onMouseLeave={handlePanEnd}
+      >
+        <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1} debounce={80}>
           <ComposedChart margin={{ top: 10, right: 30, bottom: 25, left: 10 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.5} />
             
             <XAxis
               dataKey="diameter"
               type="number"
-              domain={[0, 500]}
+              domain={zoom.xMin !== null && zoom.xMax !== null ? [zoom.xMin, zoom.xMax] : [chartBounds.minX, chartBounds.maxX]}
+              allowDataOverflow
               stroke="#64748b"
               tick={{ fontSize: 11 }}
               tickCount={10}
@@ -477,6 +577,8 @@ export const DiameterVsSSCChart = memo(function DiameterVsSSCChart({
             <YAxis
               dataKey="ssc"
               type="number"
+              domain={zoom.yMin !== null && zoom.yMax !== null ? [zoom.yMin, zoom.yMax] : [chartBounds.minY, chartBounds.maxY]}
+              allowDataOverflow
               stroke="#64748b"
               tick={{ fontSize: 11 }}
               label={{ 
@@ -501,17 +603,18 @@ export const DiameterVsSSCChart = memo(function DiameterVsSSCChart({
               labelStyle={{ color: "#94a3b8" }}
               formatter={(value: number, name: string) => {
                 if (name === "mieSSC") return [value.toFixed(1), "Mie Theory SSC"]
-                return [value.toFixed(1), name === "ssc" ? "SSC-A" : name]
+                if (name === "ssc") return [value.toFixed(1), "SSC-A"]
+                return [value.toFixed(1), name]
               }}
               labelFormatter={(label) => `Diameter: ${label} nm`}
             />
             
             {showLegend && (
               <Legend
-                wrapperStyle={{ fontSize: "12px", paddingTop: "10px" }}
+                wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }}
                 iconType="circle"
-                verticalAlign="top"
-                height={36}
+                verticalAlign="bottom"
+                height={44}
               />
             )}
 
@@ -524,13 +627,6 @@ export const DiameterVsSSCChart = memo(function DiameterVsSSCChart({
                 strokeDasharray="4 4"
                 strokeWidth={1}
                 opacity={0.6}
-                label={{
-                  value: ref.label,
-                  position: "top",
-                  fill: ref.color,
-                  fontSize: 9,
-                  offset: 5,
-                }}
               />
             ))}
 
@@ -540,22 +636,25 @@ export const DiameterVsSSCChart = memo(function DiameterVsSSCChart({
                 data={mieTheoryCurve}
                 type="monotone"
                 dataKey="mieSSC"
-                stroke={CHART_COLORS.primary}
-                strokeWidth={2}
+                stroke="#7c3aed"
+                strokeWidth={3}
+                strokeOpacity={0.95}
                 dot={false}
                 name="Mie Theory"
                 legendType="line"
+                isAnimationActive={false}
               />
             )}
 
             {/* Primary normal events scatter */}
             {showPrimary && (
               <Scatter
-                name={hasOverlay ? (fcsAnalysis.file?.name?.slice(0, 20) || "Primary") : "Normal Events"}
+                name={hasOverlay ? (fcsAnalysis.file?.name?.slice(0, 24) || "Primary") : "Measured Events"}
                 data={normalData}
                 fill={hasOverlay ? overlayConfig.primaryColor : CHART_COLORS.primary}
                 fillOpacity={hasOverlay ? overlayConfig.primaryOpacity : 0.5}
                 shape="circle"
+                isAnimationActive={false}
               />
             )}
 
@@ -567,17 +666,19 @@ export const DiameterVsSSCChart = memo(function DiameterVsSSCChart({
                 fill={CHART_COLORS.anomaly}
                 fillOpacity={0.8}
                 shape="diamond"
+                isAnimationActive={false}
               />
             )}
             
             {/* Secondary normal events scatter for overlay */}
             {hasOverlay && showSecondary && secondaryNormalData.length > 0 && (
               <Scatter
-                name={secondaryFcsAnalysis.file?.name?.slice(0, 20) || "Comparison"}
+                name={secondaryFcsAnalysis.file?.name?.slice(0, 24) || "Comparison"}
                 data={secondaryNormalData}
                 fill={overlayConfig.secondaryColor}
                 fillOpacity={overlayConfig.secondaryOpacity}
                 shape="circle"
+                isAnimationActive={false}
               />
             )}
             
@@ -589,6 +690,7 @@ export const DiameterVsSSCChart = memo(function DiameterVsSSCChart({
                 fill="#f97316"
                 fillOpacity={0.7}
                 shape="square"
+                isAnimationActive={false}
               />
             )}
           </ComposedChart>

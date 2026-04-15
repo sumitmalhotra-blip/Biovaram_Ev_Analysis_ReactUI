@@ -1,0 +1,6 @@
+﻿TEST=ROLLBACK_DRILL
+TIMESTAMP=2026-04-15T18:45:22
+PROCESS_SURVIVED_35S=yes
+ROLLBACK_STATE_CLEARED=yes
+STATE_PATH=C:\Users\Asus\AppData\Roaming\my-v0-project\updater-state.json
+METHOD=packaged app startup with seeded install-started state + auto-ack test mode

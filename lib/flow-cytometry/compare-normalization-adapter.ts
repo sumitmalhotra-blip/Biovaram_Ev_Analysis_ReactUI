@@ -17,14 +17,44 @@ const CANONICAL_RULES: Array<{
   aliases: RegExp[]
   unit: string
 }> = [
-  { canonical: "FSC-A", aliases: [/^FSC([\s_-]?A)?$/i, /^FSCA$/i], unit: "a.u." },
-  { canonical: "FSC-H", aliases: [/^FSC([\s_-]?H)$/i, /^FSCH$/i], unit: "a.u." },
+  { canonical: "FSC-A", aliases: [/^FSC([\s_-]?A)?$/i, /^FSCA$/i, /^VFSC([\s_-]?A)?$/i], unit: "a.u." },
+  { canonical: "FSC-H", aliases: [/^FSC([\s_-]?H)$/i, /^FSCH$/i, /^VFSC([\s_-]?H)$/i], unit: "a.u." },
   { canonical: "SSC-A", aliases: [/^SSC([\s_-]?A)?$/i, /^SSCA$/i], unit: "a.u." },
   { canonical: "SSC-H", aliases: [/^SSC([\s_-]?H)$/i, /^SSCH$/i], unit: "a.u." },
   { canonical: "VSSC1-A", aliases: [/^VSSC1([\s_-]?A)?$/i, /^VSSC([\s_-]?1)?([\s_-]?A)?$/i], unit: "a.u." },
+  { canonical: "VSSC1-H", aliases: [/^VSSC1([\s_-]?H)$/i, /^VSSC([\s_-]?1)?([\s_-]?H)$/i], unit: "a.u." },
   { canonical: "VSSC2-A", aliases: [/^VSSC2([\s_-]?A)?$/i, /^VSSC([\s_-]?2)?([\s_-]?A)?$/i], unit: "a.u." },
+  { canonical: "VSSC2-H", aliases: [/^VSSC2([\s_-]?H)$/i, /^VSSC([\s_-]?2)?([\s_-]?H)$/i], unit: "a.u." },
   { canonical: "BSSC-A", aliases: [/^BSSC([\s_-]?A)?$/i], unit: "a.u." },
+  { canonical: "BSSC-H", aliases: [/^BSSC([\s_-]?H)$/i], unit: "a.u." },
+  { canonical: "YSSC-A", aliases: [/^YSSC([\s_-]?A)?$/i], unit: "a.u." },
+  { canonical: "YSSC-H", aliases: [/^YSSC([\s_-]?H)$/i], unit: "a.u." },
+  { canonical: "RSSC-A", aliases: [/^RSSC([\s_-]?A)?$/i], unit: "a.u." },
+  { canonical: "RSSC-H", aliases: [/^RSSC([\s_-]?H)$/i], unit: "a.u." },
 ]
+
+const SIDE_SCATTER_FALLBACKS = [
+  "SSC-A",
+  "SSC-H",
+  "VSSC1-A",
+  "VSSC1-H",
+  "VSSC2-A",
+  "VSSC2-H",
+  "BSSC-A",
+  "BSSC-H",
+  "YSSC-A",
+  "YSSC-H",
+  "RSSC-A",
+  "RSSC-H",
+] as const
+
+function isLikelyScatterOrFSCChannel(channel: string): boolean {
+  return /(FSC|SSC)/i.test(channel)
+}
+
+function isAuxiliaryScatterChannel(channel: string): boolean {
+  return /(WIDTH|TIME)/i.test(channel)
+}
 
 function normalizeToken(value: string): string {
   return value.trim().replace(/\s+/g, " ")
@@ -61,7 +91,9 @@ export function normalizeFCSChannels(sampleId: string, channels: string[]): FCSN
   nativeChannels.forEach((nativeChannel) => {
     const canonical = toCanonical(nativeChannel)
     if (!canonical) {
-      warnings.push(`Unsupported channel preserved as native only: ${nativeChannel}`)
+      if (isLikelyScatterOrFSCChannel(nativeChannel) && !isAuxiliaryScatterChannel(nativeChannel)) {
+        warnings.push(`Unsupported scatter/FSC channel preserved as native only: ${nativeChannel}`)
+      }
       nativeToCanonical[nativeChannel] = nativeChannel
       return
     }
@@ -83,7 +115,8 @@ export function normalizeFCSChannels(sampleId: string, channels: string[]): FCSN
     warnings.push("No FSC channel detected for normalized compare")
   }
 
-  if (!canonicalToNative["SSC-A"] && !canonicalToNative["SSC-H"]) {
+  const hasAnySideScatter = SIDE_SCATTER_FALLBACKS.some((channel) => !!canonicalToNative[channel])
+  if (!hasAnySideScatter) {
     warnings.push("No SSC channel detected for normalized compare")
   }
 
@@ -105,6 +138,15 @@ export function resolveChannelForSample(requestedChannel: string, schema: FCSNor
   const canonicalRequested = toCanonical(requestedChannel) ?? requestedChannel
   if (schema.canonicalToNative[canonicalRequested]) {
     return schema.canonicalToNative[canonicalRequested]
+  }
+
+  if (canonicalRequested === "SSC-A" || canonicalRequested === "SSC-H") {
+    for (const fallback of SIDE_SCATTER_FALLBACKS) {
+      const native = schema.canonicalToNative[fallback]
+      if (native) {
+        return native
+      }
+    }
   }
 
   if (schema.nativeChannels.includes(requestedChannel)) {

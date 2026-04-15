@@ -498,6 +498,11 @@ export async function captureChartAsImage(
     }
   } catch (error) {
     console.error("Failed to capture chart:", error)
+    // Runtime fallback: if html2canvas fails, attempt direct SVG capture.
+    const svgElement = chartElement.querySelector("svg")
+    if (svgElement) {
+      return await captureSVGAsImage(svgElement, title, source, chartType, options)
+    }
     return null
   }
 }

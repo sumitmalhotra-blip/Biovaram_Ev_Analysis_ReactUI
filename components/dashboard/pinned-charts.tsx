@@ -106,7 +106,18 @@ export function PinnedCharts({ charts }: PinnedChartsProps) {
                 </div>
               </CardHeader>
               <CardContent className="pt-0">
-                <MiniChart type={chart.type} data={chart.data} config={chart.config} />
+                {chart.snapshotDataUrl ? (
+                  <div className="h-48 rounded-md overflow-hidden border border-border/40 bg-background/40">
+                    <img
+                      src={chart.snapshotDataUrl}
+                      alt={`${chart.title} snapshot`}
+                      className="w-full h-full object-contain"
+                      loading="lazy"
+                    />
+                  </div>
+                ) : (
+                  <MiniChart type={chart.type} data={chart.data} config={chart.config} />
+                )}
               </CardContent>
             </Card>
           ))}

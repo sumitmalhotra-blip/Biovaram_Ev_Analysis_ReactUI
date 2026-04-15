@@ -1,0 +1,7 @@
+﻿TEST=FULL_REGRESSION_PASS
+TIMESTAMP=2026-04-15T18:49:50
+PERF_GATES_PASS=yes
+UAT_EVIDENCE_PASS=yes
+OVERALL_PASS=yes
+LOG1=temp\regression_perf_gates_apr15.log
+LOG2=temp\regression_uat_evidence_apr15.log

@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-04-07T12:49:27.361Z",
+  "timestamp": "2026-04-15T20:28:26.299Z",
   "test": "fcs-compare-five-file-live-backend-checklist",
   "mode": "live-backend-non-mocked-uploader",
   "uploadResponses": [
@@ -8,7 +8,7 @@
       "ok": true,
       "status": 200,
       "sample_id": "Nano_Vis_High",
-      "id": 34,
+      "id": 6,
       "fcs_results": {
         "total_events": 124189,
         "event_count": 124189,
@@ -95,7 +95,7 @@
             "bssc_channel": "BSSC-H"
           }
         },
-        "id": 34,
+        "id": 6,
         "sample_id": "Nano_Vis_High"
       }
     },
@@ -104,7 +104,7 @@
       "ok": true,
       "status": 200,
       "sample_id": "Nano_Vis_High",
-      "id": 34,
+      "id": 6,
       "fcs_results": {
         "total_events": 124189,
         "event_count": 124189,
@@ -191,7 +191,7 @@
             "bssc_channel": "BSSC-H"
           }
         },
-        "id": 34,
+        "id": 6,
         "sample_id": "Nano_Vis_High"
       }
     },
@@ -200,7 +200,7 @@
       "ok": true,
       "status": 200,
       "sample_id": "Nano_Vis_Low",
-      "id": 33,
+      "id": 7,
       "fcs_results": {
         "total_events": 179465,
         "event_count": 179465,
@@ -287,7 +287,7 @@
             "bssc_channel": "BSSC-H"
           }
         },
-        "id": 33,
+        "id": 7,
         "sample_id": "Nano_Vis_Low"
       }
     },
@@ -296,7 +296,7 @@
       "ok": true,
       "status": 200,
       "sample_id": "Nano_Vis_Low",
-      "id": 33,
+      "id": 7,
       "fcs_results": {
         "total_events": 179465,
         "event_count": 179465,
@@ -383,7 +383,7 @@
             "bssc_channel": "BSSC-H"
           }
         },
-        "id": 33,
+        "id": 7,
         "sample_id": "Nano_Vis_Low"
       }
     },
@@ -392,7 +392,7 @@
       "ok": true,
       "status": 200,
       "sample_id": "Nano_Vis_High",
-      "id": 34,
+      "id": 6,
       "fcs_results": {
         "total_events": 124189,
         "event_count": 124189,
@@ -479,7 +479,7 @@
             "bssc_channel": "BSSC-H"
           }
         },
-        "id": 34,
+        "id": 6,
         "sample_id": "Nano_Vis_High"
       }
     }
@@ -511,6 +511,18 @@
     "allFiveLiveUploadsSucceeded": true,
     "fiveCompareItemsRetained": true,
     "compareMetaAligned": true,
-    "duplicateBackendIdsObserved": true
+    "duplicateBackendIdsObserved": true,
+    "normalizationWarningTypesBounded": true
+  },
+  "warningGuard": {
+    "threshold": 4,
+    "warningTypeCountsByStep": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "maxWarningTypeCount": 0
   }
 }

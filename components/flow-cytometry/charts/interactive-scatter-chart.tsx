@@ -98,8 +98,13 @@ export const InteractiveScatterChart = memo(function InteractiveScatterChart({
   const [gateName, setGateName] = useState("")
   const [pendingGateCoords, setPendingGateCoords] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null)
 
+  const axisShouldBeNonNegative = useMemo(
+    () => /fsc|ssc/i.test(xLabel) || /fsc|ssc/i.test(yLabel),
+    [xLabel, yLabel]
+  )
+
   // Performance: Limit displayed points
-  const MAX_POINTS = 2000
+  const MAX_POINTS = 1200
   const displayData = useMemo(() => {
     if (data.length <= MAX_POINTS) return data
     const step = Math.ceil(data.length / MAX_POINTS)
@@ -123,13 +128,15 @@ export const InteractiveScatterChart = memo(function InteractiveScatterChart({
     // Add 5% padding
     const xPad = (maxX - minX) * 0.05 || 100
     const yPad = (maxY - minY) * 0.05 || 1000
+    const boundedMinX = axisShouldBeNonNegative ? Math.max(0, minX - xPad) : minX - xPad
+    const boundedMinY = axisShouldBeNonNegative ? Math.max(0, minY - yPad) : minY - yPad
     return {
-      minX: minX - xPad,
+      minX: boundedMinX,
       maxX: maxX + xPad,
-      minY: minY - yPad,
+      minY: boundedMinY,
       maxY: maxY + yPad
     }
-  }, [displayData])
+  }, [displayData, axisShouldBeNonNegative])
 
   // Current view bounds (for zoom) - convert viewBox to Bounds format
   const currentBounds: Bounds = useMemo(() => {
@@ -243,16 +250,36 @@ export const InteractiveScatterChart = memo(function InteractiveScatterChart({
         const xMax = prev ? prev.xMax : dataBounds.maxX
         const yMin = prev ? prev.yMin : dataBounds.minY
         const yMax = prev ? prev.yMax : dataBounds.maxY
+
+        const nextXMin = xMin + dx
+        const nextXMax = xMax + dx
+        const nextYMin = yMin + dy
+        const nextYMax = yMax + dy
+
+        if (!axisShouldBeNonNegative) {
+          return {
+            xMin: nextXMin,
+            xMax: nextXMax,
+            yMin: nextYMin,
+            yMax: nextYMax,
+          }
+        }
+
+        const xRange = xMax - xMin
+        const yRange = yMax - yMin
+        const clampedXMin = Math.max(0, nextXMin)
+        const clampedYMin = Math.max(0, nextYMin)
+
         return {
-          xMin: xMin + dx,
-          xMax: xMax + dx,
-          yMin: yMin + dy,
-          yMax: yMax + dy
+          xMin: clampedXMin,
+          xMax: clampedXMin + xRange,
+          yMin: clampedYMin,
+          yMax: clampedYMin + yRange,
         }
       })
       setDragStart(clampedPos)
     }
-  }, [isDragging, dragStart, mode, getMousePos, dimensions, unscaleX, unscaleY, dataBounds])
+  }, [isDragging, dragStart, mode, getMousePos, dimensions, unscaleX, unscaleY, dataBounds, axisShouldBeNonNegative])
 
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
     if (!isDragging || !dragStart || !dragEnd) {
@@ -369,6 +396,84 @@ export const InteractiveScatterChart = memo(function InteractiveScatterChart({
     setViewBox(null)
   }, [])
 
+  const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    if (!svgRef.current) return
+
+    const rect = svgRef.current.getBoundingClientRect()
+    const localX = e.clientX - rect.left
+    const localY = e.clientY - rect.top
+
+    const inPlot =
+      localX >= PADDING.left &&
+      localX <= dimensions.width - PADDING.right &&
+      localY >= PADDING.top &&
+      localY <= dimensions.height - PADDING.bottom
+
+    if (!inPlot) return
+
+    e.preventDefault()
+
+    const zoomFactor = e.deltaY > 0 ? 1.2 : 0.8
+    const focusX = unscaleX(localX)
+    const focusY = unscaleY(localY)
+
+    setViewBox((prev) => {
+      const bounds = prev ? viewBoxToBounds(prev) : dataBounds
+
+      const nextXMin = focusX - (focusX - bounds.minX) * zoomFactor
+      const nextXMax = focusX + (bounds.maxX - focusX) * zoomFactor
+      const nextYMin = focusY - (focusY - bounds.minY) * zoomFactor
+      const nextYMax = focusY + (bounds.maxY - focusY) * zoomFactor
+
+      const originalXSpan = dataBounds.maxX - dataBounds.minX
+      const originalYSpan = dataBounds.maxY - dataBounds.minY
+
+      let clampedXMin = nextXMin
+      let clampedXMax = nextXMax
+      let clampedYMin = nextYMin
+      let clampedYMax = nextYMax
+
+      const xSpan = clampedXMax - clampedXMin
+      const ySpan = clampedYMax - clampedYMin
+
+      if (xSpan >= originalXSpan && ySpan >= originalYSpan) {
+        return null
+      }
+
+      if (clampedXMin < dataBounds.minX) {
+        const delta = dataBounds.minX - clampedXMin
+        clampedXMin += delta
+        clampedXMax += delta
+      }
+      if (clampedXMax > dataBounds.maxX) {
+        const delta = clampedXMax - dataBounds.maxX
+        clampedXMin -= delta
+        clampedXMax -= delta
+      }
+
+      if (clampedYMin < dataBounds.minY) {
+        const delta = dataBounds.minY - clampedYMin
+        clampedYMin += delta
+        clampedYMax += delta
+      }
+      if (clampedYMax > dataBounds.maxY) {
+        const delta = clampedYMax - dataBounds.maxY
+        clampedYMin -= delta
+        clampedYMax -= delta
+      }
+
+      if (axisShouldBeNonNegative) {
+        const safeXMin = Math.max(0, clampedXMin)
+        const safeYMin = Math.max(0, clampedYMin)
+        const safeXMax = safeXMin + (clampedXMax - clampedXMin)
+        const safeYMax = safeYMin + (clampedYMax - clampedYMin)
+        return { xMin: safeXMin, xMax: safeXMax, yMin: safeYMin, yMax: safeYMax }
+      }
+
+      return { xMin: clampedXMin, xMax: clampedXMax, yMin: clampedYMin, yMax: clampedYMax }
+    })
+  }, [dimensions, unscaleX, unscaleY, viewBoxToBounds, dataBounds, axisShouldBeNonNegative])
+
   const clearSelection = useCallback(() => {
     setSelectedIndices(new Set())
     setSelectionRect(null)
@@ -439,6 +544,39 @@ export const InteractiveScatterChart = memo(function InteractiveScatterChart({
   // Anomaly set for quick lookup
   const anomalySet = useMemo(() => new Set(anomalousIndices), [anomalousIndices])
 
+  const renderedLayers = useMemo(() => {
+    const normal: Array<{ key: string; cx: number; cy: number }> = []
+    const anomalies: Array<{ key: string; cx: number; cy: number }> = []
+    const selected: Array<{ key: string; cx: number; cy: number }> = []
+
+    for (let i = 0; i < displayData.length; i++) {
+      const point = displayData[i]
+      const pointIndex = point.index ?? i
+      const cx = scaleX(point.x)
+      const cy = scaleY(point.y)
+
+      if (
+        cx < PADDING.left ||
+        cx > dimensions.width - PADDING.right ||
+        cy < PADDING.top ||
+        cy > dimensions.height - PADDING.bottom
+      ) {
+        continue
+      }
+
+      const keyBase = `${pointIndex}-${i}`
+      if (selectedIndices.has(pointIndex)) {
+        selected.push({ key: `selected-${keyBase}`, cx, cy })
+      } else if (highlightAnomalies && anomalySet.has(pointIndex)) {
+        anomalies.push({ key: `anomaly-${keyBase}`, cx, cy })
+      } else {
+        normal.push({ key: `normal-${keyBase}`, cx, cy })
+      }
+    }
+
+    return { normal, anomalies, selected }
+  }, [displayData, scaleX, scaleY, dimensions, selectedIndices, highlightAnomalies, anomalySet])
+
   // Format number for display
   const formatNumber = (n: number) => {
     if (Math.abs(n) >= 1000) return (n / 1000).toFixed(1) + 'k'
@@ -449,7 +587,7 @@ export const InteractiveScatterChart = memo(function InteractiveScatterChart({
   // Stats
   const totalPoints = data.length
   const selectedCount = selectedIndices.size
-  const anomalyCount = displayData.filter((_, i) => anomalySet.has(displayData[i].index ?? i)).length
+  const anomalyCount = renderedLayers.anomalies.length
 
   return (
     <Card className="card-3d">
@@ -563,6 +701,7 @@ export const InteractiveScatterChart = memo(function InteractiveScatterChart({
             mode === 'pan' && "ring-2 ring-orange-500/50"
           )}
           style={{ height: `${height}px`, cursor: mode === 'select' ? 'crosshair' : mode === 'pan' ? 'grab' : 'default' }}
+          onWheel={handleWheel}
         >
           <svg
             ref={svgRef}
@@ -663,85 +802,42 @@ export const InteractiveScatterChart = memo(function InteractiveScatterChart({
             {/* Data points - render in layers for proper z-ordering */}
             <g>
               {/* Normal points */}
-              {displayData.map((point, i) => {
-                const pointIndex = point.index ?? i
-                const isSelected = selectedIndices.has(pointIndex)
-                const isAnomaly = highlightAnomalies && anomalySet.has(pointIndex)
-                
-                if (isSelected || isAnomaly) return null
-                
-                const cx = scaleX(point.x)
-                const cy = scaleY(point.y)
-                
-                // Skip if outside visible area
-                if (cx < PADDING.left || cx > dimensions.width - PADDING.right ||
-                    cy < PADDING.top || cy > dimensions.height - PADDING.bottom) {
-                  return null
-                }
-                
-                return (
-                  <circle
-                    key={`normal-${pointIndex}`}
-                    cx={cx}
-                    cy={cy}
-                    r={2}
-                    fill={CHART_COLORS.primary}
-                    fillOpacity={0.6}
-                  />
-                )
-              })}
+              {renderedLayers.normal.map((point) => (
+                <circle
+                  key={point.key}
+                  cx={point.cx}
+                  cy={point.cy}
+                  r={2}
+                  fill={CHART_COLORS.primary}
+                  fillOpacity={0.6}
+                />
+              ))}
               
               {/* Anomaly points */}
-              {highlightAnomalies && displayData.map((point, i) => {
-                const pointIndex = point.index ?? i
-                if (!anomalySet.has(pointIndex) || selectedIndices.has(pointIndex)) return null
-                
-                const cx = scaleX(point.x)
-                const cy = scaleY(point.y)
-                
-                if (cx < PADDING.left || cx > dimensions.width - PADDING.right ||
-                    cy < PADDING.top || cy > dimensions.height - PADDING.bottom) {
-                  return null
-                }
-                
-                return (
-                  <circle
-                    key={`anomaly-${pointIndex}`}
-                    cx={cx}
-                    cy={cy}
-                    r={3}
-                    fill={CHART_COLORS.anomaly}
-                    fillOpacity={0.9}
-                  />
-                )
-              })}
+              {highlightAnomalies && renderedLayers.anomalies.map((point) => (
+                <circle
+                  key={point.key}
+                  cx={point.cx}
+                  cy={point.cy}
+                  r={3}
+                  fill={CHART_COLORS.anomaly}
+                  fillOpacity={0.9}
+                />
+              ))}
               
               {/* Selected points (on top) */}
-              {displayData.map((point, i) => {
-                const pointIndex = point.index ?? i
-                if (!selectedIndices.has(pointIndex)) return null
-                
-                const cx = scaleX(point.x)
-                const cy = scaleY(point.y)
-                
-                if (cx < PADDING.left || cx > dimensions.width - PADDING.right ||
-                    cy < PADDING.top || cy > dimensions.height - PADDING.bottom) {
-                  return null
-                }
-                
-                return (
-                  <circle
-                    key={`selected-${pointIndex}`}
-                    cx={cx}
-                    cy={cy}
-                    r={3}
-                    fill="#22c55e"
-                    fillOpacity={0.9}
-                    stroke="#fff"
-                    strokeWidth={1}
-                  />
-                )
-              })}
+              {renderedLayers.selected.map((point) => (
+                <circle
+                  key={point.key}
+                  cx={point.cx}
+                  cy={point.cy}
+                  r={3}
+                  fill="#22c55e"
+                  fillOpacity={0.9}
+                  stroke="#fff"
+                  strokeWidth={1}
+                />
+              ))}
             </g>
             
             {/* X Axis */}

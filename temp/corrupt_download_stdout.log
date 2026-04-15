@@ -1,0 +1,61 @@
+
+> my-v0-project@0.1.7 desktop:start
+> electron .
+
+
+[desktop] Starting backend: D:\CRM IT Project\Biovaram_Ev_Analysis_ReactUI\backend\venv\Scripts\python.exe D:\CRM IT Project\Biovaram_Ev_Analysis_ReactUI\backend\run_desktop.py
+[desktop] Backend is healthy on http://127.0.0.1:18122
+[desktop] Loading renderer: http://127.0.0.1:18122?appVersion=0.1.7
+[desktop] [backend] 
+============================================================
+  BioVaram EV Analysis Platform � Desktop Edition
+  Version 1.0.0 | Build dev
+============================================================
+
+  API Server:  http://localhost:18122
+  API Docs:    http://localhost:18122/docs
+  Application: http://localhost:18122
+
+  Data:        D:\CRM IT Project\Biovaram_Ev_Analysis_ReactUI\data
+  Frontend:    D:\CRM IT Project\Biovaram_Ev_Analysis_ReactUI\out
+
+  Press Ctrl+C to stop the server
+============================================================
+
+  Frontend: Serving static files from D:\CRM IT Project\Biovaram_Ev_Analysis_ReactUI\out
+INFO:     127.0.0.1:63293 - "GET /health HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63294 - "GET /?appVersion=0.1.7 HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63295 - "GET /_next/static/chunks/3ba7f8fd0ad6fc7b.css HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63296 - "GET /_next/static/chunks/ce1e86e4b5df7d53.css HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63294 - "GET /_next/static/media/83afe278b6a6bb3c-s.p.3a6ba036.woff2 HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63295 - "GET /_next/static/chunks/b96b2f122b869ff7.js HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63297 - "GET /_next/static/chunks/b04b8de793da60fd.js HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63294 - "GET /_next/static/chunks/e8e8eec3a49b827b.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63298 - "GET /_next/static/chunks/turbopack-18086d150842ef4a.js HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63299 - "GET /_next/static/chunks/13e374ba8c2030a2.js HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63296 - "GET /_next/static/chunks/ff1a16fafef87110.js HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63295 - "GET /_next/static/chunks/64c0a5e3a0354479.js HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63299 - "GET /_next/static/chunks/a1ecee6bd388a54a.js HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63298 - "GET /_next/static/chunks/ea7ee778772c4393.js HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63294 - "GET /_next/static/chunks/5ba7b9bb458c2ecd.js HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63296 - "GET /_next/static/chunks/c38e9cc89bb963e5.js HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63295 - "GET /_next/static/chunks/3458b7012f4848b1.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63297 - "GET /_next/static/chunks/c7e1346614847c77.js HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63298 - "GET /_next/static/chunks/a2f77e2c473b1832.js HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63297 - "GET /health HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63297 - "POST /api/v1/auth/login HTTP/1.1" 422 Unprocessable Content
+[desktop] [backend] INFO:     127.0.0.1:63297 - "GET /logo-biovaram-optimized.webp HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63296 - "GET /_next/static/chunks/5bb3ac58fd09490e.js HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63294 - "GET /_next/static/chunks/4fe28f86c3aa8a28.js HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63298 - "GET /_next/static/chunks/719eb4309da53b15.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63299 - "GET /_next/static/chunks/de1611bf34f3fe6e.js HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63297 - "GET /_next/static/chunks/e9531608257219e0.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63295 - "GET /_next/static/chunks/1ed2e8af4b6cee1b.js HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63295 - "GET /api/v1/alerts?is_acknowledged=false&limit=10&order_by=created_at&order_desc=true HTTP/1.1" 307 Temporary Redirect
+INFO:     127.0.0.1:63298 - "GET /health HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63295 - "GET /api/v1/alerts/?is_acknowledged=false&limit=10&order_by=created_at&order_desc=true HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63295 - "GET /health HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63296 - "GET /api/v1/samples HTTP/1.1" 307 Temporary Redirect
+[desktop] [backend] INFO:     127.0.0.1:63297 - "GET /api/v1/alerts/counts HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63297 - "GET /api/v1/samples/ HTTP/1.1" 200 OK
+[desktop] [backend] INFO:     127.0.0.1:63302 - "GET /health HTTP/1.1" 200 OK

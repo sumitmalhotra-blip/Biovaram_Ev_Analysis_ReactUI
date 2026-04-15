@@ -878,10 +878,14 @@ export function BeadCalibrationPanel() {
           setFcmpassBeadRI(result.refractive_index.toString())
         }
       } else {
+        const fallbackMessage = selectedKit
+          ? `${result?.message || "Could not extract bead data from datasheet."} Continuing with selected bead kit (${selectedKit}).`
+          : (result?.message || "Could not extract bead data. Try CSV format.")
+
         toast({
-          title: "Parse Issue",
-          description: result?.message || "Could not extract bead data. Try CSV format.",
-          variant: "destructive",
+          title: selectedKit ? "Datasheet Parse Warning" : "Parse Issue",
+          description: fallbackMessage,
+          variant: selectedKit ? "default" : "destructive",
         })
       }
     } catch (error) {

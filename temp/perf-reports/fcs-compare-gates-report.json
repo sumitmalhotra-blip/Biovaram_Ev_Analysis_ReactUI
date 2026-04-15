@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-04-08T08:49:49.849Z",
+  "timestamp": "2026-04-15T13:18:36.780Z",
   "benchmarkSampleIds": [
     "S1",
     "S2",
@@ -12,10 +12,10 @@
     "compareMs": 3000
   },
   "measured": {
-    "primaryGateText": "Reference Gate: 451ms / 1500ms",
-    "compareGateText": "Compare Gate: 815ms / 3000ms",
-    "primaryGateMs": 451,
-    "compareGateMs": 815
+    "primaryGateText": "Reference Gate: 549ms / 1500ms",
+    "compareGateText": "Compare Gate: 949ms / 3000ms",
+    "primaryGateMs": 549,
+    "compareGateMs": 949
   },
   "passFail": {
     "primaryPass": true,

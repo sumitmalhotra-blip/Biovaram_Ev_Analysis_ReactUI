@@ -1,6 +1,17 @@
 import { test, expect } from "@playwright/test"
 import fs from "node:fs"
 import path from "node:path"
+import { buildNormalizationSummary, normalizeFCSChannels } from "../../lib/flow-cytometry/compare-normalization-adapter"
+
+function toWarningTypeCount(warnings: string[]): number {
+  const warningTypes = new Set<string>()
+  warnings.forEach((warning) => {
+    const separator = warning.indexOf(": ")
+    const message = separator > 0 ? warning.slice(separator + 2) : warning
+    warningTypes.add(message)
+  })
+  return warningTypes.size
+}
 
 test("FCS compare five-file live-backend checklist", async ({ page, request }) => {
   test.setTimeout(240000)
@@ -65,6 +76,16 @@ test("FCS compare five-file live-backend checklist", async ({ page, request }) =
 
   const successful = uploadResponses.filter((entry) => entry.ok && entry.sample_id)
   expect(successful.length).toBe(5)
+
+  // Guard against warning-count regression: warning types should stay bounded as uploads grow.
+  const warningTypeCountsByStep = successful.map((_, stepIndex) => {
+    const schemas = successful
+      .slice(0, stepIndex + 1)
+      .map((entry, idx) => normalizeFCSChannels(`cmp-${idx + 1}`, (entry.fcs_results?.channels as string[] | undefined) ?? []))
+    const summary = buildNormalizationSummary(schemas)
+    return toWarningTypeCount(summary.warnings)
+  })
+  const maxWarningTypeCount = warningTypeCountsByStep.length > 0 ? Math.max(...warningTypeCountsByStep) : 0
 
   const compareItemIds = successful.map((_, idx) => `cmp-${idx + 1}`)
   const selectedSampleIds = [...compareItemIds]
@@ -175,6 +196,12 @@ test("FCS compare five-file live-backend checklist", async ({ page, request }) =
       fiveCompareItemsRetained: snapshot.selectedCount === 5,
       compareMetaAligned: snapshot.compareItemMetaCount >= snapshot.selectedCount,
       duplicateBackendIdsObserved: snapshot.duplicateBackendCount > 0,
+      normalizationWarningTypesBounded: maxWarningTypeCount <= 4,
+    },
+    warningGuard: {
+      threshold: 4,
+      warningTypeCountsByStep,
+      maxWarningTypeCount,
     },
   }
 
@@ -194,12 +221,15 @@ test("FCS compare five-file live-backend checklist", async ({ page, request }) =
     `- compareItemMetaById keys: ${snapshot.compareItemMetaCount}`,
     `- Duplicate backend sample_id count: ${snapshot.duplicateBackendCount}`,
     `- Duplicate backend sample_id values: ${snapshot.duplicateBackendSampleIds.join(", ") || "none"}`,
+    `- Warning type counts by cumulative upload step: ${evidence.warningGuard.warningTypeCountsByStep.join(" -> ")}`,
+    `- Max warning type count observed: ${evidence.warningGuard.maxWarningTypeCount} (threshold ${evidence.warningGuard.threshold})`,
     "",
     "## Checks",
     `- allFiveLiveUploadsSucceeded: ${evidence.checks.allFiveLiveUploadsSucceeded}`,
     `- fiveCompareItemsRetained: ${evidence.checks.fiveCompareItemsRetained}`,
     `- compareMetaAligned: ${evidence.checks.compareMetaAligned}`,
     `- duplicateBackendIdsObserved: ${evidence.checks.duplicateBackendIdsObserved}`,
+    `- normalizationWarningTypesBounded: ${evidence.checks.normalizationWarningTypesBounded}`,
   ].join("\n")
 
   fs.writeFileSync(path.join(outDir, "fcs-compare-five-file-live-backend-evidence.md"), markdown, "utf-8")
@@ -212,4 +242,5 @@ test("FCS compare five-file live-backend checklist", async ({ page, request }) =
   expect(evidence.checks.fiveCompareItemsRetained).toBeTruthy()
   expect(evidence.checks.compareMetaAligned).toBeTruthy()
   expect(evidence.checks.duplicateBackendIdsObserved).toBeTruthy()
+  expect(evidence.checks.normalizationWarningTypesBounded).toBeTruthy()
 })

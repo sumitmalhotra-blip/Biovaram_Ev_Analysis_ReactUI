@@ -22,6 +22,7 @@ Date: February 2026
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 import re
+import json
 from dataclasses import dataclass, field
 from loguru import logger
 
@@ -183,6 +184,196 @@ def _parse_spec_range(text: str) -> tuple[Optional[float], Optional[float]]:
     return None, None
 
 
+def _extract_bead_from_line(
+    line: str,
+    subcomponent: str = "",
+) -> Optional[BeadPopulation]:
+    """Try to parse one free-form line into a bead population."""
+    raw = (line or "").strip()
+    if not raw:
+        return None
+
+    normalized = raw.replace("µ", "u").replace("–", "-")
+    lower = normalized.lower()
+
+    if any(k in lower for k in [
+        "certificate of analysis",
+        "refractive index",
+        "laser wavelength",
+        "storage",
+        "manufacturer",
+        "part number",
+        "lot",
+        "expiry",
+        "expiration",
+        "nanoscale sizing standards",
+    ]):
+        return None
+
+    # Case 1: explicit size label like 44nm.
+    label_match = re.search(r'(?<!\d)(\d{2,4})\s*nm\b', lower)
+
+    # Case 2: table line where first token is size label without unit.
+    # Example: "44  0.044  0.040-0.048  11.5% ..."
+    first_token_mode = False
+    if not label_match:
+        tokens = re.split(r'[\s,;\t]+', lower)
+        if tokens and re.fullmatch(r'\d{2,4}', tokens[0]):
+            label_match = re.match(r'\d{2,4}', tokens[0])
+            first_token_mode = True
+
+    if not label_match:
+        return None
+
+    if first_token_mode:
+        # Guard against metadata lines that start with numbers but are not bead rows.
+        has_percent = "%" in lower
+        has_range = bool(re.search(r'\d+\.\d+\s*[-]\s*\d+\.\d+', normalized))
+        decimal_candidates = [float(v) for v in re.findall(r'\d+\.\d+', normalized)]
+        has_mean_like_decimal = any(0.01 <= v <= 2.0 for v in decimal_candidates)
+        if not (has_mean_like_decimal and (has_percent or has_range)):
+            return None
+
+    label_token = label_match.group(1) if label_match.lastindex else label_match.group(0)
+    label_num_match = re.search(r'\d{2,4}', label_token)
+    if not label_num_match:
+        return None
+    label_nm = int(label_num_match.group(0))
+
+    # Filter likely wavelength-only lines.
+    if label_nm in {405, 488, 561, 590, 640} and "%" not in lower and "-" not in lower:
+        return None
+
+    decimals = [float(v) for v in re.findall(r'\d+\.\d+', normalized)]
+    # Mean bead diameter in um is typically 0.01..2.0
+    mean_um = next((v for v in decimals if 0.01 <= v <= 2.0), label_nm / 1000.0)
+
+    spec_min, spec_max = _parse_spec_range(normalized)
+    cv_match = re.search(r'(\d+(?:\.\d+)?)\s*%', normalized)
+    cv = float(cv_match.group(1)) if cv_match else 0.0
+
+    bead = BeadPopulation(
+        label=f"{label_nm}nm",
+        diameter_nm=round(mean_um * 1000, 1),
+        diameter_um=mean_um,
+        cv_pct=cv,
+        spec_min_um=spec_min,
+        spec_max_um=spec_max,
+        subcomponent=subcomponent,
+    )
+    return bead
+
+
+def _parse_fallback_lines_into_result(lines: List[str], result: "BeadDatasheetData") -> bool:
+    """Fallback parser for PDF-extracted free text rows."""
+    fallback_subcomponent = ""
+    seen_keys: set[tuple[str, int]] = set()
+
+    for line in lines:
+        lower = (line or "").lower()
+        if re.search(r'nanovis\s+low', lower):
+            fallback_subcomponent = "nanoViS_Low"
+        elif re.search(r'nanovis\s+high', lower):
+            fallback_subcomponent = "nanoViS_High"
+
+        bead = _extract_bead_from_line(line, subcomponent=fallback_subcomponent)
+        if not bead:
+            continue
+
+        dedupe_key = (bead.subcomponent or "", int(round(bead.diameter_nm)))
+        if dedupe_key in seen_keys:
+            continue
+        seen_keys.add(dedupe_key)
+
+        result.all_beads.append(bead)
+        if bead.subcomponent:
+            result.subcomponents.setdefault(bead.subcomponent, []).append(bead)
+
+    return len(result.all_beads) > 0
+
+
+def _infer_known_kit_from_text(lines: List[str], result: "BeadDatasheetData") -> bool:
+    """Infer bead populations from known kit templates when parsing fails on difficult PDFs."""
+    text = "\n".join(lines)
+    text_lower = text.lower()
+
+    inferred_filename = None
+    if "d03231" in text_lower or "nanovis" in text_lower:
+        inferred_filename = "nanovis_d03231.json"
+    elif "apogee" in text_lower and "mix" in text_lower:
+        inferred_filename = "apogee_mix.json"
+    elif "megamix" in text_lower:
+        inferred_filename = "megamix_plus_fsc.json"
+    elif "spherotech" in text_lower or "nist" in text_lower:
+        inferred_filename = "spherotech_nist.json"
+
+    if not inferred_filename:
+        return False
+
+    backend_root = Path(__file__).resolve().parents[2]
+    kit_path = backend_root / "config" / "bead_standards" / inferred_filename
+    if not kit_path.exists():
+        result.parse_warnings.append(f"Detected known kit pattern, but template not found: {inferred_filename}")
+        return False
+
+    try:
+        with open(kit_path, "r", encoding="utf-8") as f:
+            kit = json.load(f)
+
+        result.kit_part_number = result.kit_part_number or str(kit.get("kit_part_number") or "")
+        result.product_name = result.product_name or str(kit.get("product_name") or "")
+        result.manufacturer = result.manufacturer or str(kit.get("manufacturer") or "")
+
+        if not result.lot_number:
+            lot_match = re.search(r'\b\d{6,}\b', text)
+            if lot_match:
+                result.lot_number = lot_match.group(0)
+
+        try:
+            if kit.get("refractive_index") is not None:
+                result.refractive_index = float(kit["refractive_index"])
+        except Exception:
+            pass
+
+        result.subcomponents = {}
+        result.all_beads = []
+
+        subcomponents = kit.get("subcomponents") or {}
+        for sub_name, sub_obj in subcomponents.items():
+            beads = sub_obj.get("beads") or []
+            parsed_sub = []
+            for b in beads:
+                diameter_nm = float(b.get("diameter_nm") or 0)
+                diameter_um = float(b.get("diameter_um") or (diameter_nm / 1000.0 if diameter_nm > 0 else 0))
+                bead = BeadPopulation(
+                    label=str(b.get("label") or (f"{int(round(diameter_nm))}nm" if diameter_nm else "bead")),
+                    diameter_nm=diameter_nm,
+                    diameter_um=diameter_um,
+                    cv_pct=float(b.get("cv_pct") or 0),
+                    spec_min_um=float(b["spec_min_um"]) if b.get("spec_min_um") is not None else None,
+                    spec_max_um=float(b["spec_max_um"]) if b.get("spec_max_um") is not None else None,
+                    concentration_particles_per_ml=float(b["concentration_particles_per_ml"]) if b.get("concentration_particles_per_ml") is not None else None,
+                    subcomponent=sub_name,
+                )
+                parsed_sub.append(bead)
+                result.all_beads.append(bead)
+
+            if parsed_sub:
+                result.subcomponents[sub_name] = parsed_sub
+
+        if result.all_beads:
+            result.parse_warnings.append(
+                f"Could not parse bead rows directly; inferred populations from known kit template ({inferred_filename})"
+            )
+            return True
+
+    except Exception as exc:
+        result.parse_warnings.append(f"Known-kit inference failed: {exc}")
+        return False
+
+    return False
+
+
 def parse_csv_datasheet(file_path: str | Path, content: Optional[str] = None) -> BeadDatasheetData:
     """
     Parse a CSV/TSV bead Certificate of Analysis.
@@ -303,8 +494,9 @@ def parse_csv_datasheet(file_path: str | Path, content: Optional[str] = None) ->
         # Subcomponent headers: "nanoViS Low", "nanoViS High"
         for cell in row:
             cell_stripped = cell.strip()
-            if re.match(r'nanoViS\s+(Low|High)', cell_stripped, re.IGNORECASE):
-                current_subcomponent = cell_stripped
+            sc_match = re.match(r'(nanoViS\s+(Low|High))', cell_stripped, re.IGNORECASE)
+            if sc_match:
+                current_subcomponent = sc_match.group(1)
                 if current_subcomponent not in result.subcomponents:
                     result.subcomponents[current_subcomponent] = []
                 break
@@ -367,6 +559,20 @@ def parse_csv_datasheet(file_path: str | Path, content: Optional[str] = None) ->
     if not result.material:
         result.material = "polystyrene_latex"
     
+    # Fallback: some PDF-extracted text is line-oriented and does not preserve table columns.
+    # Try a heuristic parse from raw lines when structured parsing found no bead rows.
+    if not result.all_beads:
+        if _parse_fallback_lines_into_result(lines, result):
+            result.parse_warnings.append("Used heuristic line-based parsing fallback for datasheet extraction")
+
+    if not result.all_beads:
+        _infer_known_kit_from_text(lines, result)
+
+    # Drop empty subcomponents that may be created during header scanning.
+    result.subcomponents = {
+        name: beads for name, beads in result.subcomponents.items() if beads
+    }
+
     # Validation
     if not result.all_beads:
         result.parse_warnings.append("No bead populations found in file")
@@ -407,7 +613,8 @@ def parse_pdf_datasheet(file_path: str | Path, content_bytes: Optional[bytes] = 
         else:
             pdf = _open_pdf(str(file_path))
         
-        all_text_lines = []
+        table_lines: List[str] = []
+        text_lines: List[str] = []
         
         for page in pdf.pages:
             # Try to extract tables first (more structured)
@@ -418,18 +625,43 @@ def parse_pdf_datasheet(file_path: str | Path, content_bytes: Optional[bytes] = 
                         if row:
                             # Clean up None cells
                             cleaned = [str(cell).strip() if cell else "" for cell in row]
-                            all_text_lines.append(",".join(cleaned))
-            else:
-                # Fall back to text extraction
-                text = page.extract_text()
-                if text:
-                    all_text_lines.extend(text.split("\n"))
+                            table_lines.append(",".join(cleaned))
+
+            # Always collect page text too; some certificates contain key fields
+            # that are not preserved in extracted table rows.
+            text = page.extract_text()
+            if text:
+                text_lines.extend(text.split("\n"))
+
+            # Additional fallback: per-word extraction can recover text from difficult layouts.
+            words = page.extract_words() or []
+            if words and len(text_lines) < 4:
+                for w in words:
+                    txt = (w.get("text") or "").strip()
+                    if txt:
+                        text_lines.append(txt)
         
         pdf.close()
         
-        # Re-parse using the CSV parser with the extracted text
+        all_text_lines = table_lines + text_lines
+        if not all_text_lines:
+            result.parse_warnings.append(
+                "No extractable text found in PDF. File may be scanned/image-only. Use CSV export or text-based PDF."
+            )
+            return result
+
+        # First pass: structured tables (if available) + text.
         csv_content = "\n".join(all_text_lines)
         result = parse_csv_datasheet(file_path, content=csv_content)
+
+        # Second pass fallback: plain text only can recover bead lines when
+        # table rows lose useful columns or delimiters.
+        if not result.all_beads and text_lines:
+            text_content = "\n".join(text_lines)
+            text_result = parse_csv_datasheet(file_path, content=text_content)
+            if text_result.all_beads:
+                result = text_result
+                result.parse_warnings.append("Used PDF plain-text fallback parsing")
         
     except Exception as e:
         logger.error(f"Failed to parse PDF bead datasheet: {e}", exc_info=True)

@@ -1,0 +1,92 @@
+[desktop] [backend] INFO:     Started server process [12468]
+INFO:     Waiting for application startup.
+2026-04-15 18:39:46.289 | INFO     | src.api.main:lifespan:68 - \U0001f680 CRMIT API starting up...
+2026-04-15 18:39:46.290 | INFO     | src.api.main:lifespan:69 -    Environment: development
+2026-04-15 18:39:46.290 | INFO     | src.api.main:lifespan:70 -    Upload directory: D:\CRM IT Project\Biovaram_Ev_Analysis_ReactUI\data\uploads
+2026-04-15 18:39:46.290 | INFO     | src.api.main:lifespan:71 -    Parquet directory: D:\CRM IT Project\Biovaram_Ev_Analysis_ReactUI\data\parquet
+2026-04-15 18:39:46.290 | INFO     | src.database.connection:get_engine:59 - \U0001f50c Creating database engine...
+2026-04-15 18:39:46.290 | INFO     | src.database.connection:get_engine:60 -    Database URL: sqlite+aiosqlite:///D:\CRM IT Project\Biovaram_Ev_Analysis_ReactUI\data\crmit.db
+2026-04-15 18:39:46.290 | INFO     | src.database.connection:get_engine:64 -    Pool: NullPool (async engine)
+[desktop] [backend] 2026-04-15 18:39:46.307 | SUCCESS  | src.database.connection:get_engine:73 - \u2705 Database engine created
+2026-04-15 18:39:46.307 | INFO     | src.database.connection:init_database:184 - \U0001f4ca Initializing database schema...
+[desktop] [backend] 2026-04-15 18:39:46.314 | SUCCESS  | src.database.connection:init_database:190 - \u2705 Database schema initialized
+2026-04-15 18:39:46.314 | INFO     | src.api.main:lifespan:76 -    Database: Connection pool initialized
+2026-04-15 18:39:46.314 | INFO     | src.database.connection:get_session_factory:103 - \u2705 Session factory created
+[desktop] [backend] 2026-04-15 18:39:46.332 | INFO     | src.api.main:_ensure_default_user:138 -    Default desktop user exists: lab@biovaram.local
+[desktop] [backend] 2026-04-15 18:39:46.333 | SUCCESS  | src.api.main:lifespan:84 - \u2705 CRMIT API ready
+[desktop] [backend] INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:18122 (Press CTRL+C to quit)
+[desktop] [backend] 2026-04-15 18:39:46.649 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /health
+[desktop] [backend] 2026-04-15 18:39:46.650 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /health \u2192 200 (1.2ms)
+[desktop] [backend] 2026-04-15 18:39:46.885 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /
+[desktop] [backend] 2026-04-15 18:39:46.890 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET / \u2192 200 (4.9ms)
+[desktop] [backend] 2026-04-15 18:39:46.943 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /_next/static/media/83afe278b6a6bb3c-s.p.3a6ba036.woff2
+[desktop] [backend] 2026-04-15 18:39:46.943 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /_next/static/chunks/3ba7f8fd0ad6fc7b.css
+[desktop] [backend] 2026-04-15 18:39:46.944 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /_next/static/chunks/ce1e86e4b5df7d53.css
+[desktop] [backend] 2026-04-15 18:39:46.984 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /_next/static/chunks/3ba7f8fd0ad6fc7b.css \u2192 200 (40.9ms)
+[desktop] [backend] 2026-04-15 18:39:46.985 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /_next/static/chunks/ce1e86e4b5df7d53.css \u2192 200 (41.2ms)
+[desktop] [backend] 2026-04-15 18:39:46.986 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /_next/static/media/83afe278b6a6bb3c-s.p.3a6ba036.woff2 \u2192 200 (43.0ms)
+[desktop] [backend] 2026-04-15 18:39:46.988 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /_next/static/chunks/b96b2f122b869ff7.js
+[desktop] [backend] 2026-04-15 18:39:46.989 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /_next/static/chunks/b04b8de793da60fd.js
+[desktop] [backend] 2026-04-15 18:39:46.992 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /_next/static/chunks/e8e8eec3a49b827b.js
+[desktop] [backend] 2026-04-15 18:39:46.992 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /_next/static/chunks/turbopack-18086d150842ef4a.js
+[desktop] [backend] 2026-04-15 18:39:46.994 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /_next/static/chunks/13e374ba8c2030a2.js
+[desktop] [backend] 2026-04-15 18:39:47.006 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /_next/static/chunks/b96b2f122b869ff7.js \u2192 200 (18.2ms)
+[desktop] [backend] 2026-04-15 18:39:47.006 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /_next/static/chunks/ff1a16fafef87110.js
+[desktop] [backend] 2026-04-15 18:39:47.008 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /_next/static/chunks/b04b8de793da60fd.js \u2192 200 (19.1ms)
+[desktop] [backend] 2026-04-15 18:39:47.010 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /_next/static/chunks/64c0a5e3a0354479.js
+[desktop] [backend] 2026-04-15 18:39:47.011 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /_next/static/chunks/e8e8eec3a49b827b.js \u2192 200 (19.0ms)
+2026-04-15 18:39:47.011 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /_next/static/chunks/turbopack-18086d150842ef4a.js \u2192 200 (19.1ms)
+[desktop] [backend] 2026-04-15 18:39:47.014 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /_next/static/chunks/13e374ba8c2030a2.js \u2192 200 (20.0ms)
+[desktop] [backend] 2026-04-15 18:39:47.019 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /_next/static/chunks/ea7ee778772c4393.js
+[desktop] [backend] 2026-04-15 18:39:47.021 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /_next/static/chunks/a1ecee6bd388a54a.js
+[desktop] [backend] 2026-04-15 18:39:47.025 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /_next/static/chunks/ff1a16fafef87110.js \u2192 200 (18.2ms)
+[desktop] [backend] 2026-04-15 18:39:47.028 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /_next/static/chunks/5ba7b9bb458c2ecd.js
+2026-04-15 18:39:47.031 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /_next/static/chunks/c38e9cc89bb963e5.js
+[desktop] [backend] 2026-04-15 18:39:47.063 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /_next/static/chunks/64c0a5e3a0354479.js \u2192 200 (52.8ms)
+[desktop] [backend] 2026-04-15 18:39:47.074 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /_next/static/chunks/a1ecee6bd388a54a.js \u2192 200 (53.1ms)
+[desktop] [backend] 2026-04-15 18:39:47.076 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /_next/static/chunks/ea7ee778772c4393.js \u2192 200 (56.9ms)
+[desktop] [backend] 2026-04-15 18:39:47.078 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /_next/static/chunks/3458b7012f4848b1.js
+2026-04-15 18:39:47.080 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /_next/static/chunks/c7e1346614847c77.js
+[desktop] [backend] 2026-04-15 18:39:47.087 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /_next/static/chunks/5ba7b9bb458c2ecd.js \u2192 200 (59.3ms)
+[desktop] [backend] 2026-04-15 18:39:47.089 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /_next/static/chunks/a2f77e2c473b1832.js
+2026-04-15 18:39:47.090 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /_next/static/chunks/c38e9cc89bb963e5.js \u2192 200 (59.2ms)
+[desktop] [backend] 2026-04-15 18:39:47.106 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /_next/static/chunks/3458b7012f4848b1.js \u2192 200 (27.4ms)
+[desktop] [backend] 2026-04-15 18:39:47.106 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /_next/static/chunks/c7e1346614847c77.js \u2192 200 (26.8ms)
+[desktop] [backend] 2026-04-15 18:39:47.113 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /_next/static/chunks/a2f77e2c473b1832.js \u2192 200 (24.6ms)
+[desktop] [backend] 2026-04-15 18:39:47.209 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /health
+[desktop] [backend] 2026-04-15 18:39:47.211 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /health \u2192 200 (1.2ms)
+[desktop] [backend] 2026-04-15 18:39:47.214 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  POST /api/v1/auth/login
+[desktop] [backend] 2026-04-15 18:39:47.227 | WARNING  | src.api.main:validation_exception_handler:233 - Validation error on /api/v1/auth/login: [{'field': 'body -> email', 'message': 'value is not a valid email address: The part after the @-sign is a special-use or reserved name that cannot be used with email.', 'type': 'value_error'}]
+[desktop] [backend] 2026-04-15 18:39:47.227 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  POST /api/v1/auth/login \u2192 422 (12.8ms)
+[desktop] [backend] 2026-04-15 18:39:47.949 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /logo-biovaram-optimized.webp
+[desktop] [backend] 2026-04-15 18:39:47.951 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /logo-biovaram-optimized.webp \u2192 200 (2.4ms)
+[desktop] [backend] 2026-04-15 18:39:47.966 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /_next/static/chunks/e9531608257219e0.js
+[desktop] [backend] 2026-04-15 18:39:47.967 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /_next/static/chunks/719eb4309da53b15.js
+[desktop] [backend] 2026-04-15 18:39:47.968 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /_next/static/chunks/1ed2e8af4b6cee1b.js
+2026-04-15 18:39:47.968 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /_next/static/chunks/5bb3ac58fd09490e.js
+[desktop] [backend] 2026-04-15 18:39:47.969 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /_next/static/chunks/4fe28f86c3aa8a28.js
+[desktop] [backend] 2026-04-15 18:39:47.969 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /_next/static/chunks/de1611bf34f3fe6e.js
+[desktop] [backend] 2026-04-15 18:39:47.974 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /_next/static/chunks/5bb3ac58fd09490e.js \u2192 200 (6.2ms)
+[desktop] [backend] 2026-04-15 18:39:47.977 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /_next/static/chunks/4fe28f86c3aa8a28.js \u2192 200 (8.0ms)
+[desktop] [backend] 2026-04-15 18:39:47.978 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /_next/static/chunks/719eb4309da53b15.js \u2192 200 (11.4ms)
+[desktop] [backend] 2026-04-15 18:39:47.979 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /_next/static/chunks/de1611bf34f3fe6e.js \u2192 200 (9.9ms)
+[desktop] [backend] 2026-04-15 18:39:47.979 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /_next/static/chunks/e9531608257219e0.js \u2192 200 (13.2ms)
+2026-04-15 18:39:47.980 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /_next/static/chunks/1ed2e8af4b6cee1b.js \u2192 200 (12.2ms)
+[desktop] [backend] 2026-04-15 18:39:47.996 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /api/v1/alerts
+2026-04-15 18:39:47.996 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /api/v1/alerts/counts
+[desktop] [backend] 2026-04-15 18:39:47.996 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /health
+[desktop] [backend] 2026-04-15 18:39:48.025 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /api/v1/alerts \u2192 307 (29.0ms)
+[desktop] [backend] 2026-04-15 18:39:48.025 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /health \u2192 200 (29.5ms)
+[desktop] [backend] 2026-04-15 18:39:48.030 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /api/v1/alerts/
+[desktop] [backend] 2026-04-15 18:39:48.054 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /api/v1/alerts/ \u2192 200 (24.9ms)
+[desktop] [backend] 2026-04-15 18:39:48.061 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /health
+[desktop] [backend] 2026-04-15 18:39:48.062 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /health \u2192 200 (0.9ms)
+[desktop] [backend] 2026-04-15 18:39:48.065 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /api/v1/samples
+[desktop] [backend] 2026-04-15 18:39:48.065 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /api/v1/samples \u2192 307 (0.9ms)
+[desktop] [backend] 2026-04-15 18:39:48.070 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /api/v1/alerts/counts \u2192 200 (74.4ms)
+[desktop] [backend] 2026-04-15 18:39:48.077 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /api/v1/samples/
+[desktop] [backend] 2026-04-15 18:39:48.091 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /api/v1/samples/ \u2192 200 (14.0ms)
+[desktop] Update download failed: Simulated corrupt download package for controlled resilience test.
+[desktop] [backend] 2026-04-15 18:40:18.571 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /health
+[desktop] [backend] 2026-04-15 18:40:18.571 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /health \u2192 200 (0.5ms)

@@ -35,6 +35,9 @@ export interface PinnedChart {
   type: "histogram" | "scatter" | "line" | "bar"
   data: ChartDataPoint[] | unknown
   config?: PinnedChartConfig
+  snapshotDataUrl?: string
+  snapshotThumbnailUrl?: string
+  chartContext?: string
   // Store the original results for reference
   sourceData?: {
     fcsResults?: FCSResult

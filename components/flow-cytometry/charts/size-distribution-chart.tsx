@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, memo } from "react"
+import { useState, useMemo, useRef, useCallback, memo } from "react"
 import {
   BarChart,
   Bar,
@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Eye, EyeOff, Layers, BarChart3, TrendingUp } from "lucide-react"
 import type { DistributionAnalysisResponse } from "@/lib/api-client"
+import { computeCursorZoomWindow, computePannedWindow, getPlotRatiosFromMouse, type ZoomWindow } from "./wheel-zoom-utils"
 
 interface SizeDistributionChartProps {
   data?: Array<{
@@ -59,13 +60,18 @@ interface SizeDistributionChartProps {
 const generateHistogramData = (
   binCount: number = 20, 
   sizeRanges?: SizeRange[],
-  sizeData?: number[]
+  sizeData?: number[],
+  maxSizeOverride?: number
 ) => {
   // Only generate data if we have actual size data
   if (!sizeData || sizeData.length === 0) return null
 
   const data = []
-  const maxSize = 500
+  const observedMax = Math.max(...sizeData)
+  const maxSize = Math.max(
+    500,
+    Math.min(5000, maxSizeOverride ?? observedMax * 1.1)
+  )
   const binWidth = maxSize / binCount
   
   // Default ranges if none provided
@@ -96,6 +102,21 @@ const generateHistogramData = (
     data.push(binData)
   }
   return data
+}
+
+const shortLabel = (value: string, maxLen = 24): string => {
+  if (!value) return ""
+  return value.length > maxLen ? `${value.slice(0, maxLen - 1)}…` : value
+}
+
+const buildRangeLabel = (range: SizeRange): string => {
+  const baseName = (range.name || "").trim()
+  if (!baseName) return `${range.min}-${range.max}nm`
+
+  // Avoid duplicated range text like "Exomeres (0-50nm) (0-50nm)".
+  if (baseName.includes("(") && baseName.includes(")")) return baseName
+
+  return `${baseName} (${range.min}-${range.max}nm)`
 }
 
 // Custom tooltip
@@ -215,27 +236,40 @@ export const SizeDistributionChart = memo(function SizeDistributionChart({
   // Check if overlay is active - allow demo data generation when no real secondary size data
   const hasRealSecondaryData = (secondarySizeData?.length || 0) > 0
   const hasOverlay = overlayConfig.enabled && secondaryFcsAnalysis.results
+
+  const sharedHistogramMax = useMemo(() => {
+    const allSizes = [
+      ...(sizeData ?? []),
+      ...(secondarySizeData ?? []),
+    ].filter((v) => Number.isFinite(v) && v > 0)
+
+    if (allSizes.length === 0) return undefined
+    const observedMax = Math.max(...allSizes)
+    return Math.max(500, Math.min(5000, observedMax * 1.1))
+  }, [sizeData, secondarySizeData])
   
   // Generate data using dynamic size ranges
   const data = useMemo(() => {
     if (propData) return propData
-    return generateHistogramData(binCount, sizeRanges, sizeData)
-  }, [propData, binCount, sizeRanges, sizeData])
+    return generateHistogramData(binCount, sizeRanges, sizeData, sharedHistogramMax)
+  }, [propData, binCount, sizeRanges, sizeData, sharedHistogramMax])
   
   // Generate secondary data for overlay - only use real data
   const secondaryData = useMemo(() => {
     if (!hasOverlay || !hasRealSecondaryData || !secondarySizeData) return null
-    return generateHistogramData(binCount, sizeRanges, secondarySizeData)
-  }, [hasOverlay, hasRealSecondaryData, secondarySizeData, binCount, sizeRanges])
+    return generateHistogramData(binCount, sizeRanges, secondarySizeData, sharedHistogramMax)
+  }, [hasOverlay, hasRealSecondaryData, secondarySizeData, binCount, sizeRanges, sharedHistogramMax])
   
   // Merge primary and secondary data for overlay chart
   const overlayData = useMemo(() => {
-    if (!hasOverlay || !secondaryData) return data
-    
+    if (!data) return data
+    if (!hasOverlay) return data
+
     return data.map((item, index) => ({
       ...item,
-      primaryTotal: item.total || 0,
-      secondaryTotal: secondaryData[index]?.total || 0,
+      // Always expose overlay keys so Area series can render reliably.
+      primaryTotal: Number(item.total || 0),
+      secondaryTotal: Number(secondaryData?.[index]?.total || 0),
     }))
   }, [data, secondaryData, hasOverlay])
   
@@ -247,10 +281,14 @@ export const SizeDistributionChart = memo(function SizeDistributionChart({
   
   const rangeNames = useMemo(() => {
     if (!sizeRanges?.length) return ["Small EVs (<100nm)", "Exosomes (100-200nm)", "Large EVs (>200nm)"]
-    return sizeRanges.map(r => `${r.name} (${r.min}-${r.max}nm)`)
+    return sizeRanges.map((r) => buildRangeLabel(r))
   }, [sizeRanges])
   
   const [brushDomain, setBrushDomain] = useState<{ startIndex?: number; endIndex?: number }>({})
+  const [zoom, setZoom] = useState<ZoomWindow>({ xMin: null, xMax: null, yMin: null, yMax: null })
+  const chartContainerRef = useRef<HTMLDivElement>(null)
+  const [isPanning, setIsPanning] = useState(false)
+  const [lastPanPoint, setLastPanPoint] = useState<{ x: number; y: number } | null>(null)
 
   // Overlay header controls
   const overlayControls = hasOverlay ? (
@@ -321,6 +359,105 @@ export const SizeDistributionChart = memo(function SizeDistributionChart({
     return data
   }, [data, fitOverlayData, showFitOverlay])
 
+  const activeChartData = hasOverlay ? overlayData : mergedChartData
+
+  const chartBounds = useMemo(() => {
+    if (!activeChartData || activeChartData.length === 0) {
+      return { minX: 0, maxX: 500, minY: 0, maxY: 100 }
+    }
+
+    const sizes = activeChartData.map((d: any) => Number(d.size ?? 0))
+    const yCandidates = activeChartData.flatMap((d: any) => {
+      const values: number[] = []
+      if (typeof d.total === "number") values.push(d.total)
+      if (typeof d.primaryTotal === "number") values.push(d.primaryTotal)
+      if (typeof d.secondaryTotal === "number") values.push(d.secondaryTotal)
+      if (sizeRanges?.length) {
+        for (let idx = 0; idx < sizeRanges.length; idx++) {
+          const key = `range${idx}`
+          if (typeof d[key] === "number") values.push(d[key])
+        }
+      }
+      if (showFitOverlay && distributionAnalysis?.overlays) {
+        for (const name of Object.keys(distributionAnalysis.overlays)) {
+          const fitKey = `fit_${name}`
+          if (typeof d[fitKey] === "number") values.push(d[fitKey])
+        }
+      }
+      return values
+    })
+
+    const minX = Math.max(0, Math.min(...sizes))
+    const maxX = Math.max(minX + 1, Math.max(...sizes))
+    const maxY = Math.max(1, ...(yCandidates.length > 0 ? yCandidates : [100]))
+
+    return { minX, maxX, minY: 0, maxY: maxY * 1.05 }
+  }, [activeChartData, sizeRanges, showFitOverlay, distributionAnalysis])
+
+  const handleWheelZoom = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    const container = chartContainerRef.current
+    if (!container) return
+
+    const ratios = getPlotRatiosFromMouse(e.clientX, e.clientY, container.getBoundingClientRect(), {
+      top: 10,
+      right: 16,
+      bottom: 22,
+      left: 6,
+    })
+
+    if (!ratios.inPlot) return
+
+    e.preventDefault()
+    setZoom((prev) => computeCursorZoomWindow(prev, chartBounds, ratios, e.deltaY))
+  }, [chartBounds])
+
+  const hasActiveZoom = zoom.xMin !== null || zoom.yMin !== null
+
+  const handlePanStart = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!hasActiveZoom) return
+    const container = chartContainerRef.current
+    if (!container) return
+
+    const ratios = getPlotRatiosFromMouse(e.clientX, e.clientY, container.getBoundingClientRect(), {
+      top: 10,
+      right: 16,
+      bottom: 22,
+      left: 6,
+    })
+    if (!ratios.inPlot) return
+
+    setIsPanning(true)
+    setLastPanPoint({ x: e.clientX, y: e.clientY })
+  }, [hasActiveZoom])
+
+  const handlePanMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isPanning || !lastPanPoint) return
+
+    const container = chartContainerRef.current
+    if (!container) return
+
+    const rect = container.getBoundingClientRect()
+    const plotWidth = rect.width - 6 - 16
+    const plotHeight = rect.height - 10 - 22
+
+    setZoom((prev) =>
+      computePannedWindow(
+        prev,
+        chartBounds,
+        e.clientX - lastPanPoint.x,
+        e.clientY - lastPanPoint.y,
+        plotWidth,
+        plotHeight
+      )
+    )
+    setLastPanPoint({ x: e.clientX, y: e.clientY })
+  }, [isPanning, lastPanPoint, chartBounds])
+
+  const handlePanEnd = useCallback(() => {
+    setIsPanning(false)
+    setLastPanPoint(null)
+  }, [])
+
   if (!data) {
     return (
       <InteractiveChartWrapper
@@ -352,20 +489,36 @@ export const SizeDistributionChart = memo(function SizeDistributionChart({
     >
       {/* Use ComposedChart for overlay mode, BarChart for single file */}
       {hasOverlay ? (
-        <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
-          <ComposedChart data={overlayData} barCategoryGap={0}>
+        <div
+          ref={chartContainerRef}
+          className="h-full w-full"
+          style={{ cursor: hasActiveZoom ? (isPanning ? "grabbing" : "grab") : "default" }}
+          onWheel={handleWheelZoom}
+          onMouseDown={handlePanStart}
+          onMouseMove={handlePanMove}
+          onMouseUp={handlePanEnd}
+          onMouseLeave={handlePanEnd}
+        >
+        <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1} debounce={80}>
+          <ComposedChart data={overlayData} barCategoryGap={0} margin={{ top: 10, right: 16, left: 6, bottom: 22 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
             <XAxis
               dataKey="size"
+              type="number"
               stroke="#64748b"
+              domain={zoom.xMin !== null && zoom.xMax !== null ? [zoom.xMin, zoom.xMax] : [chartBounds.minX, chartBounds.maxX]}
+              allowDataOverflow
               tick={{ fontSize: 11 }}
-              label={{ value: "Diameter (nm)", position: "bottom", offset: -5, fill: "#64748b", fontSize: 12 }}
+              tickFormatter={(v) => `${Math.round(v)}`}
+              label={{ value: "Diameter (nm)", position: "bottom", offset: 0, fill: "#64748b", fontSize: 12 }}
             />
             <YAxis
+              type="number"
               stroke="#64748b"
               tick={{ fontSize: 11 }}
-              domain={[0, 'auto']}
-              label={{ value: "Count", angle: -90, position: "insideLeft", fill: "#64748b", fontSize: 12 }}
+              domain={zoom.yMin !== null && zoom.yMax !== null ? [zoom.yMin, zoom.yMax] : [chartBounds.minY, chartBounds.maxY]}
+              allowDataOverflow
+              label={{ value: "Event Count", angle: -90, position: "insideLeft", fill: "#64748b", fontSize: 12 }}
             />
             <Tooltip 
               contentStyle={{ 
@@ -382,11 +535,12 @@ export const SizeDistributionChart = memo(function SizeDistributionChart({
               ]}
             />
             <Legend 
-              verticalAlign="top"
-              height={36}
+              verticalAlign="bottom"
+              height={compact ? 56 : 44}
+              wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }}
               formatter={(value) => value === 'primaryTotal' 
-                ? (fcsAnalysis.file?.name?.slice(0, 25) || 'Primary')
-                : (secondaryFcsAnalysis.file?.name?.slice(0, 25) || 'Comparison')
+                ? shortLabel(fcsAnalysis.file?.name || 'Primary')
+                : shortLabel(secondaryFcsAnalysis.file?.name || 'Comparison')
               }
             />
             
@@ -400,6 +554,7 @@ export const SizeDistributionChart = memo(function SizeDistributionChart({
                 stroke={overlayConfig.primaryColor}
                 strokeWidth={2}
                 name="primaryTotal"
+                isAnimationActive={false}
               />
             )}
             
@@ -413,6 +568,7 @@ export const SizeDistributionChart = memo(function SizeDistributionChart({
                 stroke={overlayConfig.secondaryColor}
                 strokeWidth={2}
                 name="secondaryTotal"
+                isAnimationActive={false}
               />
             )}
 
@@ -469,24 +625,46 @@ export const SizeDistributionChart = memo(function SizeDistributionChart({
             )}
           </ComposedChart>
         </ResponsiveContainer>
+        </div>
       ) : (
-        <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
-          <ComposedChart data={mergedChartData} barCategoryGap={0}>
+        <div
+          ref={chartContainerRef}
+          className="h-full w-full"
+          style={{ cursor: hasActiveZoom ? (isPanning ? "grabbing" : "grab") : "default" }}
+          onWheel={handleWheelZoom}
+          onMouseDown={handlePanStart}
+          onMouseMove={handlePanMove}
+          onMouseUp={handlePanEnd}
+          onMouseLeave={handlePanEnd}
+        >
+        <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1} debounce={80}>
+          <ComposedChart data={mergedChartData} barCategoryGap={0} margin={{ top: 10, right: 16, left: 6, bottom: 22 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
             <XAxis
               dataKey="size"
+              type="number"
               stroke="#64748b"
+              domain={zoom.xMin !== null && zoom.xMax !== null ? [zoom.xMin, zoom.xMax] : [chartBounds.minX, chartBounds.maxX]}
+              allowDataOverflow
               tick={{ fontSize: 11 }}
-              label={{ value: "Diameter (nm)", position: "bottom", offset: -5, fill: "#64748b", fontSize: 12 }}
+              tickFormatter={(v) => `${Math.round(v)}`}
+              label={{ value: "Diameter (nm)", position: "bottom", offset: 0, fill: "#64748b", fontSize: 12 }}
             />
             <YAxis
+              type="number"
               stroke="#64748b"
               tick={{ fontSize: 11 }}
-              domain={[0, 'auto']}
-              label={{ value: "Count", angle: -90, position: "insideLeft", fill: "#64748b", fontSize: 12 }}
+              domain={zoom.yMin !== null && zoom.yMax !== null ? [zoom.yMin, zoom.yMax] : [chartBounds.minY, chartBounds.maxY]}
+              allowDataOverflow
+              label={{ value: "Event Count", angle: -90, position: "insideLeft", fill: "#64748b", fontSize: 12 }}
             />
             <Tooltip content={<CustomTooltip />} />
-            <Legend wrapperStyle={{ fontSize: "12px" }} />
+            <Legend
+              verticalAlign="bottom"
+              height={compact ? 56 : 44}
+              wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }}
+              formatter={(value) => shortLabel(String(value), compact ? 22 : 28)}
+            />
             
             {/* Dynamic bars based on size ranges from store */}
             {sizeRanges?.length ? (
@@ -497,15 +675,16 @@ export const SizeDistributionChart = memo(function SizeDistributionChart({
                   stackId="a" 
                   fill={range.color || rangeColors[idx]} 
                   name={rangeNames[idx]} 
-                  radius={idx === sizeRanges.length - 1 ? [2, 2, 0, 0] : [0, 0, 0, 0]} 
+                  radius={idx === sizeRanges.length - 1 ? [2, 2, 0, 0] : [0, 0, 0, 0]}
+                  isAnimationActive={false}
                 />
               ))
             ) : (
               <>
                 {/* Default bars if no custom ranges */}
-                <Bar dataKey="range0" stackId="a" fill={CHART_COLORS.smallEV} name="Small EVs (<100nm)" radius={[0, 0, 0, 0]} />
-                <Bar dataKey="range1" stackId="a" fill={CHART_COLORS.primary} name="Exosomes (100-200nm)" radius={[0, 0, 0, 0]} />
-                <Bar dataKey="range2" stackId="a" fill={CHART_COLORS.largeEV} name="Large EVs (>200nm)" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="range0" stackId="a" fill={CHART_COLORS.smallEV} name="Small EVs (<100nm)" radius={[0, 0, 0, 0]} isAnimationActive={false} />
+                <Bar dataKey="range1" stackId="a" fill={CHART_COLORS.primary} name="Exosomes (100-200nm)" radius={[0, 0, 0, 0]} isAnimationActive={false} />
+                <Bar dataKey="range2" stackId="a" fill={CHART_COLORS.largeEV} name="Large EVs (>200nm)" radius={[2, 2, 0, 0]} isAnimationActive={false} />
               </>
             )}
 
@@ -521,6 +700,7 @@ export const SizeDistributionChart = memo(function SizeDistributionChart({
                 dot={false}
                 name={FIT_LABELS[name] || name}
                 connectNulls
+                isAnimationActive={false}
               />
             ))}
 
@@ -556,6 +736,7 @@ export const SizeDistributionChart = memo(function SizeDistributionChart({
             )}
           </ComposedChart>
         </ResponsiveContainer>
+        </div>
       )}
 
       {/* Distribution Analysis Summary Panel */}

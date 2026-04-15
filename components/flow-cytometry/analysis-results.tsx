@@ -40,6 +40,7 @@ import { GatedStatisticsPanel } from "./gated-statistics-panel"
 import { useToast } from "@/hooks/use-toast"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { resolveFCSAxes } from "@/lib/fcs-axis-utils"
+import { captureChartAsImage } from "@/components/dashboard/saved-images-gallery"
 import { 
   exportAnomaliesToCSV, 
   exportScatterDataToCSV, 
@@ -109,6 +110,8 @@ export function AnalysisResults() {
   // Distribution analysis state
   const [distributionAnalysis, setDistributionAnalysis] = useState<import("@/lib/api-client").DistributionAnalysisResponse | null>(null)
   const [distributionLoading, setDistributionLoading] = useState(false)
+  const [activeVisualizationTab, setActiveVisualizationTab] = useState("dashboard")
+  const [avgFrameMs, setAvgFrameMs] = useState<number | null>(null)
 
   // Phase 4: Gain mismatch warnings from scatter-data response
   const [gainMismatchWarnings, setGainMismatchWarnings] = useState<string[]>([])
@@ -144,6 +147,17 @@ export function AnalysisResults() {
   const secondarySampleId = secondaryFcsAnalysis.sampleId
   const secondaryScatterData = secondaryFcsAnalysis.scatterData
   const secondaryAnomalyData = secondaryFcsAnalysis.anomalyData
+  const isDevTelemetry = process.env.NODE_ENV === "development"
+
+  const primaryAnomalyIndexSet = useMemo(
+    () => new Set(anomalyData?.anomalous_indices ?? []),
+    [anomalyData?.anomalous_indices]
+  )
+
+  const secondaryAnomalyIndexSet = useMemo(
+    () => new Set(secondaryAnomalyData?.anomalous_indices ?? []),
+    [secondaryAnomalyData?.anomalous_indices]
+  )
 
   const primaryAxisResolution = useMemo(
     () => resolveFCSAxes({
@@ -436,19 +450,21 @@ export function AnalysisResults() {
     [scatterData]
   )
 
-  const theoryMeasuredData = useMemo(() =>
-    scatterData.length > 0
-      ? scatterData.filter(p => p.diameter && p.diameter > 0 && p.y > 0).map(p => ({ diameter: p.diameter as number, intensity: p.y }))
-      : undefined,
-    [scatterData]
-  )
+  const theoryMeasuredData = useMemo(() => {
+    if (scatterData.length === 0) return undefined
+    const valid = scatterData.filter((p) => p.diameter && p.diameter > 0 && p.y > 0)
+    const maxPoints = 1800
+    const step = valid.length > maxPoints ? Math.ceil(valid.length / maxPoints) : 1
+    return valid.filter((_, i) => i % step === 0).map((p) => ({ diameter: p.diameter as number, intensity: p.y }))
+  }, [scatterData])
 
-  const secondaryTheoryData = useMemo(() =>
-    secondaryScatterData && secondaryScatterData.length > 0
-      ? secondaryScatterData.filter(p => p.diameter && p.diameter > 0 && p.y > 0).map(p => ({ diameter: p.diameter as number, intensity: p.y }))
-      : undefined,
-    [secondaryScatterData]
-  )
+  const secondaryTheoryData = useMemo(() => {
+    if (!secondaryScatterData || secondaryScatterData.length === 0) return undefined
+    const valid = secondaryScatterData.filter((p) => p.diameter && p.diameter > 0 && p.y > 0)
+    const maxPoints = 1800
+    const step = valid.length > maxPoints ? Math.ceil(valid.length / maxPoints) : 1
+    return valid.filter((_, i) => i % step === 0).map((p) => ({ diameter: p.diameter as number, intensity: p.y }))
+  }, [secondaryScatterData])
 
   const secondarySizeData = useMemo(() =>
     secondaryScatterData?.filter(p => p.diameter).map(p => p.diameter as number),
@@ -462,9 +478,9 @@ export function AnalysisResults() {
         diameter: p.diameter as number,
         ssc: p.y,
         index: p.index,
-        isAnomaly: anomalyData?.anomalous_indices?.includes(p.index ?? -1) || false,
+        isAnomaly: primaryAnomalyIndexSet.has(p.index ?? -1),
       })),
-    [scatterData, anomalyData]
+    [scatterData, primaryAnomalyIndexSet]
   )
 
   const secondaryDiameterVsSSCData = useMemo(() =>
@@ -474,10 +490,79 @@ export function AnalysisResults() {
         diameter: p.diameter as number,
         ssc: p.y,
         index: p.index,
-        isAnomaly: secondaryAnomalyData?.anomalous_indices?.includes(p.index ?? -1) || false,
+        isAnomaly: secondaryAnomalyIndexSet.has(p.index ?? -1),
       })),
-    [secondaryScatterData, secondaryAnomalyData]
+    [secondaryScatterData, secondaryAnomalyIndexSet]
   )
+
+  const estimatedRenderedPoints = useMemo(() => {
+    const INTERACTIVE_SCATTER_MAX_POINTS = 1200
+    const DIAMETER_MAX_POINTS = 1500
+    const THEORY_MAX_POINTS_PER_SERIES = 1800
+    const EVENT_MAX_POINTS = 2500
+
+    switch (activeVisualizationTab) {
+      case "fsc-ssc":
+        return Math.min(scatterData.length, INTERACTIVE_SCATTER_MAX_POINTS)
+      case "diameter": {
+        const primary = Math.min(diameterVsSSCData.length, DIAMETER_MAX_POINTS)
+        const secondary = secondaryDiameterVsSSCData ? Math.min(secondaryDiameterVsSSCData.length, DIAMETER_MAX_POINTS) : 0
+        return primary + secondary
+      }
+      case "theory": {
+        const primary = Math.min(theoryMeasuredData?.length ?? 0, THEORY_MAX_POINTS_PER_SERIES)
+        const secondary = Math.min(secondaryTheoryData?.length ?? 0, THEORY_MAX_POINTS_PER_SERIES)
+        return primary + secondary
+      }
+      case "event-size":
+        return Math.min(scatterData.length, EVENT_MAX_POINTS)
+      case "distribution":
+        return Math.max(25, Math.min(scatterDiameters.length, 2500))
+      default:
+        return Math.min(scatterData.length, INTERACTIVE_SCATTER_MAX_POINTS) + Math.max(25, Math.min(scatterDiameters.length, 1000))
+    }
+  }, [
+    activeVisualizationTab,
+    scatterData.length,
+    diameterVsSSCData.length,
+    secondaryDiameterVsSSCData,
+    theoryMeasuredData,
+    secondaryTheoryData,
+    scatterDiameters.length,
+  ])
+
+  useEffect(() => {
+    if (!isDevTelemetry) return
+
+    let rafId = 0
+    let lastTs = 0
+    const samples: number[] = []
+
+    const tick = (ts: number) => {
+      if (lastTs > 0) {
+        samples.push(ts - lastTs)
+        if (samples.length > 60) {
+          samples.shift()
+        }
+        if (samples.length >= 30) {
+          const avg = samples.reduce((sum, ms) => sum + ms, 0) / samples.length
+          setAvgFrameMs(avg)
+        }
+      }
+      lastTs = ts
+      rafId = window.requestAnimationFrame(tick)
+    }
+
+    rafId = window.requestAnimationFrame(tick)
+    return () => window.cancelAnimationFrame(rafId)
+  }, [isDevTelemetry, activeVisualizationTab])
+
+  const frameBudgetHint = useMemo(() => {
+    if (avgFrameMs === null) return "profiling"
+    if (avgFrameMs <= 16.7) return "within budget"
+    if (avgFrameMs <= 24) return "watch"
+    return "over budget"
+  }, [avgFrameMs])
 
   // Generate mock anomaly events for table (TODO: Replace with real data)
   const anomalyEvents: AnomalyEvent[] = useMemo(() => {
@@ -494,7 +579,51 @@ export function AnalysisResults() {
     }))
   }, [anomalyData])
 
-  const handlePin = (chartTitle: string, chartType: "histogram" | "scatter" | "line") => {
+  const chartCaptureKeyByTitle: Record<string, string> = {
+    "Size Distribution": "distribution",
+    "Theory vs Measured": "theory",
+    "FSC vs SSC": "fsc-ssc",
+    "Diameter vs SSC": "diameter",
+    "Event vs Size": "event-size",
+  }
+
+  const buildPinContext = (
+    chartTitle: string,
+    chartType: "histogram" | "scatter" | "line",
+    data: Array<{ x: number; y: number; label?: string }>
+  ) => {
+    const xVals = data.map((d) => d.x).filter((v) => Number.isFinite(v))
+    const yVals = data.map((d) => d.y).filter((v) => Number.isFinite(v))
+    const xMin = xVals.length > 0 ? Math.min(...xVals) : null
+    const xMax = xVals.length > 0 ? Math.max(...xVals) : null
+    const yMin = yVals.length > 0 ? Math.min(...yVals) : null
+    const yMax = yVals.length > 0 ? Math.max(...yVals) : null
+    const fmt = (v: number | null) => (v == null ? "N/A" : Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 }))
+
+    const lines = [
+      `Chart: ${chartTitle}`,
+      `Type: ${chartType}`,
+      `Sample: ${sampleId || "Unknown"}`,
+      `Point Count: ${data.length.toLocaleString()}`,
+      `X Range: ${fmt(xMin)} to ${fmt(xMax)}`,
+      `Y Range: ${fmt(yMin)} to ${fmt(yMax)}`,
+      `Overlay Active: ${overlayConfig.enabled && secondaryResults ? "Yes" : "No"}`,
+      `Primary Axes: ${xChannel || "FSC"} vs ${yChannel || "SSC"}`,
+      `Total Events: ${(results?.total_events || results?.event_count || 0).toLocaleString()}`,
+    ]
+
+    if (results?.particle_size_median_nm != null) {
+      lines.push(`Median Particle Size: ${results.particle_size_median_nm.toFixed(2)} nm`)
+    }
+
+    if (anomalyData?.total_anomalies != null) {
+      lines.push(`Anomalies: ${anomalyData.total_anomalies.toLocaleString()} (${anomalyData.anomaly_percentage.toFixed(2)}%)`)
+    }
+
+    return lines.join("\n")
+  }
+
+  const handlePin = async (chartTitle: string, chartType: "histogram" | "scatter" | "line") => {
     if (loadingScatter && scatterData.length === 0) {
       toast({
         title: "Data Still Loading",
@@ -610,6 +739,23 @@ export function AnalysisResults() {
       return
     }
 
+    let snapshotDataUrl: string | undefined
+    let snapshotThumbnailUrl: string | undefined
+    const captureKey = chartCaptureKeyByTitle[chartTitle]
+    const chartElement = captureKey
+      ? document.querySelector(`[data-pin-chart="${captureKey}"]`) as HTMLElement | null
+      : null
+
+    if (chartElement) {
+      const captured = await captureChartAsImage(chartElement, chartTitle, "Flow Cytometry", chartType)
+      if (captured) {
+        snapshotDataUrl = captured.dataUrl
+        snapshotThumbnailUrl = captured.thumbnailUrl
+      }
+    }
+
+    const chartContext = buildPinContext(chartTitle, chartType, pinData)
+
     pinChart({
       id: crypto.randomUUID(),
       title: chartTitle,
@@ -618,6 +764,12 @@ export function AnalysisResults() {
       type: chartType,
       data: pinData,
       config: pinConfig,
+      snapshotDataUrl,
+      snapshotThumbnailUrl,
+      chartContext,
+      sourceData: {
+        fcsResults: results || undefined,
+      },
     })
     toast({
       title: "Pinned to Dashboard",
@@ -998,19 +1150,30 @@ export function AnalysisResults() {
         <CardHeader className="pb-2">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <CardTitle className="text-base md:text-lg">Analysis Visualizations</CardTitle>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="w-fit bg-transparent"
-              onClick={() => handleExport("all")}
-            >
-              <Download className="h-4 w-4 mr-1" />
-              Export All Charts
-            </Button>
+            <div className="flex items-center gap-2 flex-wrap">
+              {isDevTelemetry && (
+                <Badge
+                  variant="outline"
+                  className="text-[11px] bg-slate-500/10 border-slate-500/30 text-slate-700 dark:text-slate-300"
+                  title="Development-only telemetry for render/regression tracking"
+                >
+                  Dev Telemetry: ~{estimatedRenderedPoints.toLocaleString()} pts • {avgFrameMs ? `${avgFrameMs.toFixed(1)}ms` : "--.-ms"} • {frameBudgetHint}
+                </Badge>
+              )}
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="w-fit bg-transparent"
+                onClick={() => handleExport("all")}
+              >
+                <Download className="h-4 w-4 mr-1" />
+                Export All Charts
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="dashboard" className="space-y-4">
+          <Tabs value={activeVisualizationTab} onValueChange={setActiveVisualizationTab} className="space-y-4">
             <div className="relative">
               <TabsList className="bg-secondary/50 w-full justify-start overflow-x-auto flex-nowrap scrollbar-thin scrollbar-thumb-primary/50 pb-1 flex gap-1">
                 <TabsTrigger value="dashboard" className="shrink-0 text-xs sm:text-sm">
@@ -1032,10 +1195,12 @@ export function AnalysisResults() {
                   Diameter vs SSC
                 </TabsTrigger>
               </TabsList>
-              <div className="absolute right-0 top-0 h-full w-8 bg-gradient-to-l from-background to-transparent pointer-events-none" />
+              <div className="absolute right-0 top-0 h-full w-8 bg-linear-to-l from-background to-transparent pointer-events-none" />
             </div>
 
             <TabsContent value="dashboard" className="space-y-4">
+              {activeVisualizationTab === "dashboard" && (
+                <>
               {/* Phase 4: Gain Mismatch Warning Banner (B3) */}
               {gainMismatchWarnings.length > 0 && (
                 <Alert className="border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
@@ -1089,9 +1254,13 @@ export function AnalysisResults() {
                 secondaryAnomalyData={secondaryAnomalyData}
                 secondarySizeData={secondarySizeData}
               />
+                </>
+              )}
             </TabsContent>
 
             <TabsContent value="distribution" className="space-y-4">
+              {activeVisualizationTab === "distribution" && (
+                <>
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   <Badge variant="outline" className="bg-cyan/20 text-cyan border-cyan/50">
@@ -1118,21 +1287,27 @@ export function AnalysisResults() {
                   </Button>
                 </div>
               </div>
-              <SizeDistributionChart 
-                sizeData={scatterDiameters}
-                secondarySizeData={secondarySizeData}
-                d10={results.size_statistics?.d10}
-                d50={results.size_statistics?.d50}
-                d90={results.size_statistics?.d90}
-                secondaryD10={secondaryResults?.size_statistics?.d10}
-                secondaryD50={secondaryResults?.size_statistics?.d50}
-                secondaryD90={secondaryResults?.size_statistics?.d90}
-                distributionAnalysis={distributionAnalysis}
-                distributionLoading={distributionLoading}
-              />
+              <div data-pin-chart="distribution">
+                <SizeDistributionChart 
+                  sizeData={scatterDiameters}
+                  secondarySizeData={secondarySizeData}
+                  d10={results.size_statistics?.d10}
+                  d50={results.size_statistics?.d50}
+                  d90={results.size_statistics?.d90}
+                  secondaryD10={secondaryResults?.size_statistics?.d10}
+                  secondaryD50={secondaryResults?.size_statistics?.d50}
+                  secondaryD90={secondaryResults?.size_statistics?.d90}
+                  distributionAnalysis={distributionAnalysis}
+                  distributionLoading={distributionLoading}
+                />
+              </div>
+                </>
+              )}
             </TabsContent>
 
             <TabsContent value="theory" className="space-y-4">
+              {activeVisualizationTab === "theory" && (
+                <>
               <div className="flex items-center justify-end gap-1">
                 <Button variant="ghost" size="icon" className="h-8 w-8">
                   <Maximize2 className="h-4 w-4" />
@@ -1146,13 +1321,19 @@ export function AnalysisResults() {
                   <Pin className="h-4 w-4" />
                 </Button>
               </div>
-              <TheoryVsMeasuredChart 
-                primaryMeasuredData={theoryMeasuredData}
-                secondaryMeasuredData={secondaryTheoryData}
-              />
+              <div data-pin-chart="theory">
+                <TheoryVsMeasuredChart 
+                  primaryMeasuredData={theoryMeasuredData}
+                  secondaryMeasuredData={secondaryTheoryData}
+                />
+              </div>
+                </>
+              )}
             </TabsContent>
 
             <TabsContent value="fsc-ssc" className="space-y-4">
+              {activeVisualizationTab === "fsc-ssc" && (
+                <>
               {/* View Mode Toggle + Axis Selection */}
               <div className="flex items-center justify-between gap-4 flex-wrap">
                 {/* CRMIT-002: Auto Axis Selection */}
@@ -1212,60 +1393,66 @@ export function AnalysisResults() {
                 </div>
               </div>
               
-              {loadingScatter ? (
-                <div className="flex items-center justify-center h-[400px]">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                  <span className="ml-3 text-muted-foreground">Loading scatter data...</span>
-                </div>
-              ) : scatterViewMode === "clustered" && sampleId ? (
-                // UI-002: Clustered scatter view for large datasets
-                <ClusteredScatterChart
-                  sampleId={sampleId}
-                  title={`${xChannel} vs ${yChannel} (Clustered)`}
-                  xLabel={xChannel}
-                  yLabel={yChannel}
-                  xChannel={xChannel}
-                  yChannel={yChannel}
-                  height={500}
-                  onClusterClick={(cluster) => {
-                    toast({
-                      title: `Cluster ${cluster.id + 1}`,
-                      description: `${cluster.count.toLocaleString()} events (${cluster.pct}%)${cluster.avg_diameter ? `, Avg diameter: ${cluster.avg_diameter.toFixed(1)} nm` : ''}`,
-                    })
-                  }}
-                />
-              ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-                  <div className="lg:col-span-3">
-                    {/* Standard: Interactive SVG-based scatter chart with reliable selection */}
-                    <InteractiveScatterChart
-                      title={`${xChannel} vs ${yChannel}`}
-                      xLabel={xChannel}
-                      yLabel={yChannel}
-                      data={scatterData}
-                      anomalousIndices={anomalyData?.anomalous_indices ?? emptyAnomalyIndices}
-                      highlightAnomalies={highlightAnomalies}
-                      height={450}
-                      onSelectionChange={handleSelectionChange}
-                      onGatedAnalysis={handleGatedAnalysis}
-                    />
+              <div data-pin-chart="fsc-ssc">
+                {loadingScatter ? (
+                  <div className="flex items-center justify-center h-[400px]">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <span className="ml-3 text-muted-foreground">Loading scatter data...</span>
                   </div>
-                  <div className="lg:col-span-1">
-                    <GatedStatisticsPanel
-                      scatterData={scatterData}
-                      xLabel={xChannel}
-                      yLabel={yChannel}
-                      selectedIndices={selectedIndices}
-                      sampleId={sampleId}
-                      gateCoordinates={gateCoordinates}
-                      onExportSelection={handleExportSelection}
-                    />
+                ) : scatterViewMode === "clustered" && sampleId ? (
+                  // UI-002: Clustered scatter view for large datasets
+                  <ClusteredScatterChart
+                    sampleId={sampleId}
+                    title={`${xChannel} vs ${yChannel} (Clustered)`}
+                    xLabel={xChannel}
+                    yLabel={yChannel}
+                    xChannel={xChannel}
+                    yChannel={yChannel}
+                    height={500}
+                    onClusterClick={(cluster) => {
+                      toast({
+                        title: `Cluster ${cluster.id + 1}`,
+                        description: `${cluster.count.toLocaleString()} events (${cluster.pct}%)${cluster.avg_diameter ? `, Avg diameter: ${cluster.avg_diameter.toFixed(1)} nm` : ''}`,
+                      })
+                    }}
+                  />
+                ) : (
+                  <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+                    <div className="lg:col-span-3">
+                      {/* Standard: Interactive SVG-based scatter chart with reliable selection */}
+                      <InteractiveScatterChart
+                        title={`${xChannel} vs ${yChannel}`}
+                        xLabel={xChannel}
+                        yLabel={yChannel}
+                        data={scatterData}
+                        anomalousIndices={anomalyData?.anomalous_indices ?? emptyAnomalyIndices}
+                        highlightAnomalies={highlightAnomalies}
+                        height={450}
+                        onSelectionChange={handleSelectionChange}
+                        onGatedAnalysis={handleGatedAnalysis}
+                      />
+                    </div>
+                    <div className="lg:col-span-1">
+                      <GatedStatisticsPanel
+                        scatterData={scatterData}
+                        xLabel={xChannel}
+                        yLabel={yChannel}
+                        selectedIndices={selectedIndices}
+                        sampleId={sampleId}
+                        gateCoordinates={gateCoordinates}
+                        onExportSelection={handleExportSelection}
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
+              </div>
+                </>
               )}
             </TabsContent>
 
             <TabsContent value="diameter" className="space-y-4">
+              {activeVisualizationTab === "diameter" && (
+                <>
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   {anomalyData && anomalyData.total_anomalies > 0 && highlightAnomalies && (
@@ -1299,19 +1486,25 @@ export function AnalysisResults() {
                   </Button>
                 </div>
               </div>
-              <DiameterVsSSCChart
-                data={diameterVsSSCData}
-                anomalousIndices={anomalyData?.anomalous_indices || []}
-                highlightAnomalies={highlightAnomalies}
-                showMieTheory={true}
-                showLegend={true}
-                height={450}
-                secondaryData={secondaryDiameterVsSSCData}
-                secondaryAnomalousIndices={secondaryAnomalyData?.anomalous_indices || []}
-              />
+              <div data-pin-chart="diameter">
+                <DiameterVsSSCChart
+                  data={diameterVsSSCData}
+                  anomalousIndices={anomalyData?.anomalous_indices || []}
+                  highlightAnomalies={highlightAnomalies}
+                  showMieTheory={true}
+                  showLegend={true}
+                  height={450}
+                  secondaryData={secondaryDiameterVsSSCData}
+                  secondaryAnomalousIndices={secondaryAnomalyData?.anomalous_indices || []}
+                />
+              </div>
+                </>
+              )}
             </TabsContent>
 
             <TabsContent value="event-size" className="space-y-4">
+              {activeVisualizationTab === "event-size" && (
+                <>
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   <Badge variant="outline" className="bg-blue-500/20 text-blue-500 border-blue-500/50">
@@ -1332,16 +1525,20 @@ export function AnalysisResults() {
                   </Button>
                 </div>
               </div>
-              {sampleId ? (
-                <EventVsSizeChart
-                  sampleId={sampleId}
-                  onPin={() => handlePin("Event vs Size", "scatter")}
-                  title="Event Number vs Calculated Size"
-                />
-              ) : (
-                <div className="h-[400px] flex items-center justify-center text-muted-foreground border border-dashed rounded-lg">
-                  <p>Upload a sample to see per-event size analysis</p>
-                </div>
+              <div data-pin-chart="event-size">
+                {sampleId ? (
+                  <EventVsSizeChart
+                    sampleId={sampleId}
+                    onPin={() => handlePin("Event vs Size", "scatter")}
+                    title="Event Index vs Estimated Diameter"
+                  />
+                ) : (
+                  <div className="h-[400px] flex items-center justify-center text-muted-foreground border border-dashed rounded-lg">
+                    <p>Upload a sample to see per-event size analysis</p>
+                  </div>
+                )}
+              </div>
+                </>
               )}
             </TabsContent>
           </Tabs>

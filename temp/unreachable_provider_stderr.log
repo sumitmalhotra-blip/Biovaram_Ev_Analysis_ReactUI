@@ -1,0 +1,42 @@
+[desktop] [backend] INFO:     Started server process [8128]
+INFO:     Waiting for application startup.
+[desktop] [backend] 2026-04-15 18:38:24.586 | INFO     | src.api.main:lifespan:68 - \U0001f680 CRMIT API starting up...
+2026-04-15 18:38:24.586 | INFO     | src.api.main:lifespan:69 -    Environment: development
+2026-04-15 18:38:24.586 | INFO     | src.api.main:lifespan:70 -    Upload directory: D:\CRM IT Project\Biovaram_Ev_Analysis_ReactUI\data\uploads
+2026-04-15 18:38:24.587 | INFO     | src.api.main:lifespan:71 -    Parquet directory: D:\CRM IT Project\Biovaram_Ev_Analysis_ReactUI\data\parquet
+2026-04-15 18:38:24.587 | INFO     | src.database.connection:get_engine:59 - \U0001f50c Creating database engine...
+2026-04-15 18:38:24.587 | INFO     | src.database.connection:get_engine:60 -    Database URL: sqlite+aiosqlite:///D:\CRM IT Project\Biovaram_Ev_Analysis_ReactUI\data\crmit.db
+2026-04-15 18:38:24.587 | INFO     | src.database.connection:get_engine:64 -    Pool: NullPool (async engine)
+[desktop] [backend] 2026-04-15 18:38:24.605 | SUCCESS  | src.database.connection:get_engine:73 - \u2705 Database engine created
+2026-04-15 18:38:24.605 | INFO     | src.database.connection:init_database:184 - \U0001f4ca Initializing database schema...
+[desktop] [backend] 2026-04-15 18:38:24.612 | SUCCESS  | src.database.connection:init_database:190 - \u2705 Database schema initialized
+2026-04-15 18:38:24.612 | INFO     | src.api.main:lifespan:76 -    Database: Connection pool initialized
+2026-04-15 18:38:24.612 | INFO     | src.database.connection:get_session_factory:103 - \u2705 Session factory created
+[desktop] [backend] 2026-04-15 18:38:24.630 | INFO     | src.api.main:_ensure_default_user:138 -    Default desktop user exists: lab@biovaram.local
+[desktop] [backend] 2026-04-15 18:38:24.631 | SUCCESS  | src.api.main:lifespan:84 - \u2705 CRMIT API ready
+[desktop] [backend] INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:18121 (Press CTRL+C to quit)
+[desktop] [backend] 2026-04-15 18:38:24.673 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /health
+[desktop] [backend] 2026-04-15 18:38:24.674 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /health \u2192 200 (1.1ms)
+[desktop] [backend] 2026-04-15 18:38:25.086 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /health
+[desktop] [backend] 2026-04-15 18:38:25.087 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /health \u2192 200 (1.1ms)
+[desktop] [backend] 2026-04-15 18:38:25.091 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  POST /api/v1/auth/login
+[desktop] [backend] 2026-04-15 18:38:25.099 | WARNING  | src.api.main:validation_exception_handler:233 - Validation error on /api/v1/auth/login: [{'field': 'body -> email', 'message': 'value is not a valid email address: The part after the @-sign is a special-use or reserved name that cannot be used with email.', 'type': 'value_error'}]
+[desktop] [backend] 2026-04-15 18:38:25.099 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  POST /api/v1/auth/login \u2192 422 (8.6ms)
+[desktop] [backend] 2026-04-15 18:38:25.855 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /api/v1/alerts
+[desktop] [backend] 2026-04-15 18:38:25.856 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /api/v1/alerts/counts
+[desktop] [backend] 2026-04-15 18:38:25.859 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /api/v1/alerts \u2192 307 (3.6ms)
+[desktop] [backend] 2026-04-15 18:38:25.860 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /health
+[desktop] [backend] 2026-04-15 18:38:25.861 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /health \u2192 200 (1.0ms)
+[desktop] [backend] 2026-04-15 18:38:25.872 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /api/v1/alerts/counts \u2192 200 (15.9ms)
+[desktop] [backend] 2026-04-15 18:38:25.883 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /api/v1/alerts/
+[desktop] [backend] 2026-04-15 18:38:25.893 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /api/v1/alerts/ \u2192 200 (9.9ms)
+[desktop] [backend] 2026-04-15 18:38:25.960 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /health
+[desktop] [backend] 2026-04-15 18:38:25.961 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /health \u2192 200 (0.9ms)
+[desktop] [backend] 2026-04-15 18:38:25.961 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /api/v1/samples
+[desktop] [backend] 2026-04-15 18:38:25.962 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /api/v1/samples \u2192 307 (0.9ms)
+[desktop] [backend] 2026-04-15 18:38:25.998 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /api/v1/samples/
+[desktop] [backend] 2026-04-15 18:38:26.012 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /api/v1/samples/ \u2192 200 (14.0ms)
+[desktop] Initial update check failed: Simulated unreachable update provider for deterministic resilience test.
+[desktop] [backend] 2026-04-15 18:38:56.573 | INFO     | src.api.main:log_requests:191 - \u2b07\ufe0f  GET /health
+[desktop] [backend] 2026-04-15 18:38:56.573 | INFO     | src.api.main:log_requests:198 - \u2b06\ufe0f  GET /health \u2192 200 (0.5ms)

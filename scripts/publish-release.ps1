@@ -2,6 +2,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$Version,
     [switch]$BuildBackend,
+    [switch]$RequireSigning,
     [switch]$SkipBuild,
     [switch]$SkipValidate,
     [string]$ElectronOutputDir = "",
@@ -25,6 +26,21 @@ function Assert-LastExitCode {
     if ($LASTEXITCODE -ne 0) {
         throw "$Step failed with exit code $LASTEXITCODE"
     }
+}
+
+function Test-SigningProvisioned {
+    # electron-builder supports these env vars for Windows signing discovery.
+    if ($env:WIN_CSC_LINK -or $env:WIN_CSC_KEY_PASSWORD) {
+        return $true
+    }
+    if ($env:CSC_LINK -or $env:CSC_KEY_PASSWORD) {
+        return $true
+    }
+    if ($env:CSC_NAME) {
+        return $true
+    }
+
+    return $false
 }
 
 function Stop-LockingDesktopProcesses {
@@ -70,6 +86,10 @@ if (-not $env:GITHUB_TOKEN) {
 
 if (-not (Test-Path $ReleaseNotesPath)) {
     throw "Release notes file not found: $ReleaseNotesPath"
+}
+
+if ($RequireSigning -and -not (Test-SigningProvisioned)) {
+    throw "RequireSigning was set, but no signing configuration was found. Set WIN_CSC_LINK/WIN_CSC_KEY_PASSWORD or CSC_LINK/CSC_KEY_PASSWORD or CSC_NAME."
 }
 
 $frontendBuiltByBackend = $false
@@ -141,6 +161,11 @@ do {
 if (-not $SkipValidate) {
     Write-Host "[5/7] Validating published release artifacts" -ForegroundColor Yellow
     & "$ProjectRoot\scripts\validate-release-artifacts.ps1" -Version $Version -ArtifactsDir $ElectronOutputDir
+
+    if ($RequireSigning) {
+        Write-Host "[5/7] Validating code signature" -ForegroundColor Yellow
+        & "$ProjectRoot\scripts\validate-code-signing.ps1" -Version $Version -ArtifactsDir $ElectronOutputDir -RequireValid
+    }
 }
 else {
     Write-Host "[5/7] Skipping post-build artifact validation" -ForegroundColor DarkGray
