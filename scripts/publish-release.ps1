@@ -72,6 +72,8 @@ if (-not (Test-Path $ReleaseNotesPath)) {
     throw "Release notes file not found: $ReleaseNotesPath"
 }
 
+$frontendBuiltByBackend = $false
+
 Write-Host "[1/7] Updating app version to $Version" -ForegroundColor Yellow
 npm.cmd version $Version --no-git-tag-version | Out-Null
 if ($LASTEXITCODE -ne 0) {
@@ -86,16 +88,22 @@ if ($LASTEXITCODE -ne 0) {
 
 if ($BuildBackend) {
     Write-Host "[2/6] Building backend desktop executable" -ForegroundColor Yellow
-    & "$ProjectRoot\packaging\build.ps1" -SkipFrontend -Version $Version
+    # Build backend with bundled frontend to keep in-app UI assets in sync.
+    & "$ProjectRoot\packaging\build.ps1" -Version $Version
+    Assert-LastExitCode -Step "Backend desktop build"
+    $frontendBuiltByBackend = $true
 }
 else {
     Write-Host "[2/6] Skipping backend build (use -BuildBackend to include it)" -ForegroundColor DarkGray
 }
 
-if (-not $SkipBuild) {
+if (-not $SkipBuild -and -not $frontendBuiltByBackend) {
     Write-Host "[3/6] Building static frontend" -ForegroundColor Yellow
     npm.cmd run build
     Assert-LastExitCode -Step "Frontend build"
+}
+elseif ($frontendBuiltByBackend) {
+    Write-Host "[3/6] Skipping standalone frontend build (already built during backend packaging)" -ForegroundColor DarkGray
 }
 else {
     Write-Host "[3/6] Skipping frontend build" -ForegroundColor DarkGray
