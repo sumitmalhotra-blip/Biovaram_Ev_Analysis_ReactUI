@@ -12,8 +12,9 @@ Status legend:
 - [x] Backend launch from Electron implemented.
 - [x] Mandatory updater flow implemented (download progress + install and restart).
 - [x] Release publishing scripts implemented and hardened.
-- [x] Releases v0.1.0 through v0.1.4 published with updater assets.
-- [x] Runtime version-badge fix rolled out in v0.1.4 with backend/frontend asset sync.
+- [x] Releases v0.1.0 through v0.1.5 published with updater assets.
+- [x] Runtime version-badge/cache-staleness fix rolled out in v0.1.5.
+- [x] Update prompt notes fallback hardened (blank/empty release notes now show meaningful text).
 
 ### Open Rollout Gaps
 - [~] Clean-profile E2E validation recorded for latest candidate release (detection/download evidence captured; final interactive install-restart proof pending).
