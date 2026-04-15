@@ -219,7 +219,12 @@ function extractReleaseNoteLines(rawText) {
     return [];
   }
 
-  const withBreaks = String(rawText)
+  const normalized = String(rawText)
+    .replace(/<\s*code[^>]*>\s*\\?n\s*<\s*\/\s*code\s*>/gi, "\n")
+    .replace(/\\n/g, "\n")
+    .replace(/\r\n/g, "\n");
+
+  const withBreaks = normalized
     .replace(/<\s*br\s*\/?>/gi, "\n")
     .replace(/<\s*\/\s*p\s*>/gi, "\n")
     .replace(/<\s*p[^>]*>/gi, "\n")
