@@ -1,4 +1,5 @@
-const { app, BrowserWindow, dialog, ipcMain } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, session } = require("electron");
+const fs = require("fs");
 const path = require("path");
 const { BackendManager } = require("./backend-manager");
 const { APP_NAME } = require("./constants");
@@ -42,10 +43,64 @@ function createWindow(backendBaseUrl) {
 
   const url = isDev
     ? process.env.ELECTRON_RENDERER_URL || "http://127.0.0.1:3000"
-    : backendBaseUrl;
+    : `${backendBaseUrl}?appVersion=${encodeURIComponent(app.getVersion())}`;
 
   logger.info(`Loading renderer: ${url}`);
   mainWindow.loadURL(url);
+}
+
+function getRendererCacheStatePath() {
+  return path.join(app.getPath("userData"), "renderer-cache-state.json");
+}
+
+async function ensureRendererCacheFresh() {
+  if (!app.isPackaged) {
+    return;
+  }
+
+  const currentVersion = app.getVersion();
+  const statePath = getRendererCacheStatePath();
+
+  let lastVersion = null;
+  try {
+    if (fs.existsSync(statePath)) {
+      const parsed = JSON.parse(fs.readFileSync(statePath, "utf8"));
+      lastVersion = parsed?.lastVersion || null;
+    }
+  } catch {
+    lastVersion = null;
+  }
+
+  if (lastVersion === currentVersion) {
+    return;
+  }
+
+  logger.info(`Renderer version changed (${lastVersion || "none"} -> ${currentVersion}); clearing cache.`);
+  try {
+    await session.defaultSession.clearCache();
+    await session.defaultSession.clearStorageData({
+      storages: ["serviceworkers", "cachestorage"],
+    });
+  } catch (err) {
+    logger.error(`Renderer cache clear failed: ${err?.message || err}`);
+  }
+
+  try {
+    fs.writeFileSync(
+      statePath,
+      JSON.stringify(
+        {
+          lastVersion: currentVersion,
+          updatedAt: new Date().toISOString(),
+        },
+        null,
+        2
+      ),
+      "utf8"
+    );
+  } catch {
+    // Non-fatal; cache clear should still take effect for this run.
+  }
 }
 
 async function boot() {
@@ -56,6 +111,7 @@ async function boot() {
 
   try {
     await backendManager.start();
+    await ensureRendererCacheFresh();
     createWindow(backendManager.getBaseUrl());
 
     ipcMain.handle("backend:status", async () => ({

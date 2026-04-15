@@ -204,21 +204,33 @@ async function startMandatoryDownload(mainWindow, logger) {
 
 function normalizeReleaseNotes(releaseNotes) {
   if (!releaseNotes) {
-    return "No release notes were provided for this update.";
+    return "No release notes were attached to this release. This update includes stability fixes and production rollout improvements.";
   }
 
   if (typeof releaseNotes === "string") {
-    return releaseNotes;
+    const text = releaseNotes.trim();
+    return text.length > 0
+      ? text
+      : "No release notes were attached to this release. This update includes stability fixes and production rollout improvements.";
   }
 
   if (Array.isArray(releaseNotes)) {
-    return releaseNotes
+    if (releaseNotes.length === 0) {
+      return "No release notes were attached to this release. This update includes stability fixes and production rollout improvements.";
+    }
+
+    const combined = releaseNotes
       .map((entry) => {
         const version = entry?.version ? `v${entry.version}` : "version update";
         const note = entry?.note || "No details provided.";
         return `${version}\n${note}`;
       })
-      .join("\n\n");
+      .join("\n\n")
+      .trim();
+
+    return combined.length > 0
+      ? combined
+      : "No release notes were attached to this release. This update includes stability fixes and production rollout improvements.";
   }
 
   return String(releaseNotes);
