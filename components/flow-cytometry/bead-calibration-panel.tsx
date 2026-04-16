@@ -1361,6 +1361,25 @@ export function BeadCalibrationPanel() {
                     <CheckCircle2 className="h-3 w-3" />
                     {autoCalResult.message}
                   </div>
+                  <div className="text-[10px] text-muted-foreground space-y-0.5">
+                    <div>
+                      Certificate populations: {autoCalResult.calibration_summary?.certificate?.total_populations ?? "-"} (unique diameters: {autoCalResult.calibration_summary?.certificate?.unique_diameters ?? "-"})
+                    </div>
+                    <div>
+                      Candidate beads from run: {autoCalResult.calibration_summary?.selection?.candidate_unique_beads ?? "-"} → Final used: {autoCalResult.calibration_summary?.selection?.final_beads_used ?? autoCalResult.n_beads ?? "-"}
+                    </div>
+                    <div>
+                      Final diameter coverage: {autoCalResult.calibration_summary?.selection?.final_diameter_range_nm?.[0] ?? "-"}nm to {autoCalResult.calibration_summary?.selection?.final_diameter_range_nm?.[1] ?? "-"}nm
+                    </div>
+                    <div>
+                      Run consistency thresholds: file-level CV ≤ {autoCalResult.calibration_summary?.thresholds?.subset_consistency_max_cv_pct ?? "-"}% and final CV ≤ {autoCalResult.calibration_summary?.thresholds?.final_consistency_target_cv_pct ?? "-"}%
+                    </div>
+                  </div>
+                  {!!autoCalResult.calibration_summary?.selection?.coverage_warning && (
+                    <div className="text-[10px] text-amber-600">
+                      {autoCalResult.calibration_summary.selection.coverage_warning}
+                    </div>
+                  )}
                   {autoCalResult.per_file_results?.map((r, i) => (
                     <div key={i} className="text-[10px] flex items-center gap-1">
                       {r.success ? (
@@ -1370,12 +1389,29 @@ export function BeadCalibrationPanel() {
                       )}
                       <span className="font-mono">{r.sample_id}</span>
                       {r.success ? (
-                        <span className="text-muted-foreground">— {r.n_beads_matched} beads matched</span>
+                        <span className="text-muted-foreground">
+                          — {r.n_beads_matched} matched
+                          {typeof r.expected_beads === "number" ? ` / ${r.expected_beads} expected` : ""}
+                          {typeof r.detected_peaks === "number" ? `, ${r.detected_peaks} peaks detected` : ""}
+                          {typeof r.run_k_cv_pct === "number" ? `, run CV ${r.run_k_cv_pct.toFixed(1)}%` : ""}
+                        </span>
                       ) : (
-                        <span className="text-red-500">— {r.error}</span>
+                        <span className="text-red-500">
+                          — {r.error}
+                          {typeof r.run_k_cv_pct === "number" ? ` (run CV ${r.run_k_cv_pct.toFixed(1)}% > ${r.subset_consistency_threshold_pct ?? "?"}%)` : ""}
+                        </span>
                       )}
                     </div>
                   ))}
+                  {!!autoCalResult.calibration_summary?.selection?.outliers_removed?.length && (
+                    <div className="text-[10px] text-amber-600 space-y-0.5">
+                      {autoCalResult.calibration_summary.selection.outliers_removed.map((o, idx) => (
+                        <div key={idx}>
+                          Outlier removed: {o.diameter_nm}nm (k={o.run_k_value}, median k={o.k_median})
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 

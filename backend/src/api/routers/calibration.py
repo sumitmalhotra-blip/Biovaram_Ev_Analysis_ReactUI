@@ -296,6 +296,8 @@ async def auto_calibrate_from_beads(
     sample_ids: comma-separated list of sample IDs
     """
     sample_id_list = [s.strip() for s in sample_ids.split(",") if s.strip()]
+    subset_consistency_max_cv_pct = 50.0
+    final_consistency_target_cv_pct = 10.0
     
     if not sample_id_list:
         raise HTTPException(
@@ -319,6 +321,11 @@ async def auto_calibrate_from_beads(
         # Load datasheet JSON to get subcomponent names
         with open(datasheet_path) as df:
             datasheet_json = json.load(df)
+
+        cert_total_populations = sum(
+            len(sc.get("beads", [])) for sc in (datasheet_json.get("subcomponents", {}) or {}).values()
+        )
+        cert_unique_diameters = len(set(datasheet_json.get("unique_bead_diameters_nm", [])))
         
         # Get subcomponent names (e.g., ["nanoViS_Low", "nanoViS_High"])
         subcomponent_names = list(datasheet_json.get("subcomponents", {}).keys())
@@ -356,6 +363,10 @@ async def auto_calibrate_from_beads(
         
         # Load datasheet for subcomponent filtering
         datasheet = BeadDatasheet.load(str(datasheet_path))
+        vendor_cv_by_diameter: Dict[float, float] = {}
+        for bead in datasheet.beads:
+            if bead.diameter_nm not in vendor_cv_by_diameter:
+                vendor_cv_by_diameter[bead.diameter_nm] = bead.cv_pct
         
         # Build a temporary FCMPASSCalibrator to compute σ_sca for beads
         temp_calibrator = FCMPASSCalibrator(
@@ -441,7 +452,7 @@ async def auto_calibrate_from_beads(
                             best_combo = pairs
                             best_k_mean = k_mean
                     
-                    if best_combo and best_cv < 50.0:
+                    if best_combo and best_cv < subset_consistency_max_cv_pct:
                         logger.info(
                             f"  ✓ Subset matching: k≈{best_k_mean:.1f}, CV={best_cv:.1f}%, "
                             f"{n_beads} beads"
@@ -455,21 +466,27 @@ async def auto_calibrate_from_beads(
                                 "scatter_au": scatter_au,
                                 "source_file": sid,
                                 "subcomponent": best_subcomp,
+                                "vendor_cv_pct": vendor_cv_by_diameter.get(diameter),
                             })
                         
                         per_file_results.append({
                             "sample_id": sid,
                             "success": True,
                             "n_beads_matched": n_beads,
+                            "expected_beads": len(known_diameters),
+                            "detected_peaks": len(detected_peaks),
                             "subcomponent": best_subcomp,
+                            "matching_mode": "subset",
                             "k_estimate": round(best_k_mean, 1),
-                            "k_cv_estimate": round(best_cv, 1),
+                            "run_k_cv_pct": round(best_cv, 1),
+                            "subset_consistency_threshold_pct": subset_consistency_max_cv_pct,
                         })
                         continue
                     else:
+                        poor_cv = round(best_cv, 1) if np.isfinite(best_cv) else None
                         raise ValueError(
                             f"Only {len(detected_peaks)} peaks found and subset matching "
-                            f"gave poor CV ({best_cv:.1f}%)"
+                            f"gave poor run consistency CV ({poor_cv if poor_cv is not None else 'n/a'}%)"
                         )
                 
                 # Combinatorial Mie-theory matching:
@@ -521,23 +538,41 @@ async def auto_calibrate_from_beads(
                         "scatter_au": scatter_au,
                         "source_file": sid,
                         "subcomponent": best_subcomp,
+                        "vendor_cv_pct": vendor_cv_by_diameter.get(diameter),
                     })
                 
                 per_file_results.append({
                     "sample_id": sid,
                     "success": True,
                     "n_beads_matched": n_beads,
+                    "expected_beads": len(known_diameters),
+                    "detected_peaks": len(detected_peaks),
                     "subcomponent": best_subcomp,
+                    "matching_mode": "combinatorial",
                     "k_estimate": round(best_k_mean, 1),
-                    "k_cv_estimate": round(best_cv, 1),
+                    "run_k_cv_pct": round(best_cv, 1),
+                    "subset_consistency_threshold_pct": subset_consistency_max_cv_pct,
                 })
                 
             except Exception as e:
                 logger.warning(f"Failed to process bead FCS {sid}: {e}")
+                err_text = str(e)
+                poor_cv_match = re.search(r'poor run consistency CV \(([^)]+)%\)', err_text)
+                poor_cv = None
+                try:
+                    if poor_cv_match:
+                        poor_cv = float(poor_cv_match.group(1))
+                except Exception:
+                    poor_cv = None
                 per_file_results.append({
                     "sample_id": sid,
                     "success": False,
-                    "error": str(e),
+                    "error": (
+                        "Run consistency for this file is poor; detected peak intensities do not align "
+                        "to a stable instrument constant (k)."
+                    ) if poor_cv is not None else err_text,
+                    "run_k_cv_pct": poor_cv,
+                    "subset_consistency_threshold_pct": subset_consistency_max_cv_pct,
                 })
         
         if not all_bead_points:
@@ -555,10 +590,15 @@ async def auto_calibrate_from_beads(
                 deduped[d] = bp
         
         unique_points = sorted(deduped.values(), key=lambda x: x["diameter_nm"])
+        candidate_points_count = len(unique_points)
         
         # Now fit FCMPASS calibration with all collected points
         fcmpass_points = [
-            {"diameter_nm": p["diameter_nm"], "scatter_au": p["scatter_au"]}
+            {
+                "diameter_nm": p["diameter_nm"],
+                "scatter_au": p["scatter_au"],
+                "vendor_cv_pct": p.get("vendor_cv_pct"),
+            }
             for p in unique_points
         ]
         
@@ -568,6 +608,7 @@ async def auto_calibrate_from_beads(
         # the bead with the most inconsistent k value until CV ≤ 10%
         # or only 2 beads remain. This handles noise peaks that slip through.
         working_points = list(fcmpass_points)
+        removed_outliers = []
         
         while len(working_points) >= 3:
             # Compute trial k values
@@ -583,7 +624,7 @@ async def auto_calibrate_from_beads(
             k_std = float(np.std(k_values))
             k_cv = (k_std / k_mean * 100) if k_mean > 0 else 999.0
             
-            if k_cv <= 10.0:
+            if k_cv <= final_consistency_target_cv_pct:
                 break  # Good enough
             
             # Find the bead with the most deviation from median
@@ -595,6 +636,12 @@ async def auto_calibrate_from_beads(
                 f"  ⚠️ Outlier rejection: CV={k_cv:.1f}%, removing {worst_d}nm "
                 f"(k={worst_k:.1f} vs median={k_median:.1f})"
             )
+            removed_outliers.append({
+                "diameter_nm": worst_d,
+                "run_k_value": round(worst_k, 2),
+                "k_median": round(k_median, 2),
+                "reason": "run_consistency_outlier",
+            })
             working_points = [p for p in working_points if p["diameter_nm"] != worst_d]
         
         if len(working_points) < 2:
@@ -609,6 +656,15 @@ async def auto_calibrate_from_beads(
             sigma = temp_calibrator._compute_bead_sigma(p["diameter_nm"])
             k = p["scatter_au"] / sigma if sigma > 0 else 0
             logger.info(f"    {p['diameter_nm']}nm: AU={p['scatter_au']:.0f}, k={k:.1f}")
+
+        final_diameters = sorted([float(p["diameter_nm"]) for p in working_points])
+        final_min_d = final_diameters[0]
+        final_max_d = final_diameters[-1]
+        coverage_warning = None
+        if len(final_diameters) < 4 or final_max_d < 600:
+            coverage_warning = (
+                "Calibration is based on a narrow bead subset; size outputs can shift compared to a full multi-size calibration."
+            )
         
         calibrator = FCMPASSCalibrator(
             wavelength_nm=wavelength_nm,
@@ -646,8 +702,36 @@ async def auto_calibrate_from_beads(
             "k_instrument": calibrator.k_instrument,
             "k_cv_pct": calibrator.k_cv_pct,
             "n_beads": len(working_points),
-            "bead_points": [{"diameter_nm": p["diameter_nm"], "scatter_au": p["scatter_au"]} for p in working_points],
+            "bead_points": [
+                {
+                    "diameter_nm": p["diameter_nm"],
+                    "scatter_au": p["scatter_au"],
+                    "vendor_cv_pct": p.get("vendor_cv_pct"),
+                }
+                for p in working_points
+            ],
             "per_file_results": per_file_results,
+            "calibration_summary": {
+                "certificate": {
+                    "total_populations": cert_total_populations,
+                    "unique_diameters": cert_unique_diameters,
+                },
+                "selection": {
+                    "candidate_unique_beads": candidate_points_count,
+                    "final_beads_used": len(working_points),
+                    "final_diameter_range_nm": [final_min_d, final_max_d],
+                    "outliers_removed": removed_outliers,
+                    "coverage_warning": coverage_warning,
+                },
+                "thresholds": {
+                    "subset_consistency_max_cv_pct": subset_consistency_max_cv_pct,
+                    "final_consistency_target_cv_pct": final_consistency_target_cv_pct,
+                },
+                "notes": [
+                    "Certificate CV% describes bead lot size spread. Calibration CV% describes run-time instrument consistency.",
+                    "A file can be excluded if detected peaks are not consistent with a single instrument k value.",
+                ],
+            },
             "diagnostics": diagnostics,
         }
         

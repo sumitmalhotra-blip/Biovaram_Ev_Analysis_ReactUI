@@ -612,13 +612,41 @@ export interface AutoCalibrateResult {
   k_instrument?: number;
   k_cv_pct?: number;
   n_beads?: number;
-  bead_points?: Array<{ diameter_nm: number; scatter_au: number }>;
+  bead_points?: Array<{ diameter_nm: number; scatter_au: number; vendor_cv_pct?: number }>;
   per_file_results?: Array<{
     sample_id: string;
     success: boolean;
     n_beads_matched?: number;
+    expected_beads?: number;
+    detected_peaks?: number;
+    matching_mode?: "subset" | "combinatorial";
+    run_k_cv_pct?: number;
+    subset_consistency_threshold_pct?: number;
     error?: string;
   }>;
+  calibration_summary?: {
+    certificate?: {
+      total_populations?: number;
+      unique_diameters?: number;
+    };
+    selection?: {
+      candidate_unique_beads?: number;
+      final_beads_used?: number;
+      final_diameter_range_nm?: [number, number];
+      outliers_removed?: Array<{
+        diameter_nm: number;
+        run_k_value: number;
+        k_median: number;
+        reason: string;
+      }>;
+      coverage_warning?: string;
+    };
+    thresholds?: {
+      subset_consistency_max_cv_pct?: number;
+      final_consistency_target_cv_pct?: number;
+    };
+    notes?: string[];
+  };
   diagnostics?: Record<string, unknown>;
 }
 

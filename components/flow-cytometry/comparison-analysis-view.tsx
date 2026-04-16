@@ -25,7 +25,11 @@ import {
   Plus,
   Trash2,
 } from "lucide-react"
-import { useAnalysisStore } from "@/lib/store"
+import {
+  useAnalysisStore,
+  type FCSCompareScatterDensityMode,
+  type FCSCompareScatterZoomPreset,
+} from "@/lib/store"
 import { useToast } from "@/hooks/use-toast"
 import { useApi } from "@/hooks/use-api"
 import { FullAnalysisDashboard } from "./full-analysis-dashboard"
@@ -57,8 +61,8 @@ const EMPTY_SCATTER_POINTS: Array<{ x: number; y: number; index?: number; diamet
 
 type ReplicateGroupingMode = "none" | "prefix"
 type ReplicateRenderMode = "standard" | "histogram-average" | "merged-points"
-type ScatterDensityMode = "auto" | "raw" | "density"
-type ScatterZoomPreset = "auto" | "center-60" | "core-30" | "high-signal"
+type ScatterDensityMode = FCSCompareScatterDensityMode
+type ScatterZoomPreset = FCSCompareScatterZoomPreset
 type CompareMode = "pairwise" | "multi-overlay"
 
 const DENSITY_TRIGGER_POINTS = 1400
@@ -232,6 +236,9 @@ export function ComparisonAnalysisView() {
   const unifiedAxis = activeGraphInstance?.unifiedAxis ?? { x: "FSC-A", y: "SSC-A" }
   const primaryAxis = activeGraphInstance?.primaryAxis ?? { x: "FSC-A", y: "SSC-A" }
   const comparisonAxis = activeGraphInstance?.comparisonAxis ?? { x: "FSC-A", y: "SSC-A" }
+  const scatterDensityMode = activeGraphInstance?.scatterDensityMode ?? "auto"
+  const scatterZoomPreset = activeGraphInstance?.scatterZoomPreset ?? "auto"
+  const showRawOverlayInDensity = activeGraphInstance?.showRawOverlayInDensity ?? false
   const [progressiveLoadMetrics, setProgressiveLoadMetrics] = useState<{
     primaryRenderMs: number | null
     settledRenderMs: number | null
@@ -598,13 +605,30 @@ export function ComparisonAnalysisView() {
     updateFCSCompareGraphInstance(activeGraphInstance.id, { axisMode: mode })
   }, [activeGraphInstance, updateFCSCompareGraphInstance])
 
+  const handleScatterDensityModeChange = useCallback((mode: ScatterDensityMode) => {
+    if (!activeGraphInstance) return
+    updateFCSCompareGraphInstance(activeGraphInstance.id, { scatterDensityMode: mode })
+  }, [activeGraphInstance, updateFCSCompareGraphInstance])
+
+  const handleScatterZoomPresetChange = useCallback((preset: ScatterZoomPreset) => {
+    if (!activeGraphInstance) return
+    updateFCSCompareGraphInstance(activeGraphInstance.id, { scatterZoomPreset: preset })
+  }, [activeGraphInstance, updateFCSCompareGraphInstance])
+
+  const handleToggleRawOverlayInDensity = useCallback(() => {
+    if (!activeGraphInstance) return
+    updateFCSCompareGraphInstance(activeGraphInstance.id, {
+      showRawOverlayInDensity: !showRawOverlayInDensity,
+    })
+  }, [activeGraphInstance, showRawOverlayInDensity, updateFCSCompareGraphInstance])
+
   const handleCreateGraphInstance = useCallback(() => {
     const nextIndex = fcsCompareGraphInstances.length + 1
     const nextId = createFCSCompareGraphInstance(`Overlay Graph ${nextIndex}`)
     setActiveFCSCompareGraphInstance(nextId)
     toast({
       title: "Graph Instance Added",
-      description: `Overlay Graph ${nextIndex} created.`,
+      description: `Overlay Graph ${nextIndex} created with an independent scatter profile.`,
     })
   }, [fcsCompareGraphInstances.length, createFCSCompareGraphInstance, setActiveFCSCompareGraphInstance, toast])
 
@@ -1350,6 +1374,12 @@ export function ComparisonAnalysisView() {
           onUnifiedAxisChange={handleUnifiedAxisChange}
           onPrimaryAxisChange={handlePrimaryAxisChange}
           onComparisonAxisChange={handleComparisonAxisChange}
+          scatterDensityMode={scatterDensityMode}
+          onScatterDensityModeChange={handleScatterDensityModeChange}
+          scatterZoomPreset={scatterZoomPreset}
+          onScatterZoomPresetChange={handleScatterZoomPresetChange}
+          showRawOverlayInDensity={showRawOverlayInDensity}
+          onToggleRawOverlayInDensity={handleToggleRawOverlayInDensity}
           loadingBySampleId={compareLoadingBySampleId}
           errorsBySampleId={compareErrorsBySampleId}
           onRetrySample={retrySample}
@@ -1653,6 +1683,12 @@ function OverlayAnalysisPanel({
   onUnifiedAxisChange,
   onPrimaryAxisChange,
   onComparisonAxisChange,
+  scatterDensityMode,
+  onScatterDensityModeChange,
+  scatterZoomPreset,
+  onScatterZoomPresetChange,
+  showRawOverlayInDensity,
+  onToggleRawOverlayInDensity,
   loadingBySampleId,
   errorsBySampleId,
   onRetrySample,
@@ -1701,6 +1737,12 @@ function OverlayAnalysisPanel({
   onUnifiedAxisChange: (xChannel: string, yChannel: string) => void
   onPrimaryAxisChange: (xChannel: string, yChannel: string) => void
   onComparisonAxisChange: (xChannel: string, yChannel: string) => void
+  scatterDensityMode: ScatterDensityMode
+  onScatterDensityModeChange: (mode: ScatterDensityMode) => void
+  scatterZoomPreset: ScatterZoomPreset
+  onScatterZoomPresetChange: (preset: ScatterZoomPreset) => void
+  showRawOverlayInDensity: boolean
+  onToggleRawOverlayInDensity: () => void
   loadingBySampleId: Record<string, boolean>
   errorsBySampleId: Record<string, string>
   onRetrySample: (sampleId: string) => void
@@ -1812,9 +1854,6 @@ function OverlayAnalysisPanel({
   }, [compareScatterBySampleId, fcsCompareSession.compareItemMetaById])
   const [primaryScatterData, setPrimaryScatterData] = useState<Array<{ x: number; y: number; index?: number; diameter?: number }>>([])
   const [secondaryScatterData, setSecondaryScatterData] = useState<Array<{ x: number; y: number; index?: number; diameter?: number }>>([])
-  const [scatterDensityMode, setScatterDensityMode] = useState<ScatterDensityMode>("auto")
-  const [scatterZoomPreset, setScatterZoomPreset] = useState<ScatterZoomPreset>("auto")
-  const [showRawOverlayInDensity, setShowRawOverlayInDensity] = useState(false)
   const [primaryDensityCells, setPrimaryDensityCells] = useState<Array<{ x: number; y: number; count: number; normalized: number }>>([])
   const [secondaryDensityCells, setSecondaryDensityCells] = useState<Array<{ x: number; y: number; count: number; normalized: number }>>([])
   const [primaryScatterLoaded, setPrimaryScatterLoaded] = useState(false)
@@ -2482,7 +2521,7 @@ function OverlayAnalysisPanel({
               >
                 Per-file Axis
               </Button>
-              <Select value={scatterDensityMode} onValueChange={(value) => setScatterDensityMode(value as ScatterDensityMode)}>
+              <Select value={scatterDensityMode} onValueChange={(value) => onScatterDensityModeChange(value as ScatterDensityMode)}>
                 <SelectTrigger className="h-8 w-[172px] text-xs">
                   <SelectValue placeholder="Scatter mode" />
                 </SelectTrigger>
@@ -2492,7 +2531,7 @@ function OverlayAnalysisPanel({
                   <SelectItem value="density">Scatter: density/contour</SelectItem>
                 </SelectContent>
               </Select>
-              <Select value={scatterZoomPreset} onValueChange={(value) => setScatterZoomPreset(value as ScatterZoomPreset)}>
+              <Select value={scatterZoomPreset} onValueChange={(value) => onScatterZoomPresetChange(value as ScatterZoomPreset)}>
                 <SelectTrigger className="h-8 w-[196px] text-xs">
                   <SelectValue placeholder="Zoom preset" />
                 </SelectTrigger>
@@ -2508,7 +2547,7 @@ function OverlayAnalysisPanel({
                   variant={showRawOverlayInDensity ? "default" : "outline"}
                   size="sm"
                   className="h-8 text-xs"
-                  onClick={() => setShowRawOverlayInDensity((prev) => !prev)}
+                  onClick={onToggleRawOverlayInDensity}
                 >
                   Raw Overlay
                 </Button>

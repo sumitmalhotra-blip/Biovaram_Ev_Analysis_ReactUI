@@ -227,6 +227,9 @@ export interface FCSCompareGraphAxis {
   y: string
 }
 
+export type FCSCompareScatterDensityMode = "auto" | "raw" | "density"
+export type FCSCompareScatterZoomPreset = "auto" | "center-60" | "core-30" | "high-signal"
+
 export interface FCSCompareGraphInstance {
   id: string
   title: string
@@ -234,6 +237,9 @@ export interface FCSCompareGraphInstance {
   unifiedAxis: FCSCompareGraphAxis
   primaryAxis: FCSCompareGraphAxis
   comparisonAxis: FCSCompareGraphAxis
+  scatterDensityMode: FCSCompareScatterDensityMode
+  scatterZoomPreset: FCSCompareScatterZoomPreset
+  showRawOverlayInDensity: boolean
   isMaximized: boolean
   createdAt: number
 }
@@ -895,13 +901,31 @@ const normalizeFCSCompareSessionForHydration = (
   }
 }
 
-const createDefaultFCSCompareGraphInstance = (title = "Overlay Graph 1"): FCSCompareGraphInstance => ({
+const DEFAULT_FCS_COMPARE_GRAPH_PROFILES: Array<{
+  densityMode: FCSCompareScatterDensityMode
+  zoomPreset: FCSCompareScatterZoomPreset
+  showRawOverlayInDensity: boolean
+}> = [
+  { densityMode: "auto", zoomPreset: "auto", showRawOverlayInDensity: false },
+  { densityMode: "raw", zoomPreset: "center-60", showRawOverlayInDensity: false },
+  { densityMode: "density", zoomPreset: "core-30", showRawOverlayInDensity: true },
+  { densityMode: "auto", zoomPreset: "high-signal", showRawOverlayInDensity: true },
+]
+
+const getDefaultFCSCompareGraphProfile = (instanceIndex = 0) => {
+  return DEFAULT_FCS_COMPARE_GRAPH_PROFILES[Math.abs(instanceIndex) % DEFAULT_FCS_COMPARE_GRAPH_PROFILES.length]
+}
+
+const createDefaultFCSCompareGraphInstance = (title = "Overlay Graph 1", instanceIndex = 0): FCSCompareGraphInstance => ({
   id: `compare-graph-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
   title,
   axisMode: "unified",
   unifiedAxis: { x: "FSC-A", y: "SSC-A" },
   primaryAxis: { x: "FSC-A", y: "SSC-A" },
   comparisonAxis: { x: "FSC-A", y: "SSC-A" },
+  scatterDensityMode: getDefaultFCSCompareGraphProfile(instanceIndex).densityMode,
+  scatterZoomPreset: getDefaultFCSCompareGraphProfile(instanceIndex).zoomPreset,
+  showRawOverlayInDensity: getDefaultFCSCompareGraphProfile(instanceIndex).showRawOverlayInDensity,
   isMaximized: false,
   createdAt: Date.now(),
 })
@@ -1405,7 +1429,7 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
   }),
   clearFCSCompareSession: () => set({ fcsCompareSession: initialFCSCompareSession }),
   createFCSCompareGraphInstance: (title) => {
-    const instance = createDefaultFCSCompareGraphInstance(title)
+    const instance = createDefaultFCSCompareGraphInstance(title, useAnalysisStore.getState().fcsCompareGraphInstances.length)
     set((state) => ({
       fcsCompareGraphInstances: [...state.fcsCompareGraphInstances, instance],
       activeFCSCompareGraphInstanceId: instance.id,
@@ -2015,6 +2039,16 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
             const replacement = createDefaultFCSCompareGraphInstance("Overlay Graph 1")
             state.fcsCompareGraphInstances = [replacement]
             state.activeFCSCompareGraphInstanceId = replacement.id
+          } else {
+            state.fcsCompareGraphInstances = state.fcsCompareGraphInstances.map((instance, index) => {
+              const defaults = getDefaultFCSCompareGraphProfile(index)
+              return {
+                ...instance,
+                scatterDensityMode: instance.scatterDensityMode ?? defaults.densityMode,
+                scatterZoomPreset: instance.scatterZoomPreset ?? defaults.zoomPreset,
+                showRawOverlayInDensity: instance.showRawOverlayInDensity ?? defaults.showRawOverlayInDensity,
+              }
+            })
           }
 
           if (!state.activeFCSCompareGraphInstanceId) {

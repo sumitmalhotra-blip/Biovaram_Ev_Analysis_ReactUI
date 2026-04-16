@@ -10,7 +10,7 @@ import { apiClient } from "@/lib/api-client"
 import { deriveOverlayHistogramRenderState } from "@/lib/fcs-compare-acceptance-helpers"
 import { runOverlayHistogramWorker } from "@/lib/fcs-series-worker-client"
 import { buildOverlayHistogramCacheKey, estimateSeriesBytes } from "@/lib/fcs-series-cache-utils"
-import { Layers, Eye, EyeOff, Loader2, RefreshCw, AlertCircle } from "lucide-react"
+import { Layers, Eye, EyeOff, Loader2, RefreshCw, AlertCircle, ZoomIn, ZoomOut, RotateCcw, Pin } from "lucide-react"
 import { useState, useEffect, useMemo, useRef } from "react"
 
 interface OverlayHistogramChartProps {
@@ -281,6 +281,7 @@ export function OverlayHistogramChart({
     fcsCompareSession,
     getFCSSeriesCacheEntry,
     setFCSSeriesCacheEntry,
+    pinChart,
   } = useAnalysisStore()
   const [showSeries, setShowSeries] = useState<Record<string, boolean>>({})
   const [histogramData, setHistogramData] = useState<{ data: HistogramSeriesPoint[]; isApproximate: boolean }>({
@@ -289,6 +290,7 @@ export function OverlayHistogramChart({
   })
   const [histogramLoading, setHistogramLoading] = useState(false)
   const [workerFallbackActive, setWorkerFallbackActive] = useState(false)
+  const [zoomFactor, setZoomFactor] = useState(1)
   const histogramRequestIdRef = useRef(0)
 
   // Fetch primary scatter data on-demand (not stored in global state)
@@ -620,6 +622,99 @@ export function OverlayHistogramChart({
   const downsampledSecondary = !isMultiOverlay && hasOverlay && secondaryTotalEvents > secondaryRenderedEvents && secondaryRenderedEvents > 0
   const comparisonErrorSampleIds = comparisonSampleIds.filter((sampleId) => !!errorsBySampleId[sampleId])
   const showAnySeries = seriesDescriptors.some((descriptor) => showSeries[descriptor.key])
+  const visibleSeriesKeys = seriesDescriptors
+    .filter((descriptor) => showSeries[descriptor.key])
+    .map((descriptor) => descriptor.key)
+  const fullDomain = useMemo(() => {
+    if (chartData.length === 0) {
+      return null
+    }
+
+    const xValues = chartData
+      .map((entry) => Number(entry.binValue))
+      .filter((value) => Number.isFinite(value))
+    if (xValues.length === 0) {
+      return null
+    }
+
+    const yValues = chartData.flatMap((entry) =>
+      visibleSeriesKeys
+        .map((key) => Number(entry[key]))
+        .filter((value) => Number.isFinite(value))
+    )
+    const yMax = yValues.length > 0 ? Math.max(...yValues, 1) : 1
+
+    return {
+      xMin: Math.min(...xValues),
+      xMax: Math.max(...xValues),
+      yMax,
+    }
+  }, [chartData, visibleSeriesKeys])
+  const currentXDomain = useMemo(() => {
+    if (!fullDomain) {
+      return undefined
+    }
+
+    if (zoomFactor <= 1) {
+      return [fullDomain.xMin, fullDomain.xMax] as [number, number]
+    }
+
+    const center = (fullDomain.xMin + fullDomain.xMax) / 2
+    const halfRange = ((fullDomain.xMax - fullDomain.xMin) / zoomFactor) / 2
+    const nextMin = Math.max(fullDomain.xMin, center - halfRange)
+    const nextMax = Math.min(fullDomain.xMax, center + halfRange)
+    return [nextMin, nextMax] as [number, number]
+  }, [fullDomain, zoomFactor])
+  const currentYDomain = useMemo(() => {
+    if (!fullDomain) {
+      return undefined
+    }
+
+    return [0, Math.max(1, fullDomain.yMax * 1.08)] as [number, number]
+  }, [fullDomain])
+
+  const handleZoomIn = () => {
+    setZoomFactor((prev) => Math.min(prev * 1.5, 8))
+  }
+
+  const handleZoomOut = () => {
+    setZoomFactor((prev) => Math.max(prev / 1.5, 1))
+  }
+
+  const handleZoomReset = () => {
+    setZoomFactor(1)
+  }
+
+  const handlePinHistogram = () => {
+    if (chartData.length === 0 || visibleSeriesKeys.length === 0) {
+      return
+    }
+
+    const pinnedRows = chartData.flatMap((entry) =>
+      visibleSeriesKeys.map((seriesKey) => ({
+        x: Number(entry.binValue),
+        y: Number(entry[seriesKey] ?? 0),
+        label: seriesDescriptorByKey[seriesKey]?.label || seriesKey,
+        category: seriesKey,
+      }))
+    )
+
+    pinChart({
+      id: crypto.randomUUID(),
+      title,
+      source: "Flow Cytometry Compare",
+      timestamp: new Date(),
+      type: "histogram",
+      data: pinnedRows,
+      config: {
+        xAxisLabel: parameter,
+        yAxisLabel: "Count",
+        color: overlayConfig.primaryColor,
+        secondaryColor: overlayConfig.secondaryColor,
+      },
+    })
+  }
+
   const renderState = deriveOverlayHistogramRenderState({
     primaryLoading: primaryLoading || histogramLoading,
     hasPrimaryResults: !!primaryResults,
@@ -695,6 +790,22 @@ export function OverlayHistogramChart({
             {title}
           </CardTitle>
           <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleZoomIn} disabled={!fullDomain}>
+              <ZoomIn className="h-3 w-3 mr-1" />
+              Zoom In
+            </Button>
+            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleZoomOut} disabled={!fullDomain || zoomFactor <= 1}>
+              <ZoomOut className="h-3 w-3 mr-1" />
+              Zoom Out
+            </Button>
+            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleZoomReset} disabled={zoomFactor <= 1}>
+              <RotateCcw className="h-3 w-3 mr-1" />
+              Reset
+            </Button>
+            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handlePinHistogram} disabled={!showAnySeries || chartData.length === 0}>
+              <Pin className="h-3 w-3 mr-1" />
+              Pin
+            </Button>
             {secondaryLoading && (
               <Badge variant="outline" className="gap-1">
                 <Loader2 className="h-3 w-3 animate-spin" />
@@ -737,6 +848,11 @@ export function OverlayHistogramChart({
                 High density: downsampled
               </Badge>
             )}
+            {zoomFactor > 1 && (
+              <Badge variant="outline" className="text-xs">
+                Zoom {zoomFactor.toFixed(1)}x
+              </Badge>
+            )}
             {workerFallbackActive && (
               <Badge variant="outline" className="text-xs">
                 Worker Fallback
@@ -751,11 +867,15 @@ export function OverlayHistogramChart({
             <ComposedChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
               <XAxis 
-                dataKey="bin" 
+                type="number"
+                dataKey="binValue"
+                domain={currentXDomain}
                 tick={{ fontSize: 10 }}
+                tickFormatter={(value) => Number(value).toFixed(0)}
                 label={{ value: parameter, position: 'bottom', fontSize: 12 }}
               />
               <YAxis 
+                domain={currentYDomain}
                 tick={{ fontSize: 10 }}
                 label={{ value: 'Count', angle: -90, position: 'insideLeft', fontSize: 12 }}
               />
