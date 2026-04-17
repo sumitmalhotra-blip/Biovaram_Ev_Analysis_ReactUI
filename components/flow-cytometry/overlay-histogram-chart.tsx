@@ -645,7 +645,7 @@ export function OverlayHistogramChart({
     const yMax = yValues.length > 0 ? Math.max(...yValues, 1) : 1
 
     return {
-      xMin: Math.min(...xValues),
+      xMin: Math.max(0, Math.min(...xValues)),
       xMax: Math.max(...xValues),
       yMax,
     }
@@ -656,14 +656,14 @@ export function OverlayHistogramChart({
     }
 
     if (zoomFactor <= 1) {
-      return [fullDomain.xMin, fullDomain.xMax] as [number, number]
+      return [Math.max(0, fullDomain.xMin), Math.max(Math.max(0, fullDomain.xMin), fullDomain.xMax)] as [number, number]
     }
 
     const center = (fullDomain.xMin + fullDomain.xMax) / 2
     const halfRange = ((fullDomain.xMax - fullDomain.xMin) / zoomFactor) / 2
-    const nextMin = Math.max(fullDomain.xMin, center - halfRange)
+    const nextMin = Math.max(0, fullDomain.xMin, center - halfRange)
     const nextMax = Math.min(fullDomain.xMax, center + halfRange)
-    return [nextMin, nextMax] as [number, number]
+    return [nextMin, Math.max(nextMin, nextMax)] as [number, number]
   }, [fullDomain, zoomFactor])
   const currentYDomain = useMemo(() => {
     if (!fullDomain) {
@@ -789,20 +789,20 @@ export function OverlayHistogramChart({
             <Layers className="h-4 w-4" />
             {title}
           </CardTitle>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleZoomIn} disabled={!fullDomain}>
+          <div className="flex items-center gap-2 max-w-full overflow-x-auto whitespace-nowrap pb-1">
+            <Button variant="outline" size="sm" className="h-7 text-xs shrink-0" onClick={handleZoomIn} disabled={!fullDomain}>
               <ZoomIn className="h-3 w-3 mr-1" />
               Zoom In
             </Button>
-            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleZoomOut} disabled={!fullDomain || zoomFactor <= 1}>
+            <Button variant="outline" size="sm" className="h-7 text-xs shrink-0" onClick={handleZoomOut} disabled={!fullDomain || zoomFactor <= 1}>
               <ZoomOut className="h-3 w-3 mr-1" />
               Zoom Out
             </Button>
-            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleZoomReset} disabled={zoomFactor <= 1}>
+            <Button variant="outline" size="sm" className="h-7 text-xs shrink-0" onClick={handleZoomReset} disabled={zoomFactor <= 1}>
               <RotateCcw className="h-3 w-3 mr-1" />
               Reset
             </Button>
-            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handlePinHistogram} disabled={!showAnySeries || chartData.length === 0}>
+            <Button variant="outline" size="sm" className="h-7 text-xs shrink-0" onClick={handlePinHistogram} disabled={!showAnySeries || chartData.length === 0}>
               <Pin className="h-3 w-3 mr-1" />
               Pin
             </Button>
@@ -817,7 +817,7 @@ export function OverlayHistogramChart({
                 key={descriptor.key}
                 variant={showSeries[descriptor.key] ? (descriptor.isPrimary ? "default" : "secondary") : "outline"}
                 size="sm"
-                className="h-7 text-xs"
+                className="h-7 text-xs shrink-0"
                 onClick={() => {
                   setShowSeries((prev) => ({
                     ...prev,
@@ -830,31 +830,31 @@ export function OverlayHistogramChart({
               </Button>
             ))}
             {hasOverlay && (
-              <Badge variant="secondary">
+              <Badge variant="secondary" className="shrink-0">
                 <Layers className="h-3 w-3 mr-1" />
                 Overlay {seriesDescriptors.length} series
               </Badge>
             )}
             {isApproximate && (
-              <Badge variant="outline" className="text-xs text-amber-500 border-amber-500/50">
+              <Badge variant="outline" className="text-xs text-amber-500 border-amber-500/50 shrink-0">
                 Approximated
               </Badge>
             )}
-            <Badge variant="outline" className="text-xs">
+            <Badge variant="outline" className="text-xs shrink-0">
               {FIXED_HISTOGRAM_BINS} fixed bins
             </Badge>
             {(downsampledPrimary || downsampledSecondary) && (
-              <Badge variant="secondary" className="text-xs">
+              <Badge variant="secondary" className="text-xs shrink-0">
                 High density: downsampled
               </Badge>
             )}
             {zoomFactor > 1 && (
-              <Badge variant="outline" className="text-xs">
+              <Badge variant="outline" className="text-xs shrink-0">
                 Zoom {zoomFactor.toFixed(1)}x
               </Badge>
             )}
             {workerFallbackActive && (
-              <Badge variant="outline" className="text-xs">
+              <Badge variant="outline" className="text-xs shrink-0">
                 Worker Fallback
               </Badge>
             )}

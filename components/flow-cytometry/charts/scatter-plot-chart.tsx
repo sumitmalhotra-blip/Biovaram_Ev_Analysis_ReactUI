@@ -42,6 +42,26 @@ export function ScatterPlotChart({
   showLegend = true,
   height = 320,
 }: ScatterPlotChartProps) {
+  const sanitizedXDomain = useMemo<[number, number] | undefined>(() => {
+    if (!xDomain) {
+      return undefined
+    }
+
+    const min = Math.max(0, xDomain[0])
+    const max = Math.max(min, xDomain[1])
+    return [min, max]
+  }, [xDomain])
+
+  const sanitizedYDomain = useMemo<[number, number] | undefined>(() => {
+    if (!yDomain) {
+      return undefined
+    }
+
+    const min = Math.max(0, yDomain[0])
+    const max = Math.max(min, yDomain[1])
+    return [min, max]
+  }, [yDomain])
+
   // Deterministic pseudo-random for SSR compatibility
   const seededRandom = (seed: number): number => {
     const x = Math.sin(seed * 9999) * 10000
@@ -138,7 +158,7 @@ export function ScatterPlotChart({
             <XAxis
               dataKey="x"
               type="number"
-              domain={xDomain}
+              domain={sanitizedXDomain}
               stroke="#64748b"
               tick={{ fontSize: 11 }}
               label={{ value: xLabel, position: "bottom", offset: -5, fill: "#64748b", fontSize: 12 }}
@@ -146,7 +166,7 @@ export function ScatterPlotChart({
             <YAxis
               dataKey="y"
               type="number"
-              domain={yDomain}
+              domain={sanitizedYDomain}
               stroke="#64748b"
               tick={{ fontSize: 11 }}
               label={{ value: yLabel, angle: -90, position: "insideLeft", fill: "#64748b", fontSize: 12 }}

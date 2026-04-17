@@ -343,7 +343,9 @@ export const TheoryVsMeasuredChart = memo(function TheoryVsMeasuredChart({
                 type="number"
                 stroke="#64748b"
                 tick={{ fontSize: 11 }}
-                domain={zoom.xMin !== null && zoom.xMax !== null ? [zoom.xMin, zoom.xMax] : [chartBounds.minX, chartBounds.maxX]}
+                domain={zoom.xMin !== null && zoom.xMax !== null
+                  ? [Math.max(0, zoom.xMin), Math.max(Math.max(0, zoom.xMin), zoom.xMax)]
+                  : [Math.max(0, chartBounds.minX), Math.max(Math.max(0, chartBounds.minX), chartBounds.maxX)]}
                 allowDataOverflow
                 label={{ value: "Diameter (nm)", position: "bottom", offset: -5, fill: "#64748b", fontSize: 12 }}
               />
@@ -351,7 +353,9 @@ export const TheoryVsMeasuredChart = memo(function TheoryVsMeasuredChart({
                 type="number"
                 stroke="#64748b"
                 tick={{ fontSize: 11 }}
-                domain={zoom.yMin !== null && zoom.yMax !== null ? [zoom.yMin, zoom.yMax] : [chartBounds.minY, chartBounds.maxY]}
+                domain={zoom.yMin !== null && zoom.yMax !== null
+                  ? [Math.max(0, zoom.yMin), Math.max(Math.max(0, zoom.yMin), zoom.yMax)]
+                  : [Math.max(0, chartBounds.minY), Math.max(Math.max(0, chartBounds.minY), chartBounds.maxY)]}
                 allowDataOverflow
                 label={{
                   value: "Scattering Intensity (a.u.)",

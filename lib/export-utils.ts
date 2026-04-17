@@ -46,6 +46,15 @@ export interface FCSExportData {
     dilutionFactor?: number
     notes?: string
   }
+  reportCharts?: ReportChartImage[]
+}
+
+export interface ReportChartImage {
+  title: string
+  dataUrl: string
+  width?: number
+  height?: number
+  description?: string
 }
 
 export interface NTAExportData {
@@ -69,6 +78,7 @@ export interface NTAExportData {
     bin_200_plus_pct?: number
   }
   sizeDistribution?: Array<{ size: number; concentration: number }>
+  reportCharts?: ReportChartImage[]
 }
 
 /**
@@ -900,6 +910,20 @@ export async function exportFCSToPDF(data: FCSExportData): Promise<void> {
   const doc = new jsPDF()
   const timestamp = new Date().toLocaleString()
   const pageWidth = doc.internal.pageSize.getWidth()
+
+  const formatNumber = (value?: number | null, digits: number = 2) => {
+    if (value === null || value === undefined || Number.isNaN(value)) {
+      return 'N/A'
+    }
+    return value.toFixed(digits)
+  }
+
+  const formatPercent = (value?: number | null, digits: number = 2) => {
+    if (value === null || value === undefined || Number.isNaN(value)) {
+      return 'N/A'
+    }
+    return `${value.toFixed(digits)}%`
+  }
   
   // Header
   doc.setFontSize(20)
@@ -927,8 +951,8 @@ export async function exportFCSToPDF(data: FCSExportData): Promise<void> {
       ['Sample ID', data.sampleId],
       ['File Name', data.fileName || 'N/A'],
       ['Export Date', timestamp],
-      ['Total Events', String(data.results.total_events || 'N/A')],
-      ['Gated Events', String(data.results.gated_events || 'N/A')],
+      ['Total Events', data.results.total_events != null ? String(data.results.total_events) : 'N/A'],
+      ['Gated Events', data.results.gated_events != null ? String(data.results.gated_events) : 'N/A'],
     ],
     theme: 'striped',
     headStyles: { fillColor: [139, 92, 246] },
@@ -944,11 +968,11 @@ export async function exportFCSToPDF(data: FCSExportData): Promise<void> {
     startY: sizeStartY + 4,
     head: [['Metric', 'Value']],
     body: [
-      ['Median Size (nm)', data.results.particle_size_median_nm?.toFixed(2) || 'N/A'],
-      ['Mean Size (nm)', data.results.particle_size_mean_nm?.toFixed(2) || 'N/A'],
-      ['D10 (nm)', data.results.size_statistics?.d10?.toFixed(2) || 'N/A'],
-      ['D50 (nm)', data.results.size_statistics?.d50?.toFixed(2) || 'N/A'],
-      ['D90 (nm)', data.results.size_statistics?.d90?.toFixed(2) || 'N/A'],
+      ['Median Size (nm)', formatNumber(data.results.particle_size_median_nm)],
+      ['Mean Size (nm)', formatNumber(data.results.particle_size_mean_nm ?? data.results.size_statistics?.mean)],
+      ['D10 (nm)', formatNumber(data.results.size_statistics?.d10)],
+      ['D50 (nm)', formatNumber(data.results.size_statistics?.d50)],
+      ['D90 (nm)', formatNumber(data.results.size_statistics?.d90)],
     ],
     theme: 'striped',
     headStyles: { fillColor: [139, 92, 246] },
@@ -966,15 +990,15 @@ export async function exportFCSToPDF(data: FCSExportData): Promise<void> {
     body: [
       [
         'FSC',
-        data.results.fsc_mean?.toFixed(2) || 'N/A',
-        data.results.fsc_median?.toFixed(2) || 'N/A',
-        data.results.fsc_cv_pct ? `${data.results.fsc_cv_pct.toFixed(2)}%` : 'N/A'
+        formatNumber(data.results.fsc_mean),
+        formatNumber(data.results.fsc_median),
+        formatPercent(data.results.fsc_cv_pct)
       ],
       [
         'SSC',
-        data.results.ssc_mean?.toFixed(2) || 'N/A',
-        data.results.ssc_median?.toFixed(2) || 'N/A',
-        data.results.ssc_cv_pct ? `${data.results.ssc_cv_pct.toFixed(2)}%` : 'N/A'
+        formatNumber(data.results.ssc_mean),
+        formatNumber(data.results.ssc_median),
+        formatPercent(data.results.ssc_cv_pct)
       ],
     ],
     theme: 'striped',
@@ -1033,6 +1057,10 @@ export async function exportFCSToPDF(data: FCSExportData): Promise<void> {
         margin: { left: 14, right: 14 },
       })
     }
+  }
+
+  if (data.reportCharts && data.reportCharts.length > 0) {
+    addChartPagesToPDF(doc, data.reportCharts, "Analysis Visualizations")
   }
   
   // Footer
@@ -1130,7 +1158,7 @@ export async function exportNTAToPDF(data: NTAExportData): Promise<void> {
       ['50-80 nm', data.results.bin_50_80nm_pct ? `${data.results.bin_50_80nm_pct.toFixed(2)}%` : 'N/A'],
       ['80-100 nm', data.results.bin_80_100nm_pct ? `${data.results.bin_80_100nm_pct.toFixed(2)}%` : 'N/A'],
       ['100-120 nm', data.results.bin_100_120nm_pct ? `${data.results.bin_100_120nm_pct.toFixed(2)}%` : 'N/A'],
-      ['120-150 nm', data.results.bin_150_200nm_pct ? `${data.results.bin_120_150nm_pct?.toFixed(2)}%` : 'N/A'],
+      ['120-150 nm', data.results.bin_120_150nm_pct ? `${data.results.bin_120_150nm_pct.toFixed(2)}%` : 'N/A'],
       ['150-200 nm', data.results.bin_150_200nm_pct ? `${data.results.bin_150_200nm_pct.toFixed(2)}%` : 'N/A'],
       ['200+ nm', data.results.bin_200_plus_pct ? `${data.results.bin_200_plus_pct.toFixed(2)}%` : 'N/A'],
     ],
@@ -1155,6 +1183,10 @@ export async function exportNTAToPDF(data: NTAExportData): Promise<void> {
     headStyles: { fillColor: [16, 185, 129] },
     margin: { left: 14, right: 14 },
   })
+
+  if (data.reportCharts && data.reportCharts.length > 0) {
+    addChartPagesToPDF(doc, data.reportCharts, "Analysis Visualizations")
+  }
   
   // Footer
   const pageCount = doc.getNumberOfPages()
@@ -1207,4 +1239,59 @@ export async function captureChartToPDF(
   doc.addImage(imgData, 'PNG', 14, startY, imgWidth, imgHeight)
   
   return startY + imgHeight + 10
+}
+
+function addChartPagesToPDF(
+  doc: any,
+  charts: ReportChartImage[],
+  sectionTitle: string
+): void {
+  if (charts.length === 0) {
+    return
+  }
+
+  const pageWidth = doc.internal.pageSize.getWidth()
+  const pageHeight = doc.internal.pageSize.getHeight()
+  const marginX = 14
+  const contentWidth = pageWidth - marginX * 2
+  let y = 20
+
+  doc.addPage()
+  doc.setFontSize(16)
+  doc.setTextColor(0)
+  doc.text(sectionTitle, marginX, y)
+  y += 8
+
+  for (const chart of charts) {
+    const sourceWidth = Math.max(1, chart.width ?? 1200)
+    const sourceHeight = Math.max(1, chart.height ?? 700)
+    const aspectRatio = sourceWidth / sourceHeight
+
+    const titleBlockHeight = 6
+    const spacingAfterImage = 10
+    const maxImageHeightOnPage = pageHeight - y - titleBlockHeight - 20
+
+    if (maxImageHeightOnPage < 60) {
+      doc.addPage()
+      y = 20
+    }
+
+    doc.setFontSize(12)
+    doc.setTextColor(30)
+    doc.text(chart.title, marginX, y)
+    y += titleBlockHeight
+
+    const availableHeight = pageHeight - y - 14
+    let renderWidth = contentWidth
+    let renderHeight = renderWidth / aspectRatio
+
+    if (renderHeight > availableHeight) {
+      renderHeight = availableHeight
+      renderWidth = renderHeight * aspectRatio
+    }
+
+    const imageFormat = chart.dataUrl.startsWith("data:image/jpeg") ? "JPEG" : "PNG"
+    doc.addImage(chart.dataUrl, imageFormat, marginX, y, renderWidth, renderHeight)
+    y += renderHeight + spacingAfterImage
+  }
 }

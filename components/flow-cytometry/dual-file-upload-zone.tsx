@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -259,45 +259,63 @@ export function DualFileUploadZone() {
 
   const getCompareDisplayLabel = (sampleId: string) => sampleMetaById[sampleId]?.sampleLabel || sampleId
 
-  const resolvedPrimarySampleId = compareSampleIds.includes(fcsAnalysis.sampleId || "")
-    ? (fcsAnalysis.sampleId as string)
-    : (fcsCompareSession.primarySampleId && compareSampleIds.includes(fcsCompareSession.primarySampleId)
+  const compareIdByBackendSampleId = useMemo(() => {
+    const map: Record<string, string> = {}
+    compareSampleIds.forEach((compareId) => {
+      const backendSampleId = sampleMetaById[compareId]?.backendSampleId || compareId
+      map[backendSampleId] = compareId
+    })
+    return map
+  }, [compareSampleIds, sampleMetaById])
+
+  const getBackendSampleId = useCallback((compareSampleId: string) => {
+    return sampleMetaById[compareSampleId]?.backendSampleId || compareSampleId
+  }, [sampleMetaById])
+
+  const resolvedPrimaryCompareSampleId = (fcsCompareSession.primarySampleId && compareSampleIds.includes(fcsCompareSession.primarySampleId)
       ? fcsCompareSession.primarySampleId
+      : (fcsAnalysis.sampleId && compareIdByBackendSampleId[fcsAnalysis.sampleId]
+        ? compareIdByBackendSampleId[fcsAnalysis.sampleId]
       : (compareSampleIds[0] || null))
+    )
 
-  const resolvedSecondarySampleId = compareSampleIds.includes(secondaryFcsAnalysis.sampleId || "")
-    ? (secondaryFcsAnalysis.sampleId as string)
-    : (compareSampleIds.find((id) => id !== resolvedPrimarySampleId) || null)
+  const resolvedSecondaryCompareSampleId = (secondaryFcsAnalysis.sampleId && compareIdByBackendSampleId[secondaryFcsAnalysis.sampleId])
+    ? compareIdByBackendSampleId[secondaryFcsAnalysis.sampleId]
+    : (compareSampleIds.find((id) => id !== resolvedPrimaryCompareSampleId) || null)
 
-  const handleOverlayPrimarySampleChange = (sampleId: string) => {
-    if (!compareSampleIds.includes(sampleId)) return
+  const handleOverlayPrimarySampleChange = (compareSampleId: string) => {
+    if (!compareSampleIds.includes(compareSampleId)) return
 
-    const fallbackSecondary = compareSampleIds.find((id) => id !== sampleId) || null
-    const nextSecondary = resolvedSecondarySampleId === sampleId ? fallbackSecondary : resolvedSecondarySampleId
+    const primaryBackendSampleId = getBackendSampleId(compareSampleId)
+    const fallbackSecondary = compareSampleIds.find((id) => id !== compareSampleId) || null
+    const nextSecondaryCompareId = resolvedSecondaryCompareSampleId === compareSampleId ? fallbackSecondary : resolvedSecondaryCompareSampleId
+    const nextSecondaryBackendId = nextSecondaryCompareId ? getBackendSampleId(nextSecondaryCompareId) : null
 
-    setFCSComparePrimarySampleId(sampleId)
-    setFCSSampleId(sampleId)
-    setFCSResults(resultsBySampleId[sampleId] ?? null)
+    setFCSComparePrimarySampleId(compareSampleId)
+    setFCSSampleId(primaryBackendSampleId)
+    setFCSResults(resultsBySampleId[compareSampleId] ?? null)
 
-    if (nextSecondary) {
-      setSecondaryFCSSampleId(nextSecondary)
-      setSecondaryFCSResults(resultsBySampleId[nextSecondary] ?? null)
+    if (nextSecondaryCompareId && nextSecondaryBackendId) {
+      setSecondaryFCSSampleId(nextSecondaryBackendId)
+      setSecondaryFCSResults(resultsBySampleId[nextSecondaryCompareId] ?? null)
       setOverlayConfig({
-        primaryLabel: getCompareDisplayLabel(sampleId),
-        secondaryLabel: getCompareDisplayLabel(nextSecondary),
+        primaryLabel: getCompareDisplayLabel(compareSampleId),
+        secondaryLabel: getCompareDisplayLabel(nextSecondaryCompareId),
       })
     }
   }
 
-  const handleOverlaySecondarySampleChange = (sampleId: string) => {
-    if (!compareSampleIds.includes(sampleId)) return
-    if (sampleId === resolvedPrimarySampleId) return
+  const handleOverlaySecondarySampleChange = (compareSampleId: string) => {
+    if (!compareSampleIds.includes(compareSampleId)) return
+    if (compareSampleId === resolvedPrimaryCompareSampleId) return
 
-    setSecondaryFCSSampleId(sampleId)
-    setSecondaryFCSResults(resultsBySampleId[sampleId] ?? null)
+    const secondaryBackendSampleId = getBackendSampleId(compareSampleId)
+
+    setSecondaryFCSSampleId(secondaryBackendSampleId)
+    setSecondaryFCSResults(resultsBySampleId[compareSampleId] ?? null)
     setOverlayConfig({
-      primaryLabel: resolvedPrimarySampleId ? getCompareDisplayLabel(resolvedPrimarySampleId) : overlayConfig.primaryLabel,
-      secondaryLabel: getCompareDisplayLabel(sampleId),
+      primaryLabel: resolvedPrimaryCompareSampleId ? getCompareDisplayLabel(resolvedPrimaryCompareSampleId) : overlayConfig.primaryLabel,
+      secondaryLabel: getCompareDisplayLabel(compareSampleId),
     })
   }
 
@@ -652,7 +670,7 @@ export function DualFileUploadZone() {
               <div className="space-y-1">
                 <Label className="text-[11px] text-muted-foreground">Primary Overlay File</Label>
                 <Select
-                  value={resolvedPrimarySampleId || ""}
+                  value={resolvedPrimaryCompareSampleId || ""}
                   onValueChange={handleOverlayPrimarySampleChange}
                 >
                   <SelectTrigger className="h-8 text-xs">
@@ -671,7 +689,7 @@ export function DualFileUploadZone() {
               <div className="space-y-1">
                 <Label className="text-[11px] text-muted-foreground">Secondary Overlay File</Label>
                 <Select
-                  value={resolvedSecondarySampleId || ""}
+                  value={resolvedSecondaryCompareSampleId || ""}
                   onValueChange={handleOverlaySecondarySampleChange}
                 >
                   <SelectTrigger className="h-8 text-xs">
@@ -679,7 +697,7 @@ export function DualFileUploadZone() {
                   </SelectTrigger>
                   <SelectContent>
                     {compareSampleIds
-                      .filter((sampleId) => sampleId !== resolvedPrimarySampleId)
+                      .filter((sampleId) => sampleId !== resolvedPrimaryCompareSampleId)
                       .map((sampleId) => (
                         <SelectItem key={sampleId} value={sampleId}>
                           {getCompareDisplayLabel(sampleId)}
@@ -690,21 +708,21 @@ export function DualFileUploadZone() {
               </div>
             </div>
 
-            {overlayConfig.enabled && resolvedPrimarySampleId && resolvedSecondarySampleId && (
+            {overlayConfig.enabled && resolvedPrimaryCompareSampleId && resolvedSecondaryCompareSampleId && (
               <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                 <div className="flex items-center gap-2 p-2 bg-secondary/50 rounded">
                   <div
                     className="w-3 h-3 rounded-full"
                     style={{ backgroundColor: overlayConfig.primaryColor }}
                   />
-                  <span className="truncate">{getCompareDisplayLabel(resolvedPrimarySampleId)}</span>
+                  <span className="truncate">{getCompareDisplayLabel(resolvedPrimaryCompareSampleId)}</span>
                 </div>
                 <div className="flex items-center gap-2 p-2 bg-secondary/50 rounded">
                   <div
                     className="w-3 h-3 rounded-full"
                     style={{ backgroundColor: overlayConfig.secondaryColor }}
                   />
-                  <span className="truncate">{getCompareDisplayLabel(resolvedSecondarySampleId)}</span>
+                  <span className="truncate">{getCompareDisplayLabel(resolvedSecondaryCompareSampleId)}</span>
                 </div>
               </div>
             )}

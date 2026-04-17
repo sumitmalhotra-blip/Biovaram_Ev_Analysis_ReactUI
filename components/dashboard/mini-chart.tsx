@@ -24,22 +24,12 @@ interface MiniChartProps {
   config?: PinnedChartConfig
 }
 
-// Default sample data if no real data provided
-const defaultData: ChartDataPoint[] = [
-  { x: 50, y: 120 },
-  { x: 100, y: 280 },
-  { x: 150, y: 420 },
-  { x: 200, y: 350 },
-  { x: 250, y: 180 },
-  { x: 300, y: 90 },
-]
-
 // Validate and normalize chart data — filter out NaN/Infinity values
 function normalizeChartData(data: unknown): ChartDataPoint[] {
-  if (!data) return defaultData
+  if (!data) return []
   
   if (Array.isArray(data)) {
-    if (data.length === 0) return defaultData
+    if (data.length === 0) return []
 
     // Check if it's already in the right format
     if (typeof data[0] === 'object' && data[0] !== null && 'x' in data[0]) {
@@ -47,7 +37,7 @@ function normalizeChartData(data: unknown): ChartDataPoint[] {
       const valid = (data as ChartDataPoint[]).filter(
         d => Number.isFinite(d.x) && Number.isFinite(d.y)
       )
-      return valid.length > 0 ? valid : defaultData
+      return valid
     }
     
     // Try to convert from various formats
@@ -59,7 +49,7 @@ function normalizeChartData(data: unknown): ChartDataPoint[] {
         return data.map((d: Record<string, unknown>) => ({
           x: Number(d.size) || 0,
           y: Number(d.count) || 0,
-        }))
+        })).filter((d) => Number.isFinite(d.x) && Number.isFinite(d.y))
       }
       
       // Handle {diameter: number, value: number} format
@@ -67,7 +57,7 @@ function normalizeChartData(data: unknown): ChartDataPoint[] {
         return data.map((d: Record<string, unknown>) => ({
           x: Number(d.diameter) || 0,
           y: Number(d.value || d.count || d.intensity) || 0,
-        }))
+        })).filter((d) => Number.isFinite(d.x) && Number.isFinite(d.y))
       }
       
       // Handle generic {name/label: x, value: y} format
@@ -83,12 +73,12 @@ function normalizeChartData(data: unknown): ChartDataPoint[] {
           x: Number(d[xKey]) || 0,
           y: Number(d[yKey]) || 0,
           label: String(d.label || d.name || ''),
-        }))
+        })).filter((d) => Number.isFinite(d.x) && Number.isFinite(d.y))
       }
     }
   }
   
-  return defaultData
+  return []
 }
 
 export function MiniChart({ type, data, config }: MiniChartProps) {
@@ -109,11 +99,10 @@ export function MiniChart({ type, data, config }: MiniChartProps) {
     color: "#f8fafc",
   }
 
-  // Show empty state only when explicitly no data and no fallback possible
-  if (!data || (Array.isArray(data) && data.length === 0 && chartData === defaultData)) {
+  if (chartData.length === 0) {
     return (
       <div className="h-48 flex items-center justify-center text-muted-foreground text-xs">
-        No chart data available
+        No plottable pinned data available
       </div>
     )
   }

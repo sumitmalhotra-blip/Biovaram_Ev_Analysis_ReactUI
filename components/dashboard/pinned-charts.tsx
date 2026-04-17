@@ -1,12 +1,14 @@
 "use client"
 
+import { useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Pin, Trash2, X, Download, Maximize2 } from "lucide-react"
+import { Pin, Trash2, X, Download } from "lucide-react"
 import { useAnalysisStore, type PinnedChart } from "@/lib/store"
 import { MiniChart } from "./mini-chart"
 import { useToast } from "@/hooks/use-toast"
+import { captureChartAsImage } from "./saved-images-gallery"
 
 interface PinnedChartsProps {
   charts: PinnedChart[]
@@ -15,32 +17,57 @@ interface PinnedChartsProps {
 export function PinnedCharts({ charts }: PinnedChartsProps) {
   const { unpinChart, clearPinnedCharts } = useAnalysisStore()
   const { toast } = useToast()
+  const chartContainersRef = useRef<Record<string, HTMLDivElement | null>>({})
 
-  const handleExportChart = (chart: PinnedChart) => {
-    // Export chart data as JSON
-    const exportData = {
-      title: chart.title,
-      source: chart.source,
-      timestamp: chart.timestamp,
-      type: chart.type,
-      data: chart.data,
-      config: chart.config,
+  const handleDownloadChartImage = async (chart: PinnedChart) => {
+    try {
+      const fileName = `${chart.title.replace(/\s+/g, "_").toLowerCase()}_${new Date().toISOString().split("T")[0]}.png`
+      const container = chartContainersRef.current[chart.id]
+      const captured = container
+        ? await captureChartAsImage(container, chart.title, chart.source, chart.type)
+        : null
+
+      // Guard against icon-sized captures (e.g., toolbar SVG instead of chart surface).
+      const captureLooksValid = Boolean(
+        captured?.dataUrl
+        && (captured.metadata?.width ?? 0) >= 300
+        && (captured.metadata?.height ?? 0) >= 180
+      )
+
+      if (captureLooksValid && captured) {
+        const link = document.createElement("a")
+        link.href = captured.dataUrl
+        link.download = fileName
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+      } else if (chart.snapshotDataUrl) {
+        const link = document.createElement("a")
+        link.href = chart.snapshotDataUrl
+        link.download = fileName
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Download Failed",
+          description: "Unable to capture chart image. Re-pin the chart and try again.",
+        })
+        return
+      }
+
+      toast({
+        title: "Chart Downloaded",
+        description: `${chart.title} downloaded as PNG image.`,
+      })
+    } catch {
+      toast({
+        variant: "destructive",
+        title: "Download Failed",
+        description: `Could not download ${chart.title} as an image.`,
+      })
     }
-    
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${chart.title.replace(/\s+/g, '_').toLowerCase()}_${new Date().toISOString().split('T')[0]}.json`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-    
-    toast({
-      title: "Chart Exported",
-      description: `${chart.title} data exported as JSON.`,
-    })
   }
 
   return (
@@ -89,8 +116,8 @@ export function PinnedCharts({ charts }: PinnedChartsProps) {
                     variant="ghost" 
                     size="icon" 
                     className="h-6 w-6"
-                    onClick={() => handleExportChart(chart)}
-                    title="Export chart data"
+                    onClick={() => handleDownloadChartImage(chart)}
+                    title="Download chart image"
                   >
                     <Download className="h-3 w-3" />
                   </Button>
@@ -106,17 +133,21 @@ export function PinnedCharts({ charts }: PinnedChartsProps) {
                 </div>
               </CardHeader>
               <CardContent className="pt-0">
-                {chart.snapshotDataUrl ? (
-                  <div className="h-48 rounded-md overflow-hidden border border-border/40 bg-background/40">
-                    <img
-                      src={chart.snapshotDataUrl}
-                      alt={`${chart.title} snapshot`}
-                      className="w-full h-full object-contain"
-                      loading="lazy"
-                    />
-                  </div>
-                ) : (
+                <div ref={(el) => { chartContainersRef.current[chart.id] = el }}>
                   <MiniChart type={chart.type} data={chart.data} config={chart.config} />
+                </div>
+                {chart.snapshotDataUrl && (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-[11px] text-muted-foreground">View captured snapshot</summary>
+                    <div className="mt-2 h-40 rounded-md overflow-hidden border border-border/40 bg-background/40">
+                      <img
+                        src={chart.snapshotDataUrl}
+                        alt={`${chart.title} snapshot`}
+                        className="w-full h-full object-contain"
+                        loading="lazy"
+                      />
+                    </div>
+                  </details>
                 )}
               </CardContent>
             </Card>

@@ -445,6 +445,68 @@ export async function captureChartAsImage(
   }
 ): Promise<SavedImage | null> {
   try {
+    const resolveChartSvgElement = (container: HTMLElement): SVGElement | null => {
+      const svgCandidates = Array.from(container.querySelectorAll("svg")).filter(
+        (svg): svg is SVGElement => svg instanceof SVGElement
+      )
+
+      if (svgCandidates.length === 0) {
+        return null
+      }
+
+      const getSvgArea = (svg: SVGElement) => {
+        const rect = svg.getBoundingClientRect()
+        return Math.max(0, rect.width) * Math.max(0, rect.height)
+      }
+
+      const isChartLikeSvg = (svg: SVGElement) => {
+        if (svg.classList.contains("recharts-surface")) {
+          return true
+        }
+        return Boolean(
+          svg.querySelector(
+            ".recharts-cartesian-grid, .recharts-xAxis, .recharts-yAxis, .recharts-line, .recharts-area, .recharts-bar, .recharts-scatter"
+          )
+        )
+      }
+
+      const chartLike = svgCandidates.filter(isChartLikeSvg)
+      const chartLikeSized = chartLike.filter((svg) => {
+        const rect = svg.getBoundingClientRect()
+        return rect.width >= 160 && rect.height >= 100
+      })
+
+      if (chartLikeSized.length > 0) {
+        return chartLikeSized.sort((a, b) => getSvgArea(b) - getSvgArea(a))[0]
+      }
+      if (chartLike.length > 0) {
+        return chartLike.sort((a, b) => getSvgArea(b) - getSvgArea(a))[0]
+      }
+
+      let bestSvg = svgCandidates[0]
+      let bestArea = 0
+
+      for (const svg of svgCandidates) {
+        const area = getSvgArea(svg)
+        if (area > bestArea) {
+          bestArea = area
+          bestSvg = svg
+        }
+      }
+
+      return bestSvg
+    }
+
+    // Prefer direct SVG capture when available; this avoids html2canvas parsing
+    // errors for modern color functions like oklch/lab used in app styles.
+    const svgElement = resolveChartSvgElement(chartElement)
+    if (svgElement) {
+      const svgCapture = await captureSVGAsImage(svgElement, title, source, chartType, options)
+      if (svgCapture && (svgCapture.metadata?.width ?? 0) >= 300 && (svgCapture.metadata?.height ?? 0) >= 180) {
+        return svgCapture
+      }
+    }
+
     // Dynamic import of html2canvas - will fail gracefully if not installed
     let html2canvas: any
     try {
@@ -452,7 +514,6 @@ export async function captureChartAsImage(
     } catch {
       console.warn("html2canvas not installed. Run: npm install html2canvas")
       // Fallback: try to use canvas API directly for SVG-based charts
-      const svgElement = chartElement.querySelector("svg")
       if (svgElement) {
         return await captureSVGAsImage(svgElement, title, source, chartType, options)
       }
@@ -499,7 +560,7 @@ export async function captureChartAsImage(
   } catch (error) {
     console.error("Failed to capture chart:", error)
     // Runtime fallback: if html2canvas fails, attempt direct SVG capture.
-    const svgElement = chartElement.querySelector("svg")
+    const svgElement = chartElement.querySelector("svg.recharts-surface") || chartElement.querySelector("svg")
     if (svgElement) {
       return await captureSVGAsImage(svgElement, title, source, chartType, options)
     }
@@ -522,7 +583,25 @@ async function captureSVGAsImage(
   }
 ): Promise<SavedImage | null> {
   try {
-    const svgData = new XMLSerializer().serializeToString(svgElement)
+    const rect = svgElement.getBoundingClientRect()
+    const targetWidth = Math.max(1, Math.round(rect.width))
+    const targetHeight = Math.max(1, Math.round(rect.height))
+
+    // Reject icon-sized captures so callers can fall back to a better strategy.
+    if (targetWidth < 120 || targetHeight < 80) {
+      return null
+    }
+
+    const svgClone = svgElement.cloneNode(true) as SVGElement
+    svgClone.setAttribute("xmlns", "http://www.w3.org/2000/svg")
+    svgClone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink")
+    svgClone.setAttribute("width", String(targetWidth))
+    svgClone.setAttribute("height", String(targetHeight))
+    if (!svgClone.getAttribute("viewBox")) {
+      svgClone.setAttribute("viewBox", `0 0 ${targetWidth} ${targetHeight}`)
+    }
+
+    const svgData = new XMLSerializer().serializeToString(svgClone)
     const svgBlob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" })
     const url = URL.createObjectURL(svgBlob)
     
@@ -530,8 +609,8 @@ async function captureSVGAsImage(
       const img = new Image()
       img.onload = () => {
         const canvas = document.createElement("canvas")
-        canvas.width = img.width * 2
-        canvas.height = img.height * 2
+        canvas.width = targetWidth * 2
+        canvas.height = targetHeight * 2
         const ctx = canvas.getContext("2d")
         if (ctx) {
           ctx.scale(2, 2)

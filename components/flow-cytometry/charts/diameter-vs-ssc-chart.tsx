@@ -560,7 +560,9 @@ export const DiameterVsSSCChart = memo(function DiameterVsSSCChart({
             <XAxis
               dataKey="diameter"
               type="number"
-              domain={zoom.xMin !== null && zoom.xMax !== null ? [zoom.xMin, zoom.xMax] : [chartBounds.minX, chartBounds.maxX]}
+              domain={zoom.xMin !== null && zoom.xMax !== null
+                ? [Math.max(0, zoom.xMin), Math.max(Math.max(0, zoom.xMin), zoom.xMax)]
+                : [Math.max(0, chartBounds.minX), Math.max(Math.max(0, chartBounds.minX), chartBounds.maxX)]}
               allowDataOverflow
               stroke="#64748b"
               tick={{ fontSize: 11 }}
@@ -577,7 +579,9 @@ export const DiameterVsSSCChart = memo(function DiameterVsSSCChart({
             <YAxis
               dataKey="ssc"
               type="number"
-              domain={zoom.yMin !== null && zoom.yMax !== null ? [zoom.yMin, zoom.yMax] : [chartBounds.minY, chartBounds.maxY]}
+              domain={zoom.yMin !== null && zoom.yMax !== null
+                ? [Math.max(0, zoom.yMin), Math.max(Math.max(0, zoom.yMin), zoom.yMax)]
+                : [Math.max(0, chartBounds.minY), Math.max(Math.max(0, chartBounds.minY), chartBounds.maxY)]}
               allowDataOverflow
               stroke="#64748b"
               tick={{ fontSize: 11 }}

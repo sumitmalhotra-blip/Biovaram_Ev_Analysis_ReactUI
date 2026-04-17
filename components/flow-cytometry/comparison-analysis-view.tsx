@@ -359,6 +359,32 @@ export function ComparisonAnalysisView() {
   }, [activePeerSampleId, effectivePeerSampleId])
 
   useEffect(() => {
+    if (compareMode !== "pairwise" || !secondaryFcsAnalysis.sampleId) {
+      return
+    }
+
+    const compareMetaById = fcsCompareSession.compareItemMetaById ?? {}
+    const peerFromSecondary = compareSampleIds.find((compareId) => {
+      if (compareId === primaryCompareSampleId) {
+        return false
+      }
+      const backendSampleId = compareMetaById[compareId]?.backendSampleId || compareId
+      return backendSampleId === secondaryFcsAnalysis.sampleId
+    })
+
+    if (peerFromSecondary && peerFromSecondary !== activePeerSampleId) {
+      setActivePeerSampleId(peerFromSecondary)
+    }
+  }, [
+    activePeerSampleId,
+    compareMode,
+    compareSampleIds,
+    fcsCompareSession.compareItemMetaById,
+    primaryCompareSampleId,
+    secondaryFcsAnalysis.sampleId,
+  ])
+
+  useEffect(() => {
     if (inspectionSampleId && compareSampleIds.includes(inspectionSampleId)) {
       return
     }

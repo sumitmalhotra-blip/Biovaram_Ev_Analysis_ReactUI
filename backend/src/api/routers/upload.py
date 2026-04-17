@@ -784,6 +784,39 @@ async def upload_fcs_file(
                 # Get statistics for FSC and SSC channels
                 fsc_stats = stats.get(fsc_channel, {}) if fsc_channel else {}
                 ssc_stats = stats.get(ssc_channel, {}) if ssc_channel else {}
+
+                # If selected channels are synthetic/new (e.g., VSSC_MAX), parser stats may not include them.
+                # Compute direct stats from parsed data as a fallback so exports do not show missing values.
+                def _compute_channel_stats(channel_name: str | None) -> dict:
+                    if not channel_name or channel_name not in parsed_data.columns:
+                        return {}
+                    try:
+                        values = np.asarray(parsed_data[channel_name].values, dtype=np.float64)
+                        values = values[np.isfinite(values)]
+                        if len(values) == 0:
+                            return {}
+                        mean_val = float(np.mean(values))
+                        median_val = float(np.median(values))
+                        std_val = float(np.std(values))
+                        cv_val = float((std_val / mean_val) * 100.0) if mean_val > 0 else None
+                        return {
+                            'mean': mean_val,
+                            'median': median_val,
+                            'std': std_val,
+                            'cv_pct': cv_val,
+                        }
+                    except Exception:
+                        return {}
+
+                if (not fsc_stats or fsc_stats.get('mean') is None or fsc_stats.get('median') is None) and fsc_channel:
+                    computed_fsc_stats = _compute_channel_stats(fsc_channel)
+                    if computed_fsc_stats:
+                        fsc_stats = {**computed_fsc_stats, **fsc_stats}
+
+                if (not ssc_stats or ssc_stats.get('mean') is None or ssc_stats.get('median') is None) and ssc_channel:
+                    computed_ssc_stats = _compute_channel_stats(ssc_channel)
+                    if computed_ssc_stats:
+                        ssc_stats = {**computed_ssc_stats, **ssc_stats}
                 
                 # Calculate particle size using Mie scattering theory
                 # TASK-002 FIX (Dec 17, 2025): Use extended range to avoid edge clustering
@@ -1122,9 +1155,12 @@ async def upload_fcs_file(
                     'channels': channels,
                     'fsc_mean': fsc_stats.get('mean'),
                     'fsc_median': fsc_stats.get('median'),
+                    'fsc_cv_pct': fsc_stats.get('cv_pct'),
                     'ssc_mean': ssc_stats.get('mean'),
                     'ssc_median': ssc_stats.get('median'),
+                    'ssc_cv_pct': ssc_stats.get('cv_pct'),
                     'particle_size_median_nm': particle_size_median_nm,
+                    'particle_size_mean_nm': size_statistics.get('mean') if size_statistics else None,
                     'size_statistics': size_statistics,
                     'debris_pct': debris_pct,
                     'cd81_positive_pct': cd81_positive_pct,

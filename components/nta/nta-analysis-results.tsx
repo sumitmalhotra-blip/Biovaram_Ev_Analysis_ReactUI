@@ -41,6 +41,7 @@ import { NTAStatisticsCards } from "./statistics-cards"
 import { NTASizeDistributionBreakdown } from "./size-distribution-breakdown"
 import { SupplementaryMetadataTable } from "./supplementary-metadata-table"
 import { NTAMetadataCompareTable } from "./nta-metadata-compare-table"
+import { captureChartAsImage } from "@/components/dashboard/saved-images-gallery"
 import { 
   generateMarkdownReport, 
   downloadMarkdownReport,
@@ -648,6 +649,54 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
               title: "Generating PDF...",
               description: "Please wait while we create your report",
             })
+
+            const reportChartPlan: Array<{
+              selector: string
+              title: string
+              type: "histogram" | "bar" | "line"
+              tab?: "distribution" | "concentration" | "corrected"
+            }> = [
+              { selector: '[data-report-chart="nta-size-categories"]', title: "EV Size Category Distribution", type: "bar" },
+              { selector: '[data-report-chart="nta-distribution"]', title: "NTA Size Distribution", type: "histogram", tab: "distribution" },
+              { selector: '[data-report-chart="nta-concentration"]', title: "Concentration Profile", type: "bar", tab: "concentration" },
+              { selector: '[data-report-chart="nta-temperature-corrected"]', title: "Temperature Corrected Comparison", type: "line", tab: "corrected" },
+            ]
+
+            const reportCharts: NonNullable<NTAExportData["reportCharts"]> = []
+            const previousTab = activeTab
+            let currentTab = activeTab
+            try {
+              for (const chart of reportChartPlan) {
+                if (chart.tab && currentTab !== chart.tab) {
+                  setActiveTab(chart.tab)
+                  await new Promise<void>((resolve) => {
+                    window.setTimeout(() => resolve(), 150)
+                  })
+                  currentTab = chart.tab
+                }
+
+                const chartElement = document.querySelector(chart.selector) as HTMLElement | null
+                if (!chartElement) {
+                  continue
+                }
+
+                const captured = await captureChartAsImage(chartElement, chart.title, "NTA Analysis", chart.type)
+                if (!captured) {
+                  continue
+                }
+
+                reportCharts.push({
+                  title: chart.title,
+                  dataUrl: captured.dataUrl,
+                  width: captured.metadata?.width,
+                  height: captured.metadata?.height,
+                })
+              }
+            } finally {
+              if (currentTab !== previousTab) {
+                setActiveTab(previousTab)
+              }
+            }
             
             const exportData: NTAExportData = {
               sampleId: sampleName,
@@ -669,6 +718,7 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
                 bin_150_200nm_pct: results.bin_150_200nm_pct,
                 bin_200_plus_pct: results.bin_200_plus_pct,
               },
+              reportCharts,
             }
             
             await exportNTAToPDF(exportData)
@@ -779,7 +829,9 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
         {ntaLockedBuckets ? (
           <NTASizeDistributionBreakdown results={results} bins={ntaLockedBuckets} />
         ) : (
-          <EVSizeCategoryBarChart data={results} bins={qualityProfile?.bins || []} />
+          <div data-report-chart="nta-size-categories">
+            <EVSizeCategoryBarChart data={results} bins={qualityProfile?.bins || []} />
+          </div>
         )}
       </div>
 
@@ -1141,10 +1193,12 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
                   <Pin className="h-4 w-4" />
                 </Button>
               </div>
-              <NTASizeDistributionChart 
-                data={results} 
-                overlaySeries={stagedOverlaySeries}
-              />
+              <div data-report-chart="nta-distribution">
+                <NTASizeDistributionChart 
+                  data={results} 
+                  overlaySeries={stagedOverlaySeries}
+                />
+              </div>
             </TabsContent>
 
             <TabsContent value="concentration" className="space-y-4">
@@ -1167,16 +1221,20 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
                   <Pin className="h-4 w-4" />
                 </Button>
               </div>
-              <ConcentrationProfileChart 
-                data={results} 
-                overlaySeries={stagedOverlaySeries}
-                bins={analysisProfile?.bins || []}
-              />
+              <div data-report-chart="nta-concentration">
+                <ConcentrationProfileChart 
+                  data={results} 
+                  overlaySeries={stagedOverlaySeries}
+                  bins={analysisProfile?.bins || []}
+                />
+              </div>
             </TabsContent>
 
             {showTemperatureCorrection && (
               <TabsContent value="corrected" className="space-y-4">
-                <TemperatureCorrectedComparison data={results} />
+                <div data-report-chart="nta-temperature-corrected">
+                  <TemperatureCorrectedComparison data={results} />
+                </div>
               </TabsContent>
             )}
 

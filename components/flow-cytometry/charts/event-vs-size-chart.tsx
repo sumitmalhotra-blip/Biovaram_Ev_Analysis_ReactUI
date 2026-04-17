@@ -176,13 +176,21 @@ export const EventVsSizeChart = memo(function EventVsSizeChart({ sampleId, onPin
   }, [processedData])
 
   const xDomain = useMemo<[number, number]>(() => {
-    if (zoom.xMin !== null && zoom.xMax !== null) return [zoom.xMin, zoom.xMax]
-    return [chartBounds.minX, chartBounds.maxX]
+    if (zoom.xMin !== null && zoom.xMax !== null) {
+      const minX = Math.max(0, zoom.xMin)
+      return [minX, Math.max(minX, zoom.xMax)]
+    }
+    const minX = Math.max(0, chartBounds.minX)
+    return [minX, Math.max(minX, chartBounds.maxX)]
   }, [zoom.xMin, zoom.xMax, chartBounds])
 
   const yDomain = useMemo<[number, number]>(() => {
-    if (zoom.yMin !== null && zoom.yMax !== null) return [zoom.yMin, zoom.yMax]
-    return [chartBounds.minY, chartBounds.maxY]
+    if (zoom.yMin !== null && zoom.yMax !== null) {
+      const minY = Math.max(0, zoom.yMin)
+      return [minY, Math.max(minY, zoom.yMax)]
+    }
+    const minY = Math.max(0, chartBounds.minY)
+    return [minY, Math.max(minY, chartBounds.maxY)]
   }, [zoom.yMin, zoom.yMax, chartBounds])
 
   const handleWheelZoom = useCallback((e: React.WheelEvent<HTMLDivElement>) => {

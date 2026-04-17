@@ -844,7 +844,7 @@ export function AnalysisResults() {
             ssc_mean: results.ssc_mean,
             ssc_median: results.ssc_median,
             particle_size_median_nm: results.particle_size_median_nm,
-            particle_size_mean_nm: results.particle_size_mean_nm,
+            particle_size_mean_nm: results.particle_size_mean_nm ?? results.size_statistics?.mean,
             size_statistics: results.size_statistics,
             fsc_cv_pct: results.fsc_cv_pct,
             ssc_cv_pct: results.ssc_cv_pct,
@@ -881,6 +881,76 @@ export function AnalysisResults() {
           title: "Generating PDF...",
           description: "Please wait while we create your report",
         })
+
+        const previousVisualizationTab = activeVisualizationTab
+        const reportCharts: NonNullable<FCSExportData["reportCharts"]> = []
+
+        try {
+          let currentTab = activeVisualizationTab
+
+          const wait = (ms: number) => new Promise<void>((resolve) => {
+            window.setTimeout(() => resolve(), ms)
+          })
+
+          const captureReportChartWithRetry = async (
+            chartKey: string,
+            chartTitle: string,
+            chartType: "histogram" | "scatter" | "line"
+          ) => {
+            for (let attempt = 0; attempt < 6; attempt += 1) {
+              const chartElement = document.querySelector(`[data-pin-chart="${chartKey}"]`) as HTMLElement | null
+              if (chartElement) {
+                const rect = chartElement.getBoundingClientRect()
+                if (rect.width >= 160 && rect.height >= 100) {
+                  const captured = await captureChartAsImage(chartElement, chartTitle, "Flow Cytometry", chartType)
+                  if (captured) {
+                    return captured
+                  }
+                }
+              }
+              await wait(200)
+            }
+
+            return null
+          }
+
+          const reportChartPlan: Array<{
+            title: string
+            key: string
+            type: "histogram" | "scatter" | "line"
+            tab: "distribution" | "theory" | "fsc-ssc" | "diameter" | "event-size"
+          }> = [
+            { title: "Size Distribution", key: "distribution", type: "histogram", tab: "distribution" },
+            { title: "Theory vs Measured", key: "theory", type: "line", tab: "theory" },
+            { title: "FSC vs SSC", key: "fsc-ssc", type: "scatter", tab: "fsc-ssc" },
+            { title: "Diameter vs SSC", key: "diameter", type: "scatter", tab: "diameter" },
+            { title: "Event vs Size", key: "event-size", type: "scatter", tab: "event-size" },
+          ]
+
+          for (const chart of reportChartPlan) {
+            if (currentTab !== chart.tab) {
+              setActiveVisualizationTab(chart.tab)
+              await wait(220)
+              currentTab = chart.tab
+            }
+
+            const captured = await captureReportChartWithRetry(chart.key, chart.title, chart.type)
+            if (!captured) {
+              continue
+            }
+
+            reportCharts.push({
+              title: chart.title,
+              dataUrl: captured.dataUrl,
+              width: captured.metadata?.width,
+              height: captured.metadata?.height,
+            })
+
+            await wait(120)
+          }
+        } finally {
+          setActiveVisualizationTab(previousVisualizationTab)
+        }
         
         const exportData: FCSExportData = {
           sampleId,
@@ -893,7 +963,7 @@ export function AnalysisResults() {
             ssc_mean: results.ssc_mean,
             ssc_median: results.ssc_median,
             particle_size_median_nm: results.particle_size_median_nm,
-            particle_size_mean_nm: results.particle_size_mean_nm,
+            particle_size_mean_nm: results.particle_size_mean_nm ?? results.size_statistics?.mean,
             size_statistics: results.size_statistics,
             fsc_cv_pct: results.fsc_cv_pct,
             ssc_cv_pct: results.ssc_cv_pct,
@@ -902,6 +972,15 @@ export function AnalysisResults() {
           },
           anomalyData: anomalyData || undefined,
           experimentalConditions: fcsAnalysis.experimentalConditions || undefined,
+          reportCharts,
+        }
+
+        if (reportCharts.length === 0) {
+          toast({
+            title: "Report Generated Without Charts",
+            description: "Could not capture chart visuals. Keep the Visualizations panel open and retry export.",
+            variant: "destructive",
+          })
         }
         
         await exportFCSToPDF(exportData)

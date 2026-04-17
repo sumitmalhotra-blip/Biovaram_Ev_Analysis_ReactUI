@@ -296,7 +296,7 @@ export function PreviousAnalyses({
           </div>
 
           {/* Sample List */}
-          <ScrollArea className="max-h-[300px]">
+          <ScrollArea className="h-80 pr-1">
             {samplesLoading && apiSamples.length === 0 ? (
               <div className="space-y-2">
                 {[1, 2, 3].map((i) => (
