@@ -68,19 +68,18 @@ def _get_bedrock_client():
 def _call_bedrock(prompt: str, max_tokens: int = 1500) -> str:
     client = _get_bedrock_client()
     payload = {
-        "prompt": f"<s>[INST] {prompt} [/INST]",
-        "max_tokens": max_tokens,
-        "temperature": 0.3,
+        "messages": [{"role": "user", "content": [{"text": prompt}]}],
+        "inferenceConfig": {"maxTokens": max_tokens, "temperature": 0.3},
     }
     try:
         response = client.invoke_model(
-            modelId="mistral.mistral-large-2402-v1:0",
+            modelId="amazon.nova-lite-v1:0",
             contentType="application/json",
             accept="application/json",
             body=json.dumps(payload),
         )
         result = json.loads(response["body"].read())
-        return result["outputs"][0]["text"].strip()
+        return result["output"]["message"]["content"][0]["text"].strip()
     except Exception as e:
         logger.error(f"Bedrock call failed: {e}")
         raise HTTPException(status_code=500, detail=f"AI model call failed: {str(e)}")
@@ -441,7 +440,7 @@ async def nanofacs_ai_health():
         return {
             "status": "ok",
             "provider": "aws_bedrock",
-            "model": "mistral.mistral-large-2402-v1:0",
+            "model": "amazon.nova-lite-v1:0",
             "region": os.getenv("AWS_REGION", "us-east-1"),
             "module": "nanofacs_ai",
         }
@@ -786,3 +785,45 @@ async def upload_parquet_file(
         "folder": folder,
         "size_bytes": len(content)
     }
+
+# ============================================================================
+# Graph Suggestions Request/Response
+# ============================================================================
+
+class GraphSuggestRequest(BaseModel):
+    channels: list[str] = Field(
+        default=["FSC-A", "SSC-A", "Size"],
+        description="Available channels/parameters in the FCS file"
+    )
+    context: Optional[str] = Field(
+        None,
+        description="Researcher context e.g. 'Sample 1 has CD81 green fluorescence marker'"
+    )
+    is_compare_mode: bool = Field(
+        False,
+        description="Whether multiple files are being compared"
+    )
+    num_files: int = Field(
+        1,
+        description="Number of files uploaded"
+    )
+    file_stats: Optional[dict] = Field(
+        None,
+        description="Optional stats from the files"
+    )
+
+
+class GraphSuggestion(BaseModel):
+    title: str
+    x_axis: str
+    y_axis: str
+    description: str
+    priority: str  # "high", "medium", "low"
+    reason: str
+
+
+class GraphSuggestionsResponse(BaseModel):
+    suggestions: list[GraphSuggestion]
+    context_used: str
+    summary: str
+

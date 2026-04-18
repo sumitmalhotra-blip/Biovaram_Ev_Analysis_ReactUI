@@ -41,7 +41,7 @@ router = APIRouter()
 
 class UserRegisterRequest(BaseModel):
     """Request body for user registration."""
-    email: EmailStr = Field(..., description="User email address")
+    email: str = Field(..., description="User email address")
     password: str = Field(..., min_length=8, description="Password (min 8 characters)")
     name: str = Field(..., min_length=2, description="User's full name")
     organization: Optional[str] = Field(None, description="Organization name")
@@ -50,7 +50,7 @@ class UserRegisterRequest(BaseModel):
 
 class UserLoginRequest(BaseModel):
     """Request body for user login."""
-    email: EmailStr = Field(..., description="User email address")
+    email: str = Field(..., description="User email address")
     password: str = Field(..., description="User password")
 
 
@@ -441,7 +441,7 @@ _password_reset_tokens: dict[str, dict] = {}
 
 class ForgotPasswordRequest(BaseModel):
     """Request body for forgot password."""
-    email: EmailStr = Field(..., description="User email address")
+    email: str = Field(..., description="User email address")
 
 
 class ResetPasswordRequest(BaseModel):
