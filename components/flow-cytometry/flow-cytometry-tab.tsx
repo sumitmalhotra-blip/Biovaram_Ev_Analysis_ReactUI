@@ -9,6 +9,7 @@ import { ComparisonAnalysisView } from "./comparison-analysis-view"
 import { ColumnMapping } from "./column-mapping"
 import { FCSBestPracticesGuide } from "./best-practices-guide"
 import { BeadCalibrationPanel } from "./bead-calibration-panel"
+import { AIAnalysisTab } from "@/components/ai-analysis-tab"
 import { ExperimentalConditionsDialog, type ExperimentalConditions, type FileMetadata } from "@/components/experimental-conditions-dialog"
 import { useAnalysisStore } from "@/lib/store"
 import { useShallow } from "zustand/shallow"
@@ -175,6 +176,7 @@ export function FlowCytometryTab() {
 
       {/* Show different views based on mode */}
       {uploadMode === "single" && hasResults && <AnalysisResults />}
+      {uploadMode === "single" && hasResults && <AIAnalysisTab />}
       
       {/* Comparison Mode - Keep compare view mounted even during transient empty state */}
       {uploadMode === "comparison" && <ComparisonAnalysisView />}

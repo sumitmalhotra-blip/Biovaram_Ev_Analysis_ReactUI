@@ -50,7 +50,7 @@ def _resolve_provider_config() -> Tuple[str, str, str]:
     provider_env = (os.environ.get("AI_PROVIDER") or "").strip().lower()
 
     if provider_env:
-        if provider_env not in {"openai", "anthropic"}:
+        if provider_env not in {"openai", "anthropic", "bedrock"}:
             raise HTTPException(
                 status_code=500,
                 detail=(

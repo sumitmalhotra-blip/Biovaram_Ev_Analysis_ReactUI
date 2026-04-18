@@ -4,7 +4,7 @@ import { useShallow } from "zustand/shallow"
 import { useState, useEffect } from "react"
 import type { Sample as APISample, FCSResult, NTAResult, ProcessingJob, FileMetadata } from "./api-client"
 
-export type TabType = "dashboard" | "flow-cytometry" | "nta" | "cross-compare" | "research-chat"
+export type TabType = "dashboard" | "flow-cytometry" | "nta" | "cross-compare" | "research-chat" | "ai-analysis"
 
 export const DEFAULT_SIDEBAR_WIDTH = 288
 export const MIN_SIDEBAR_WIDTH = 240

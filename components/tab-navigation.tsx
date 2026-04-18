@@ -5,7 +5,7 @@ import type React from "react"
 import { useAnalysisStore, type TabType } from "@/lib/store"
 import { useShallow } from "zustand/shallow"
 import { cn } from "@/lib/utils"
-import { LayoutDashboard, Microscope, Atom, GitCompare, MessageCircle } from "lucide-react"
+import { LayoutDashboard, Microscope, Atom, GitCompare, MessageCircle, Brain } from "lucide-react"
 import { isTabEnabled, isSingleModule, getModuleName } from "@/lib/module-config"
 
 const allTabs: { id: TabType; label: string; shortLabel: string; icon: React.ElementType }[] = [
@@ -14,6 +14,7 @@ const allTabs: { id: TabType; label: string; shortLabel: string; icon: React.Ele
   { id: "nta", label: "NTA", shortLabel: "NTA", icon: Atom },
   { id: "cross-compare", label: "Cross-Compare", shortLabel: "Compare", icon: GitCompare },
   { id: "research-chat", label: "Research Chat", shortLabel: "Chat", icon: MessageCircle },
+  { id: "ai-analysis", label: "AI Analysis", shortLabel: "AI", icon: Brain },
 ]
 
 // Filter tabs based on current module configuration
