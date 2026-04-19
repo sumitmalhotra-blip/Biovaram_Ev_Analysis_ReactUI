@@ -58,6 +58,8 @@ def _resolve_provider_config() -> Tuple[str, str, str]:
                 ),
             )
 
+        if provider_env == "bedrock":
+            return "bedrock", "bedrock", "amazon.nova-lite-v1:0"
         if provider_env == "anthropic":
             key = (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("CRMIT_AI_API_KEY") or "").strip()
             if not key:
@@ -501,6 +503,27 @@ async def _chat_simple(request: ChatRequest):
                 data = resp.json()
                 content = data.get("content", [{}])[0].get("text", "No response")
                 return ChatResponse(content=content, model=model or DEFAULT_ANTHROPIC_MODEL)
+            elif provider == "bedrock":
+                import boto3, json as _json
+                bedrock = boto3.client(
+                    service_name="bedrock-runtime",
+                    region_name=os.environ.get("AWS_REGION", "us-east-1"),
+                    aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
+                    aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY"),
+                )
+                payload = {
+                    "messages": [{"role": m.role if m.role != "system" else "user", "content": [{"text": m.content}]} for m in request.messages],
+                    "inferenceConfig": {"maxTokens": max_tokens, "temperature": temperature},
+                }
+                response = bedrock.invoke_model(
+                    modelId="amazon.nova-lite-v1:0",
+                    contentType="application/json",
+                    accept="application/json",
+                    body=_json.dumps(payload),
+                )
+                result = _json.loads(response["body"].read())
+                content = result["output"]["message"]["content"][0]["text"].strip()
+                return ChatResponse(content=content, model="amazon.nova-lite-v1:0")
             else:
                 resp = await client.post(
                     "https://api.openai.com/v1/chat/completions",

@@ -9,8 +9,6 @@ import { Input } from "@/components/ui/input"
 import { useAnalysisStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { useChat } from "@ai-sdk/react"
-import { DefaultChatTransport } from "ai"
 import { useToast } from "@/hooks/use-toast"
 import { downloadChatHistory, type ChatMessageForExport } from "@/lib/export-utils"
 import { getApiBaseUrl } from "@/lib/module-config"
@@ -43,28 +41,20 @@ export function ResearchChatTab() {
   // DESKTOP: Chat endpoint on FastAPI backend
   const chatApiUrl = `${getApiBaseUrl()}/api/v1/chat`
 
-  const { messages, sendMessage, status, setMessages } = useChat({
-    transport: new DefaultChatTransport({ api: chatApiUrl }),
-    onError: (error) => {
-      const message = error instanceof Error ? error.message : "Chat request failed."
-      toast({
-        title: "Chat request failed",
-        description: message,
-        variant: "destructive",
-      })
-    },
-  })
-
-  // Derive isLoading from status
-  const isLoading = status === 'streaming' || status === 'submitted'
-  
-  // Helper to send user message - sendMessage expects the message content as a string
-  const sendUserMessage = (content: string) => {
-    if (content.trim()) {
-      // Use type assertion through unknown to handle AI SDK type variations
-      void (sendMessage as unknown as (msg: string) => Promise<void>)(content)
-    }
+  const [messages, setMessages] = useState([])
+  const [status, setStatus] = useState("idle")
+  const isLoading = status === "streaming"
+  const sendUserMessage = (text) => {
+    if (!text.trim()) return
+    const userMsg = {id: String(Date.now()), role: "user", content: text}
+    setMessages(prev => [...prev, userMsg])
+    setStatus("streaming")
+    fetch(`${getApiBaseUrl()}/api/v1/chat/simple`, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({messages:[...messages, userMsg].map(m=>({role:m.role,content:m.content})),stream:false})})
+      .then(r=>r.json()).then(d=>{setMessages(prev=>[...prev,{id:String(Date.now())+"r",role:"assistant",content:d.content||"No response"}])})
+      .catch(()=>{toast({title:"Chat failed",variant:"destructive"})})
+      .finally(()=>setStatus("idle"))
   }
+  const sendMessage = sendUserMessage
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -307,12 +297,10 @@ export function ResearchChatTab() {
                     )}
                   >
                     <div className="text-sm leading-relaxed space-y-2">
-                      {message.parts?.map((part, idx) => {
-                        if (part.type === "text") {
-                          return <p key={idx}>{part.text}</p>
-                        }
+                      {message.parts ? message.parts.map((part: any, idx: number) => {
+                        if (part.type === "text") return <p key={idx}>{part.text}</p>
                         return null
-                      })}
+                      }) : <p>{message.content}</p>}
                     </div>
                   </div>
                 </div>
