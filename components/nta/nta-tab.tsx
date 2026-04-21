@@ -105,15 +105,6 @@ export function NTATab() {
       ? customPurificationMethod.trim()
       : purificationMethod
 
-    if (!resolvedMarker) {
-      toast({
-        title: "Marker required",
-        description: "Select a marker or provide a custom marker name.",
-        variant: "destructive",
-      })
-      return
-    }
-
     if (dye === "custom" && !resolvedDye) {
       toast({
         title: "Custom dye required",
@@ -522,7 +513,7 @@ export function NTATab() {
                 <Button 
                   className="w-full" 
                   onClick={handleUpload}
-                  disabled={ntaAnalysis.isAnalyzing || !apiConnected}
+                  disabled={ntaAnalysis.isAnalyzing || !selectedFile}
                 >
                   {ntaAnalysis.isAnalyzing ? (
                     <>

@@ -44,6 +44,7 @@ from src.database.models import AlertType, AlertSeverity
 # Import professional parsers
 from src.parsers.fcs_parser import FCSParser
 from src.parsers.nta_parser import NTAParser
+from src.parsers.parquet_writer import ParquetWriter
 from src.physics.mie_scatter import MieScatterCalculator, MultiSolutionMieCalculator
 # Import bead calibration for calibrated sizing (CAL-001, Feb 10, 2026)
 from src.physics.bead_calibration import get_active_calibration
@@ -1469,6 +1470,7 @@ async def upload_nta_file(
         
         # Parse NTA file using professional parser
         nta_results = None
+        nta_parquet_path: Optional[Path] = None
         parser = None
         try:
             logger.info(f"🔬 Parsing NTA file with professional parser...")
@@ -1482,13 +1484,27 @@ async def upload_nta_file(
             parsed_data = parser.parse()
             
             if parsed_data is not None and len(parsed_data) > 0:
+                safe_sample_id = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in sample_id)
+                nta_parquet_path = settings.parquet_dir / f"nta_{timestamp}_{safe_sample_id}.parquet"
+                ParquetWriter.write(
+                    parsed_data,
+                    nta_parquet_path,
+                    metadata={
+                        "sample_id": sample_id,
+                        "source_file": file.filename or "",
+                        "instrument_type": "nta",
+                        "created_at": datetime.now().isoformat(),
+                    },
+                )
+                parquet_data, _ = ParquetWriter.read_with_metadata(nta_parquet_path)
+
                 # Calculate statistics from parsed data
                 size_col = None
                 count_col = None
                 conc_col = None
                 
                 # Find size, particle_count, and concentration columns
-                for col in parsed_data.columns:
+                for col in parquet_data.columns:
                     col_lower = col.lower()
                     if 'size' in col_lower and 'nm' not in col_lower and size_col is None:
                         size_col = col
@@ -1498,20 +1514,20 @@ async def upload_nta_file(
                         conc_col = col
                 
                 # Fallback to simpler matching
-                if not size_col and 'size_nm' in parsed_data.columns:
+                if not size_col and 'size_nm' in parquet_data.columns:
                     size_col = 'size_nm'
-                if not count_col and 'particle_count' in parsed_data.columns:
+                if not count_col and 'particle_count' in parquet_data.columns:
                     count_col = 'particle_count'
-                if not conc_col and 'concentration_particles_ml' in parsed_data.columns:
+                if not conc_col and 'concentration_particles_ml' in parquet_data.columns:
                     conc_col = 'concentration_particles_ml'
                 
                 # Calculate size statistics using weighted percentiles
                 if size_col:
                     # Convert to numpy arrays to avoid pandas ArrayLike type issues with numpy functions
-                    sizes = np.asarray(parsed_data[size_col].values, dtype=np.float64)
+                    sizes = np.asarray(parquet_data[size_col].values, dtype=np.float64)
                     # Get particle counts for weighting (use counts if available, else 1 per bin)
-                    if count_col and count_col in parsed_data.columns:
-                        counts = np.asarray(parsed_data[count_col].values, dtype=np.float64)
+                    if count_col and count_col in parquet_data.columns:
+                        counts = np.asarray(parquet_data[count_col].values, dtype=np.float64)
                     else:
                         counts = np.ones_like(sizes)
                     
@@ -1546,7 +1562,7 @@ async def upload_nta_file(
                         # Calculate concentration if available
                         total_concentration = None
                         if conc_col:
-                            conc_values = parsed_data[conc_col].dropna()
+                            conc_values = parquet_data[conc_col].dropna()
                             if len(conc_values) > 0:
                                 total_concentration = float(conc_values.sum())
                         
@@ -1584,7 +1600,8 @@ async def upload_nta_file(
                                 "d90": d90,
                                 "mean": mean_size,
                                 "std": weighted_std,
-                            }
+                            },
+                            "parquet_file_path": _serialize_file_path(nta_parquet_path),
                         }
                         logger.success(f"✅ Parsed NTA data: {int(total_particle_count)} particles, median={d50:.1f}nm")
         except Exception as parse_error:
@@ -1656,6 +1673,7 @@ async def upload_nta_file(
                         d90_nm=nta_results.get('d90_nm'),
                         concentration_particles_ml=nta_results.get('concentration_particles_ml'),
                         temperature_celsius=nta_results.get('temperature_celsius'),
+                        parquet_file_path=_serialize_file_path(nta_parquet_path) if nta_parquet_path else None,
                     )
                     # Mark job as completed
                     await update_job_status(
@@ -1750,6 +1768,7 @@ async def upload_nta_file(
             "processing_status": "completed" if nta_results else "pending",
             "message": "File uploaded successfully, processing started",
             "file_size_mb": file_path.stat().st_size / 1024 / 1024,
+            "parquet_file_path": _serialize_file_path(nta_parquet_path) if nta_parquet_path else None,
             "upload_timestamp": datetime.now().isoformat(),
             # Include extracted file metadata for auto-filling experimental conditions
             "file_metadata": {
