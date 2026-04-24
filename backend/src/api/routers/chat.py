@@ -50,7 +50,7 @@ def _resolve_provider_config() -> Tuple[str, str, str]:
     provider_env = (os.environ.get("AI_PROVIDER") or "").strip().lower()
 
     if provider_env:
-        if provider_env not in {"openai", "anthropic"}:
+        if provider_env not in {"openai", "anthropic", "bedrock"}:
             raise HTTPException(
                 status_code=500,
                 detail=(
@@ -58,6 +58,8 @@ def _resolve_provider_config() -> Tuple[str, str, str]:
                 ),
             )
 
+        if provider_env == "bedrock":
+            return "bedrock", "bedrock", "amazon.nova-lite-v1:0"
         if provider_env == "anthropic":
             key = (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("CRMIT_AI_API_KEY") or "").strip()
             if not key:
@@ -133,9 +135,27 @@ def _validate_chat_payload(request: "ChatRequest") -> None:
 # ============================================================================
 
 class ChatMessage(BaseModel):
+    @classmethod
+    def model_validator(cls, data):
+        if isinstance(data.get("content"), list):
+            data["content"] = " ".join(
+                p.get("text", "") if isinstance(p, dict) else str(p)
+                for p in data["content"]
+            )
+        return data
+    @classmethod
+    def __get_validators__(cls):
+        yield cls.validate_message
     """A single chat message."""
     role: str = Field(..., description="Message role: 'user', 'assistant', or 'system'")
     content: str = Field(..., description="Message text content")
+
+    @classmethod
+    def model_validate(cls, obj, **kwargs):
+        if isinstance(obj, dict) and isinstance(obj.get("content"), list):
+            obj = dict(obj)
+            obj["content"] = " ".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in obj["content"])
+        return super().model_validate(obj, **kwargs)
 
 
 class ChatRequest(BaseModel):
@@ -246,6 +266,35 @@ def _get_offline_response(messages: list[ChatMessage]) -> str:
 # ============================================================================
 # OpenAI streaming
 # ============================================================================
+
+
+async def _stream_bedrock(messages: list, max_tokens: int, temperature: float):
+    """Stream responses from AWS Bedrock Nova."""
+    import boto3, json as _json, os as _os
+    client = boto3.client(
+        service_name="bedrock-runtime",
+        region_name=_os.environ.get("AWS_REGION", "us-east-1"),
+        aws_access_key_id=_os.environ.get("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=_os.environ.get("AWS_SECRET_ACCESS_KEY"),
+    )
+    payload = {
+        "messages": [{"role": m.role if m.role != "system" else "user", "content": [{"text": m.content}]} for m in messages],
+        "inferenceConfig": {"maxTokens": max_tokens, "temperature": temperature},
+    }
+    try:
+        response = client.invoke_model(
+            modelId="amazon.nova-lite-v1:0",
+            contentType="application/json",
+            accept="application/json",
+            body=_json.dumps(payload),
+        )
+        result = _json.loads(response["body"].read())
+        text = result["output"]["message"]["content"][0]["text"].strip()
+        # Stream in Vercel AI SDK format
+        for chunk in [text[i:i+20] for i in range(0, len(text), 20)]:
+            yield f'0:{_json.dumps(chunk)}\n'
+    except Exception as e:
+        yield f'0:{_json.dumps(f"Error: {str(e)}")}\n'
 
 async def _stream_openai(messages: list[ChatMessage], api_key: str, model: str, temperature: float, max_tokens: int):
     """Stream response from OpenAI API in Vercel AI SDK-compatible SSE format."""
@@ -411,7 +460,46 @@ async def _stream_anthropic(messages: list[ChatMessage], api_key: str, model: st
 # ============================================================================
 
 @router.post("/chat")
-async def chat(request: ChatRequest):
+async def chat(request: Request):
+    raw = await request.json()
+    logger.info(f"RAW CHAT PAYLOAD: {raw}")
+    # Normalize messages
+    msgs = []
+    for m in raw.get("messages", []):
+        c = m.get("content", "")
+        if isinstance(c, list):
+            c = " ".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in c)
+        if c.strip():
+            msgs.append({"role": m.get("role", "user"), "content": c})
+    if not msgs and "query" in raw:
+        msgs = [{"role": "user", "content": raw["query"]}]
+    if not msgs:
+        return {"success": False, "error": "No messages found"}
+    # Call bedrock directly
+    import boto3, json as _json, os as _os
+    client = boto3.client(
+        service_name="bedrock-runtime",
+        region_name=_os.environ.get("AWS_REGION", "us-east-1"),
+        aws_access_key_id=_os.environ.get("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=_os.environ.get("AWS_SECRET_ACCESS_KEY"),
+    )
+    payload = {
+        "messages": [{"role": m["role"] if m["role"] != "system" else "user", "content": [{"text": m["content"]}]} for m in msgs],
+        "inferenceConfig": {"maxTokens": 1024, "temperature": 0.7},
+    }
+    response = client.invoke_model(
+        modelId="amazon.nova-lite-v1:0",
+        contentType="application/json",
+        accept="application/json",
+        body=_json.dumps(payload),
+    )
+    result = _json.loads(response["body"].read())
+    text = result["output"]["message"]["content"][0]["text"].strip()
+    # Return in Vercel AI SDK streaming format
+    from fastapi.responses import StreamingResponse as SR
+    async def gen():
+        yield f'0:{_json.dumps(text)}\n'
+    return SR(gen(), media_type="text/plain; charset=utf-8", headers={"X-Vercel-AI-Data-Stream": "v1"})
     """
     AI Research Chat — streaming SSE endpoint.
     
@@ -436,6 +524,8 @@ async def chat(request: ChatRequest):
     # Choose provider
     if provider == "anthropic":
         generator = _stream_anthropic(request.messages, api_key, model, temperature, max_tokens)
+    elif provider == "bedrock":
+        generator = _stream_bedrock(request.messages, max_tokens, temperature)
     else:
         generator = _stream_openai(request.messages, api_key, model, temperature, max_tokens)
     
@@ -501,6 +591,27 @@ async def _chat_simple(request: ChatRequest):
                 data = resp.json()
                 content = data.get("content", [{}])[0].get("text", "No response")
                 return ChatResponse(content=content, model=model or DEFAULT_ANTHROPIC_MODEL)
+            elif provider == "bedrock":
+                import boto3, json as _json, os as _os
+                bedrock = boto3.client(
+                    service_name="bedrock-runtime",
+                    region_name=_os.environ.get("AWS_REGION", "us-east-1"),
+                    aws_access_key_id=_os.environ.get("AWS_ACCESS_KEY_ID"),
+                    aws_secret_access_key=_os.environ.get("AWS_SECRET_ACCESS_KEY"),
+                )
+                payload = {
+                    "messages": [{"role": m.role if m.role != "system" else "user", "content": [{"text": m.content}]} for m in request.messages],
+                    "inferenceConfig": {"maxTokens": max_tokens, "temperature": temperature},
+                }
+                response = bedrock.invoke_model(
+                    modelId="amazon.nova-lite-v1:0",
+                    contentType="application/json",
+                    accept="application/json",
+                    body=_json.dumps(payload),
+                )
+                result = _json.loads(response["body"].read())
+                content = result["output"]["message"]["content"][0]["text"].strip()
+                return ChatResponse(content=content, model="amazon.nova-lite-v1:0")
             else:
                 resp = await client.post(
                     "https://api.openai.com/v1/chat/completions",
