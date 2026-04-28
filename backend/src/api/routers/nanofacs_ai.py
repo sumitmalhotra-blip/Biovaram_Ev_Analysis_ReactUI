@@ -34,15 +34,11 @@ import pandas as pd
 from typing import Optional
 from datetime import datetime
 from pathlib import Path
-
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ProfileNotFound  # type: ignore
-
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel, Field
 from loguru import logger
-
 from src.api.aws_utils import get_bedrock_runtime_client
-
 router = APIRouter()
 
 
@@ -98,7 +94,6 @@ def _call_bedrock(prompt: str, max_tokens: int = 1500) -> str:
             "Offline AI mode is active for local testing, so this answer is based on the computed dataset summary only. "
             "Configure AWS credentials to enable full Bedrock reasoning before release."
         )
-
     payload = {
         "messages": [{"role": "user", "content": [{"text": prompt}]}],
         "inferenceConfig": {"maxTokens": max_tokens, "temperature": 0.3},

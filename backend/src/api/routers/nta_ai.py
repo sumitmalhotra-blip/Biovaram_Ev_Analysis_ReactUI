@@ -22,15 +22,11 @@ import json
 import boto3
 from typing import Optional
 from datetime import datetime
-
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ProfileNotFound  # type: ignore
-
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from loguru import logger
-
 from src.api.aws_utils import get_bedrock_runtime_client
-
 router = APIRouter()
 
 
@@ -100,7 +96,6 @@ def _call_bedrock(prompt: str, max_tokens: int = 1500) -> str:
         )
         result = json.loads(response["body"].read())
         return result["outputs"][0]["text"].strip()
-
     except (NoCredentialsError, PartialCredentialsError, ProfileNotFound) as e:
         if _offline_ai_enabled():
             logger.warning(f"AWS credentials missing; using offline fallback: {e}")
@@ -109,7 +104,6 @@ def _call_bedrock(prompt: str, max_tokens: int = 1500) -> str:
                 "Configure an IAM role (recommended) or AWS_PROFILE/env keys to enable Bedrock."
             )
         raise HTTPException(status_code=503, detail="AWS credentials not configured.")
-
     except Exception as e:
         logger.error(f"Bedrock call failed: {e}")
         raise HTTPException(
