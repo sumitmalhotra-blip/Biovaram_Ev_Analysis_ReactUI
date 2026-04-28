@@ -11,6 +11,7 @@ Date: November 21, 2025
 
 from pathlib import Path
 from typing import List
+import os
 from pydantic_settings import BaseSettings  # type: ignore[import-not-found]
 from functools import lru_cache
 
@@ -20,8 +21,10 @@ class Settings(BaseSettings):
     Application settings loaded from environment variables.
     
     Environment Variables:
-    - CRMIT_ENV: Environment (development, staging, production)
-    - CRMIT_DB_URL: Database connection string
+        - CRMIT_ENVIRONMENT: Environment (development, staging, production)
+            (also accepts CRMIT_ENV as an alias)
+        - CRMIT_DATABASE_URL: Database connection string
+            (also accepts CRMIT_DB_URL as an alias)
     - CRMIT_UPLOAD_DIR: File upload directory
     - CRMIT_PARQUET_DIR: Parquet storage directory
     - CRMIT_MAX_UPLOAD_SIZE: Max file size in MB
@@ -107,6 +110,17 @@ def get_settings() -> Settings:
         settings = get_settings()
         print(settings.database_url)
     """
+    # ---------------------------------------------------------------------
+    # Back-compat env var aliases
+    # ---------------------------------------------------------------------
+    # Many docs/scripts historically used CRMIT_ENV and CRMIT_DB_URL.
+    # Pydantic Settings fields map to CRMIT_ENVIRONMENT and CRMIT_DATABASE_URL.
+    # Mirror values so either name works.
+    if os.getenv("CRMIT_ENV") and not os.getenv("CRMIT_ENVIRONMENT"):
+        os.environ["CRMIT_ENVIRONMENT"] = os.environ["CRMIT_ENV"]
+    if os.getenv("CRMIT_DB_URL") and not os.getenv("CRMIT_DATABASE_URL"):
+        os.environ["CRMIT_DATABASE_URL"] = os.environ["CRMIT_DB_URL"]
+
     return Settings()
 
 

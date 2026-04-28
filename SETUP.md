@@ -109,18 +109,30 @@ New-Item -Path ".env" -ItemType File
 
 Add this content to `backend/.env`:
 ```env
+# Environment
+CRMIT_ENV=development
+CRMIT_DEBUG=true
+
 # Database (SQLite for development - no setup needed)
+# Recommended name:
+CRMIT_DATABASE_URL=sqlite+aiosqlite:///./data/crmit.db
+# Alias supported (older docs/scripts):
 CRMIT_DB_URL=sqlite+aiosqlite:///./data/crmit.db
 
 # For PostgreSQL (production):
-# CRMIT_DB_URL=postgresql+asyncpg://username:password@localhost:5432/crmit_db
+# CRMIT_DATABASE_URL=postgresql+asyncpg://username:password@localhost:5432/crmit_db
 
-# Environment
-CRMIT_ENVIRONMENT=development
-CRMIT_LOG_LEVEL=DEBUG
+# CORS Origins (comma-separated)
+CRMIT_CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 
-# CORS Origins (add your frontend URL)
-CRMIT_CORS_ORIGINS=["http://localhost:3000","http://127.0.0.1:3000"]
+# AI (optional)
+# For real AI (Bedrock):
+AI_PROVIDER=bedrock
+# AWS_ACCESS_KEY_ID=...
+# AWS_SECRET_ACCESS_KEY=...
+# AWS_REGION=us-east-1
+# Or keep offline fallback for UI testing without keys:
+# CRMIT_ENABLE_OFFLINE_AI=true
 ```
 
 ---
@@ -193,7 +205,7 @@ GRANT ALL PRIVILEGES ON DATABASE crmit_db TO crmit_user;
 
 3. **Update `backend/.env`**:
 ```env
-CRMIT_DB_URL=postgresql+asyncpg://crmit_user:your_password@localhost:5432/crmit_db
+CRMIT_DATABASE_URL=postgresql+asyncpg://crmit_user:your_password@localhost:5432/crmit_db
 ```
 
 4. **Run Migrations**:
@@ -338,7 +350,7 @@ taskkill /PID <PID> /F
 
 Make sure your `backend/.env` includes the frontend URL:
 ```env
-CRMIT_CORS_ORIGINS=["http://localhost:3000"]
+CRMIT_CORS_ORIGINS=http://localhost:3000
 ```
 
 #### 6. Database connection errors

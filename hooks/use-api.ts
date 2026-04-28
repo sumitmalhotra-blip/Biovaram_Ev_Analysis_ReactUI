@@ -166,6 +166,10 @@ export function useApi() {
       } catch (error) {
         const category = categorizeError(error)
         const message = getUserFriendlyErrorMessage(error)
+
+        if (category === "network" || message.toLowerCase().includes("not found")) {
+          setApiConnected(false)
+        }
         
         // Only show toast for non-network errors (don't spam when backend is offline)
         if (category !== "network") {
@@ -183,7 +187,7 @@ export function useApi() {
         setSamplesLoading(false)
       }
     },
-    [setApiSamples, setSamplesError, setSamplesLoading, toast, userId]
+    [setApiSamples, setSamplesError, setSamplesLoading, toast, userId, setApiConnected]
   )
 
   const getSample = useCallback(
@@ -1993,6 +1997,12 @@ export function useApi() {
           })
         } catch (error) {
           const message = getUserFriendlyErrorMessage(error)
+          const category = categorizeError(error)
+
+          if (category === "network" || message.toLowerCase().includes("not found")) {
+            setApiConnected(false)
+          }
+
           toast({
             variant: "destructive",
             title: "Failed to fetch alerts",
@@ -2001,7 +2011,7 @@ export function useApi() {
           return null
         }
       },
-      [toast]
+      [toast, setApiConnected]
     ),
 
     getAlertCounts: useCallback(

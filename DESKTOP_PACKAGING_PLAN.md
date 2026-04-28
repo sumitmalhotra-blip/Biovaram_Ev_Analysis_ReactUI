@@ -395,6 +395,13 @@ a = Analysis(
 - Resolve paths relative to `sys._MEIPASS` when running as PyInstaller bundle
 - Create `%APPDATA%/BioVaram/data/` for database and uploads
 
+**AI credentials (Desktop / EXE)**
+- Do **not** ship AWS/OpenAI/Anthropic secrets inside the EXE/installer.
+- Desktop users can provide credentials using a local env file at `%APPDATA%/BioVaram/.env` (Windows).
+  - This enables “bring your own key” (BYOK) without committing or embedding secrets.
+  - Keep `CRMIT_ENABLE_OFFLINE_AI=true` for demo/testing without credentials.
+- See `docs/AI_CREDENTIALS_AND_DESKTOP_DISTRIBUTION.md` for the recommended production approach (hosted AI gateway).
+
 **Modified: `backend/src/api/config.py`**
 ```python
 # Add desktop-aware path resolution

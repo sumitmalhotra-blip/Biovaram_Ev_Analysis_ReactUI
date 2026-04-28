@@ -1,0 +1,88 @@
+{
+  "method": "fcmpass_k_based",
+  "k_instrument": 940.5864933202703,
+  "k_std": 22.834394468169517,
+  "k_cv_pct": 2.4276762031277,
+  "wavelength_nm": 405.0,
+  "n_bead": 1.6336721690788016,
+  "n_ev": 1.37,
+  "n_medium": 1.33,
+  "bead_measurements": {
+    "40": 1888.0,
+    "80": 102411.0,
+    "108": 565342.0,
+    "142": 2132067.0
+  },
+  "bead_diameters": [
+    40,
+    80,
+    108,
+    142
+  ],
+  "bead_fsc_measured": [
+    1888,
+    102411,
+    565342,
+    2132067
+  ],
+  "created_at": "2026-04-24T12:35:43.709024",
+  "bead_kit": "",
+  "self_validation": {
+    "validated": true,
+    "all_passed": true,
+    "n_beads": 4,
+    "n_passed": 4,
+    "n_failed": 0,
+    "max_error_pct": 0.71,
+    "per_bead": [
+      {
+        "expected_nm": 40,
+        "recovered_nm": 40.1,
+        "error_nm": 0.1,
+        "error_pct": 0.17,
+        "au_measured": 1888,
+        "au_predicted": 1864.4,
+        "au_error_pct": 1.25,
+        "cv_pct": 5.0,
+        "tolerance_nm": 4.0,
+        "passed": true
+      },
+      {
+        "expected_nm": 80,
+        "recovered_nm": 79.4,
+        "error_nm": -0.6,
+        "error_pct": 0.71,
+        "au_measured": 102411,
+        "au_predicted": 106561.0,
+        "au_error_pct": 4.05,
+        "cv_pct": 5.0,
+        "tolerance_nm": 8.0,
+        "passed": true
+      },
+      {
+        "expected_nm": 108,
+        "recovered_nm": 108.5,
+        "error_nm": 0.5,
+        "error_pct": 0.49,
+        "au_measured": 565342,
+        "au_predicted": 550964.3,
+        "au_error_pct": 2.54,
+        "cv_pct": 5.0,
+        "tolerance_nm": 10.8,
+        "passed": true
+      },
+      {
+        "expected_nm": 142,
+        "recovered_nm": 142.0,
+        "error_nm": 0.0,
+        "error_pct": 0.03,
+        "au_measured": 2132067,
+        "au_predicted": 2131618.5,
+        "au_error_pct": 0.02,
+        "cv_pct": 5.0,
+        "tolerance_nm": 14.2,
+        "passed": true
+      }
+    ]
+  }
+}

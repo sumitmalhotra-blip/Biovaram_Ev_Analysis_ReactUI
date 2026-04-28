@@ -23,9 +23,13 @@ import boto3
 from typing import Optional
 from datetime import datetime
 
+from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ProfileNotFound  # type: ignore
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from loguru import logger
+
+from src.api.aws_utils import get_bedrock_runtime_client
 
 router = APIRouter()
 
@@ -34,29 +38,52 @@ router = APIRouter()
 # AWS Bedrock Client
 # ============================================================================
 
+def _offline_ai_enabled() -> bool:
+    """Allow local development without AWS credentials."""
+    env = (os.getenv("CRMIT_ENV") or "development").strip().lower()
+    flag = (os.getenv("CRMIT_ENABLE_OFFLINE_AI") or "").strip().lower()
+    if flag in {"0", "false", "no", "off"}:
+        return False
+    if flag in {"1", "true", "yes", "on"}:
+        return True
+    return env in {"development", "dev", "local"}
+
 def _get_bedrock_client():
-    """Initialize AWS Bedrock client from environment variables."""
-    aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
-    aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
-    aws_region     = os.getenv("AWS_REGION", "us-east-1")
+    """Initialize AWS Bedrock client using AWS default credential chain."""
+    if _offline_ai_enabled():
+        has_env_creds = bool(os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY"))
+        has_profile = bool((os.getenv("AWS_PROFILE") or "").strip())
+        if not (has_env_creds or has_profile):
+            return None
 
-    if not aws_access_key or not aws_secret_key:
-        raise HTTPException(
-            status_code=503,
-            detail="AWS credentials not configured. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in .env"
-        )
-
-    return boto3.client(
-        service_name="bedrock-runtime",
-        region_name=aws_region,
-        aws_access_key_id=aws_access_key,
-        aws_secret_access_key=aws_secret_key,
-    )
+    try:
+        return get_bedrock_runtime_client()
+    except (ProfileNotFound, PartialCredentialsError) as exc:
+        if _offline_ai_enabled():
+            return None
+        raise HTTPException(status_code=503, detail=f"AWS credentials not configured: {exc}")
 
 
 def _call_bedrock(prompt: str, max_tokens: int = 1500) -> str:
     """Call AWS Bedrock Mistral model with a prompt."""
     client = _get_bedrock_client()
+    if client is None:
+        if "exact JSON format" in prompt:
+            return json.dumps(
+                {
+                    "anomalies": ["Offline AI mode enabled: cloud model call skipped for local testing."],
+                    "missed_parameters": [],
+                    "suggestions": [
+                        "Configure AWS credentials before release for full AI interpretation.",
+                        "Use rule-based findings to validate the local UI workflow."
+                    ],
+                    "summary": "Local offline AI mode returned deterministic guidance without Bedrock access."
+                }
+            )
+        return (
+            "Offline AI mode is active for local testing, so this answer is based on local rule-based analysis only. "
+            "Configure AWS credentials to enable full Bedrock reasoning before release."
+        )
 
     payload = {
         "prompt": f"<s>[INST] {prompt} [/INST]",
@@ -73,6 +100,15 @@ def _call_bedrock(prompt: str, max_tokens: int = 1500) -> str:
         )
         result = json.loads(response["body"].read())
         return result["outputs"][0]["text"].strip()
+
+    except (NoCredentialsError, PartialCredentialsError, ProfileNotFound) as e:
+        if _offline_ai_enabled():
+            logger.warning(f"AWS credentials missing; using offline fallback: {e}")
+            return (
+                "Offline AI mode is active for local testing (no AWS credentials resolved). "
+                "Configure an IAM role (recommended) or AWS_PROFILE/env keys to enable Bedrock."
+            )
+        raise HTTPException(status_code=503, detail="AWS credentials not configured.")
 
     except Exception as e:
         logger.error(f"Bedrock call failed: {e}")
@@ -490,7 +526,15 @@ def _compare_metadata_fields(nta_data: list[dict]) -> tuple[list[dict], list[str
 async def nta_ai_health():
     """Check AWS Bedrock connectivity."""
     try:
-        _get_bedrock_client()
+        client = _get_bedrock_client()
+        if client is None:
+            return {
+                "status": "ok",
+                "provider": "offline_local",
+                "model": "offline-local",
+                "region": os.getenv("AWS_REGION", "us-east-1"),
+                "message": "Offline AI fallback enabled for local testing",
+            }
         return {
             "status": "ok",
             "provider": "aws_bedrock",

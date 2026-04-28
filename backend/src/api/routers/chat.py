@@ -21,10 +21,14 @@ import time
 from typing import Optional, Tuple
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel, Field
 from loguru import logger
+
+from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ProfileNotFound  # type: ignore
+
+from src.api.aws_utils import get_bedrock_runtime_client
 
 router = APIRouter()
 
@@ -36,6 +40,17 @@ router = APIRouter()
 VALID_ROLES = {"user", "assistant", "system"}
 DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
 DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
+
+
+def _offline_chat_enabled() -> bool:
+    """Allow local testing without external AI credentials."""
+    env = (os.environ.get("CRMIT_ENV") or "development").strip().lower()
+    flag = (os.environ.get("CRMIT_ENABLE_OFFLINE_AI") or "").strip().lower()
+    if flag in {"0", "false", "no", "off"}:
+        return False
+    if flag in {"1", "true", "yes", "on"}:
+        return True
+    return env in {"development", "dev", "local"}
 
 
 def _resolve_provider_config() -> Tuple[str, str, str]:
@@ -94,6 +109,9 @@ def _resolve_provider_config() -> Tuple[str, str, str]:
     if openai_key:
         model = (os.environ.get("OPENAI_MODEL") or os.environ.get("CRMIT_AI_MODEL") or DEFAULT_OPENAI_MODEL).strip()
         return "openai", openai_key, model
+
+    if _offline_chat_enabled():
+        return "offline", "", "offline-local"
 
     raise HTTPException(
         status_code=503,
@@ -270,13 +288,8 @@ def _get_offline_response(messages: list[ChatMessage]) -> str:
 
 async def _stream_bedrock(messages: list, max_tokens: int, temperature: float):
     """Stream responses from AWS Bedrock Nova."""
-    import boto3, json as _json, os as _os
-    client = boto3.client(
-        service_name="bedrock-runtime",
-        region_name=_os.environ.get("AWS_REGION", "us-east-1"),
-        aws_access_key_id=_os.environ.get("AWS_ACCESS_KEY_ID"),
-        aws_secret_access_key=_os.environ.get("AWS_SECRET_ACCESS_KEY"),
-    )
+    import json as _json
+    client = get_bedrock_runtime_client()
     payload = {
         "messages": [{"role": m.role if m.role != "system" else "user", "content": [{"text": m.content}]} for m in messages],
         "inferenceConfig": {"maxTokens": max_tokens, "temperature": temperature},
@@ -293,6 +306,13 @@ async def _stream_bedrock(messages: list, max_tokens: int, temperature: float):
         # Stream in Vercel AI SDK format
         for chunk in [text[i:i+20] for i in range(0, len(text), 20)]:
             yield f'0:{_json.dumps(chunk)}\n'
+    except (NoCredentialsError, PartialCredentialsError, ProfileNotFound) as e:
+        if _offline_chat_enabled():
+            offline = _get_offline_response(messages)
+            for chunk in [offline[i:i+20] for i in range(0, len(offline), 20)]:
+                yield f'0:{_json.dumps(chunk)}\n'
+        else:
+            yield f'0:{_json.dumps(f"Error: {str(e)}")}\n'
     except Exception as e:
         yield f'0:{_json.dumps(f"Error: {str(e)}")}\n'
 
@@ -475,26 +495,29 @@ async def chat(request: Request):
         msgs = [{"role": "user", "content": raw["query"]}]
     if not msgs:
         return {"success": False, "error": "No messages found"}
-    # Call bedrock directly
-    import boto3, json as _json, os as _os
-    client = boto3.client(
-        service_name="bedrock-runtime",
-        region_name=_os.environ.get("AWS_REGION", "us-east-1"),
-        aws_access_key_id=_os.environ.get("AWS_ACCESS_KEY_ID"),
-        aws_secret_access_key=_os.environ.get("AWS_SECRET_ACCESS_KEY"),
-    )
-    payload = {
-        "messages": [{"role": m["role"] if m["role"] != "system" else "user", "content": [{"text": m["content"]}]} for m in msgs],
-        "inferenceConfig": {"maxTokens": 1024, "temperature": 0.7},
-    }
-    response = client.invoke_model(
-        modelId="amazon.nova-lite-v1:0",
-        contentType="application/json",
-        accept="application/json",
-        body=_json.dumps(payload),
-    )
-    result = _json.loads(response["body"].read())
-    text = result["output"]["message"]["content"][0]["text"].strip()
+    # Call bedrock directly; fall back to offline text in local mode.
+    import json as _json
+    text = ""
+    try:
+        client = get_bedrock_runtime_client()
+        payload = {
+            "messages": [{"role": m["role"] if m["role"] != "system" else "user", "content": [{"text": m["content"]}]} for m in msgs],
+            "inferenceConfig": {"maxTokens": 1024, "temperature": 0.7},
+        }
+        response = client.invoke_model(
+            modelId="amazon.nova-lite-v1:0",
+            contentType="application/json",
+            accept="application/json",
+            body=_json.dumps(payload),
+        )
+        result = _json.loads(response["body"].read())
+        text = result["output"]["message"]["content"][0]["text"].strip()
+    except Exception as exc:
+        if _offline_chat_enabled():
+            logger.warning(f"Chat provider unavailable; using offline fallback: {exc}")
+            text = _get_offline_response([ChatMessage(role=m["role"], content=m["content"]) for m in msgs])
+        else:
+            raise
     # Return in Vercel AI SDK streaming format
     from fastapi.responses import StreamingResponse as SR
     async def gen():
@@ -548,6 +571,9 @@ async def _chat_simple(request: ChatRequest):
     """
     _validate_chat_payload(request)
     provider, api_key, default_model = _resolve_provider_config()
+    if provider == "offline":
+        return ChatResponse(content=_get_offline_response(request.messages), model="offline-local")
+
     model = (request.model or default_model).strip()
     temperature = request.temperature or 0.7
     max_tokens = request.max_tokens or 2048
@@ -592,26 +618,26 @@ async def _chat_simple(request: ChatRequest):
                 content = data.get("content", [{}])[0].get("text", "No response")
                 return ChatResponse(content=content, model=model or DEFAULT_ANTHROPIC_MODEL)
             elif provider == "bedrock":
-                import boto3, json as _json, os as _os
-                bedrock = boto3.client(
-                    service_name="bedrock-runtime",
-                    region_name=_os.environ.get("AWS_REGION", "us-east-1"),
-                    aws_access_key_id=_os.environ.get("AWS_ACCESS_KEY_ID"),
-                    aws_secret_access_key=_os.environ.get("AWS_SECRET_ACCESS_KEY"),
-                )
+                import json as _json
+                bedrock = get_bedrock_runtime_client()
                 payload = {
                     "messages": [{"role": m.role if m.role != "system" else "user", "content": [{"text": m.content}]} for m in request.messages],
                     "inferenceConfig": {"maxTokens": max_tokens, "temperature": temperature},
                 }
-                response = bedrock.invoke_model(
-                    modelId="amazon.nova-lite-v1:0",
-                    contentType="application/json",
-                    accept="application/json",
-                    body=_json.dumps(payload),
-                )
-                result = _json.loads(response["body"].read())
-                content = result["output"]["message"]["content"][0]["text"].strip()
-                return ChatResponse(content=content, model="amazon.nova-lite-v1:0")
+                try:
+                    response = bedrock.invoke_model(
+                        modelId="amazon.nova-lite-v1:0",
+                        contentType="application/json",
+                        accept="application/json",
+                        body=_json.dumps(payload),
+                    )
+                    result = _json.loads(response["body"].read())
+                    content = result["output"]["message"]["content"][0]["text"].strip()
+                    return ChatResponse(content=content, model="amazon.nova-lite-v1:0")
+                except (NoCredentialsError, PartialCredentialsError, ProfileNotFound) as e:
+                    if _offline_chat_enabled():
+                        return ChatResponse(content=_get_offline_response(request.messages), model="offline-local")
+                    raise HTTPException(status_code=503, detail=f"AWS credentials not configured: {e}")
             else:
                 resp = await client.post(
                     "https://api.openai.com/v1/chat/completions",

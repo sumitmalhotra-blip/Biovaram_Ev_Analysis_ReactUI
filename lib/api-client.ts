@@ -1212,12 +1212,29 @@ class ApiClient {
 
   async checkHealth(): Promise<HealthResponse> {
     try {
+      // Probe a core API route first to avoid false "connected" status when
+      // a different service responds on /health but /api/v1 routes are missing.
+      const apiProbe = await fetch(`${this.baseUrl}/samples?limit=1`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (!apiProbe.ok) {
+        throw new Error(`API probe failed with status ${apiProbe.status}`);
+      }
+
+      // Health endpoint remains optional/diagnostic, but API route probe is authoritative.
       const response = await fetch(`${API_BASE_URL}/health`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
       });
+
       this.isOffline = false; // Backend is reachable
-      return this.handleResponse<HealthResponse>(response);
+      if (response.ok) {
+        return this.handleResponse<HealthResponse>(response);
+      }
+
+      return { status: "ok" };
     } catch (error) {
       this.isOffline = true;
       // Silently fail for health checks - don't spam console

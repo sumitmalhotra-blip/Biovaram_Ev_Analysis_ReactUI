@@ -189,6 +189,25 @@ def create_desktop_app():
     Create the FastAPI application configured for desktop mode.
     Mounts the static frontend and configures desktop-specific settings.
     """
+    # ---------------------------------------------------------------------
+    # Optional env file loading (BYOK)
+    # ---------------------------------------------------------------------
+    # In source/dev: allow backend/.env to configure the API.
+    # In frozen builds: allow %APPDATA%/BioVaram/.env (Windows) to override.
+    try:
+        from dotenv import load_dotenv  # type: ignore
+    except Exception:
+        load_dotenv = None  # type: ignore[assignment]
+
+    if load_dotenv is not None:
+        if getattr(sys, 'frozen', False):
+            env_root = Path(os.environ.get('APPDATA', os.path.expanduser('~'))) / 'BioVaram'
+            env_path = env_root / '.env'
+        else:
+            env_path = Path(__file__).parent / '.env'
+        if env_path.exists():
+            load_dotenv(env_path)
+
     # Set environment variables before importing the app
     data_root = setup_data_directories()
     config_root = setup_config_directories()
