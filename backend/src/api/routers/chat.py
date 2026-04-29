@@ -619,6 +619,7 @@ async def _chat_simple(request: ChatRequest):
                 return ChatResponse(content=content, model=model or DEFAULT_ANTHROPIC_MODEL)
             elif provider == "bedrock":
                 import json as _json
+
                 bedrock = get_bedrock_runtime_client()
                 payload = {
                     "messages": [{"role": m.role if m.role != "system" else "user", "content": [{"text": m.content}]} for m in request.messages],

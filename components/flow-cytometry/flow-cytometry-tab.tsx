@@ -10,6 +10,7 @@ import { ColumnMapping } from "./column-mapping"
 import { FCSBestPracticesGuide } from "./best-practices-guide"
 import { NanoFACSAIPanel } from "./nanofacs-ai-panel"
 import { BeadCalibrationPanel } from "./bead-calibration-panel"
+import { AIAnalysisTab } from "@/components/ai-analysis-tab"
 import { ExperimentalConditionsDialog, type ExperimentalConditions, type FileMetadata } from "@/components/experimental-conditions-dialog"
 import { useAnalysisStore } from "@/lib/store"
 import { useShallow } from "zustand/shallow"
@@ -248,9 +249,10 @@ export function FlowCytometryTab() {
 
           {/* Results / Charts */}
           {uploadMode === "single" && hasResults && <AnalysisResults />}
-          {uploadMode === "comparison" && (hasResults || hasSecondaryResults) && (
-            <ComparisonAnalysisView />
-          )}
+          {uploadMode === "single" && hasResults && <AIAnalysisTab />}
+
+          {/* Comparison Mode - Keep compare view mounted even during transient empty state */}
+          {uploadMode === "comparison" && <ComparisonAnalysisView />}
         </div>
       )}
 
@@ -269,7 +271,6 @@ export function FlowCytometryTab() {
           />
         </div>
       )}
-
       {/* Experimental Conditions Dialog */}
       <ExperimentalConditionsDialog
         open={showConditionsDialog}
