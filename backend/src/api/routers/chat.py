@@ -42,6 +42,23 @@ router = APIRouter()
 VALID_ROLES = {"user", "assistant", "system"}
 DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
 DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
+DEFAULT_BEDROCK_MODEL = "amazon.nova-lite-v1:0"
+
+
+def _effective_model(provider: str, requested: str | None, default_model: str) -> str:
+    requested_model = (requested or "").strip()
+
+    # Frontend defaults to an OpenAI model string; for Bedrock/Gateway we must
+    # use a Bedrock model id unless the caller explicitly provided one.
+    if provider in {"bedrock", "gateway"}:
+        if not requested_model or requested_model in {DEFAULT_OPENAI_MODEL, DEFAULT_ANTHROPIC_MODEL}:
+            return (
+                (os.environ.get("CRMIT_AI_MODEL") or default_model or DEFAULT_BEDROCK_MODEL).strip()
+                or DEFAULT_BEDROCK_MODEL
+            )
+        return requested_model
+
+    return requested_model or (default_model.strip() if default_model else "")
 
 
 def _offline_chat_enabled() -> bool:
@@ -532,7 +549,7 @@ async def chat(request: Request):
     logger.info(f"Chat request: {len(chat_request.messages)} messages, stream={chat_request.stream}")
 
     provider, api_key, default_model = _resolve_provider_config()
-    model = (chat_request.model or default_model).strip()
+    model = _effective_model(provider, chat_request.model, default_model)
     temperature = chat_request.temperature or 0.7
     max_tokens = chat_request.max_tokens or 2048
 
@@ -587,7 +604,7 @@ async def _chat_simple(request: ChatRequest):
 
     # Gateway mode does not require httpx; it proxies to the hosted gateway.
     if provider == "gateway":
-        model = (request.model or default_model).strip()
+        model = _effective_model(provider, request.model, default_model)
         temperature = request.temperature or 0.7
         max_tokens = request.max_tokens or 2048
         try:
@@ -604,9 +621,39 @@ async def _chat_simple(request: ChatRequest):
                 return ChatResponse(content=_get_offline_response(request.messages), model="offline-local")
             raise HTTPException(status_code=503, detail=str(exc))
 
-    model = (request.model or default_model).strip()
+    model = _effective_model(provider, request.model, default_model)
     temperature = request.temperature or 0.7
     max_tokens = request.max_tokens or 2048
+
+    # Bedrock does not require httpx; call directly via boto3.
+    if provider == "bedrock":
+        import json as _json
+
+        bedrock = get_bedrock_runtime_client()
+        payload = {
+            "messages": [
+                {
+                    "role": m.role if m.role != "system" else "user",
+                    "content": [{"text": m.content}],
+                }
+                for m in request.messages
+            ],
+            "inferenceConfig": {"maxTokens": int(max_tokens), "temperature": float(temperature)},
+        }
+        try:
+            response = bedrock.invoke_model(
+                modelId=model or "amazon.nova-lite-v1:0",
+                contentType="application/json",
+                accept="application/json",
+                body=_json.dumps(payload),
+            )
+            result = _json.loads(response["body"].read())
+            content = result["output"]["message"]["content"][0]["text"].strip()
+            return ChatResponse(content=content, model=model or "amazon.nova-lite-v1:0")
+        except (NoCredentialsError, PartialCredentialsError, ProfileNotFound) as e:
+            if _offline_chat_enabled():
+                return ChatResponse(content=_get_offline_response(request.messages), model="offline-local")
+            raise HTTPException(status_code=503, detail=f"AWS credentials not configured: {e}")
     
     try:
         import httpx  # type: ignore[import-untyped]
@@ -647,28 +694,6 @@ async def _chat_simple(request: ChatRequest):
                 data = resp.json()
                 content = data.get("content", [{}])[0].get("text", "No response")
                 return ChatResponse(content=content, model=model or DEFAULT_ANTHROPIC_MODEL)
-            elif provider == "bedrock":
-                import json as _json
-
-                bedrock = get_bedrock_runtime_client()
-                payload = {
-                    "messages": [{"role": m.role if m.role != "system" else "user", "content": [{"text": m.content}]} for m in request.messages],
-                    "inferenceConfig": {"maxTokens": max_tokens, "temperature": temperature},
-                }
-                try:
-                    response = bedrock.invoke_model(
-                        modelId="amazon.nova-lite-v1:0",
-                        contentType="application/json",
-                        accept="application/json",
-                        body=_json.dumps(payload),
-                    )
-                    result = _json.loads(response["body"].read())
-                    content = result["output"]["message"]["content"][0]["text"].strip()
-                    return ChatResponse(content=content, model="amazon.nova-lite-v1:0")
-                except (NoCredentialsError, PartialCredentialsError, ProfileNotFound) as e:
-                    if _offline_chat_enabled():
-                        return ChatResponse(content=_get_offline_response(request.messages), model="offline-local")
-                    raise HTTPException(status_code=503, detail=f"AWS credentials not configured: {e}")
             else:
                 resp = await client.post(
                     "https://api.openai.com/v1/chat/completions",
