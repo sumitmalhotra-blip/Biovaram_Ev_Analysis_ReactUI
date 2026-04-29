@@ -23,12 +23,14 @@ from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from loguru import logger
 
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ProfileNotFound  # type: ignore
 
 from src.api.aws_utils import get_bedrock_runtime_client
+from src.api.ai_gateway_client import AIGatewayError, gateway_chat
 
 router = APIRouter()
 
@@ -65,16 +67,29 @@ def _resolve_provider_config() -> Tuple[str, str, str]:
     provider_env = (os.environ.get("AI_PROVIDER") or "").strip().lower()
 
     if provider_env:
-        if provider_env not in {"openai", "anthropic", "bedrock"}:
+        if provider_env not in {"openai", "anthropic", "bedrock", "gateway"}:
             raise HTTPException(
                 status_code=500,
                 detail=(
-                    "Invalid AI_PROVIDER value. Supported values are 'openai' or 'anthropic'."
+                    "Invalid AI_PROVIDER value. Supported values are 'openai', 'anthropic', 'bedrock', or 'gateway'."
                 ),
             )
 
         if provider_env == "bedrock":
             return "bedrock", "bedrock", "amazon.nova-lite-v1:0"
+
+        if provider_env == "gateway":
+            # Hosted gateway mode: proxy Bedrock calls to a server that has IAM/Bedrock access.
+            gateway_url = (os.environ.get("CRMIT_AI_GATEWAY_URL") or "").strip()
+            if not gateway_url:
+                if _offline_chat_enabled():
+                    return "offline", "", "offline-local"
+                raise HTTPException(
+                    status_code=503,
+                    detail="Gateway provider selected, but CRMIT_AI_GATEWAY_URL is missing.",
+                )
+            model = (os.environ.get("CRMIT_AI_MODEL") or "amazon.nova-lite-v1:0").strip()
+            return "gateway", "gateway", model
         if provider_env == "anthropic":
             key = (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("CRMIT_AI_API_KEY") or "").strip()
             if not key:
@@ -316,6 +331,14 @@ async def _stream_bedrock(messages: list, max_tokens: int, temperature: float):
     except Exception as e:
         yield f'0:{_json.dumps(f"Error: {str(e)}")}\n'
 
+
+async def _stream_text_as_vercel(text: str):
+    import json as _json
+    for chunk in [text[i:i+20] for i in range(0, len(text), 20)]:
+        yield f'0:{_json.dumps(chunk)}\n'
+    yield 'e:{"finishReason":"stop","usage":{"promptTokens":0,"completionTokens":0}}\n'
+    yield 'd:{"finishReason":"stop","usage":{"promptTokens":0,"completionTokens":0}}\n'
+
 async def _stream_openai(messages: list[ChatMessage], api_key: str, model: str, temperature: float, max_tokens: int):
     """Stream response from OpenAI API in Vercel AI SDK-compatible SSE format."""
     try:
@@ -482,76 +505,64 @@ async def _stream_anthropic(messages: list[ChatMessage], api_key: str, model: st
 @router.post("/chat")
 async def chat(request: Request):
     raw = await request.json()
-    logger.info(f"RAW CHAT PAYLOAD: {raw}")
-    # Normalize messages
-    msgs = []
-    for m in raw.get("messages", []):
-        c = m.get("content", "")
-        if isinstance(c, list):
-            c = " ".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in c)
-        if c.strip():
-            msgs.append({"role": m.get("role", "user"), "content": c})
-    if not msgs and "query" in raw:
-        msgs = [{"role": "user", "content": raw["query"]}]
-    if not msgs:
-        return {"success": False, "error": "No messages found"}
-    # Call bedrock directly; fall back to offline text in local mode.
-    import json as _json
-    text = ""
-    try:
-        client = get_bedrock_runtime_client()
-        payload = {
-            "messages": [{"role": m["role"] if m["role"] != "system" else "user", "content": [{"text": m["content"]}]} for m in msgs],
-            "inferenceConfig": {"maxTokens": 1024, "temperature": 0.7},
-        }
-        response = client.invoke_model(
-            modelId="amazon.nova-lite-v1:0",
-            contentType="application/json",
-            accept="application/json",
-            body=_json.dumps(payload),
-        )
-        result = _json.loads(response["body"].read())
-        text = result["output"]["message"]["content"][0]["text"].strip()
-    except Exception as exc:
-        if _offline_chat_enabled():
-            logger.warning(f"Chat provider unavailable; using offline fallback: {exc}")
-            text = _get_offline_response([ChatMessage(role=m["role"], content=m["content"]) for m in msgs])
-        else:
-            raise
-    # Return in Vercel AI SDK streaming format
-    from fastapi.responses import StreamingResponse as SR
-    async def gen():
-        yield f'0:{_json.dumps(text)}\n'
-    return SR(gen(), media_type="text/plain; charset=utf-8", headers={"X-Vercel-AI-Data-Stream": "v1"})
-    """
-    AI Research Chat — streaming SSE endpoint.
-    
-    Sends messages to the configured LLM (OpenAI or Anthropic) and streams
-    the response back in Vercel AI SDK-compatible format for the frontend
-    useChat() hook.
-    
-    If no API key is configured, returns a helpful offline response.
-    """
-    _validate_chat_payload(request)
-    logger.info(f"Chat request: {len(request.messages)} messages, stream={request.stream}")
+
+    # Normalize payload to ChatRequest shape (frontend sometimes sends content as parts).
+    messages: list[ChatMessage] = []
+    for m in raw.get("messages", []) or []:
+        role = (m.get("role") or "user")
+        content = m.get("content", "")
+        if isinstance(content, list):
+            content = " ".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in content)
+        content = str(content)
+        if content.strip():
+            messages.append(ChatMessage(role=role, content=content))
+
+    if not messages and "query" in raw:
+        messages = [ChatMessage(role="user", content=str(raw["query"]))]
+
+    chat_request = ChatRequest(
+        messages=messages,
+        model=str(raw.get("model") or "gpt-4o-mini"),
+        temperature=raw.get("temperature", 0.7),
+        max_tokens=raw.get("max_tokens", 2048),
+        stream=raw.get("stream", True),
+    )
+
+    _validate_chat_payload(chat_request)
+    logger.info(f"Chat request: {len(chat_request.messages)} messages, stream={chat_request.stream}")
 
     provider, api_key, default_model = _resolve_provider_config()
-    model = (request.model or default_model).strip()
-    temperature = request.temperature or 0.7
-    max_tokens = request.max_tokens or 2048
-    
-    if request.stream is False:
-        # Non-streaming response
-        return await _chat_simple(request)
-    
-    # Choose provider
-    if provider == "anthropic":
-        generator = _stream_anthropic(request.messages, api_key, model, temperature, max_tokens)
+    model = (chat_request.model or default_model).strip()
+    temperature = chat_request.temperature or 0.7
+    max_tokens = chat_request.max_tokens or 2048
+
+    if chat_request.stream is False:
+        return await _chat_simple(chat_request)
+
+    if provider == "offline":
+        generator = _stream_text_as_vercel(_get_offline_response(chat_request.messages))
+    elif provider == "gateway":
+        try:
+            text = await run_in_threadpool(
+                gateway_chat,
+                [{"role": m.role, "content": m.content} for m in chat_request.messages],
+                model or "amazon.nova-lite-v1:0",
+                float(temperature),
+                int(max_tokens),
+            )
+        except AIGatewayError as exc:
+            if _offline_chat_enabled():
+                text = _get_offline_response(chat_request.messages)
+            else:
+                raise HTTPException(status_code=503, detail=str(exc))
+        generator = _stream_text_as_vercel(text)
+    elif provider == "anthropic":
+        generator = _stream_anthropic(chat_request.messages, api_key, model, temperature, max_tokens)
     elif provider == "bedrock":
-        generator = _stream_bedrock(request.messages, max_tokens, temperature)
+        generator = _stream_bedrock(chat_request.messages, max_tokens, temperature)
     else:
-        generator = _stream_openai(request.messages, api_key, model, temperature, max_tokens)
-    
+        generator = _stream_openai(chat_request.messages, api_key, model, temperature, max_tokens)
+
     return StreamingResponse(
         generator,
         media_type="text/plain; charset=utf-8",
@@ -573,6 +584,25 @@ async def _chat_simple(request: ChatRequest):
     provider, api_key, default_model = _resolve_provider_config()
     if provider == "offline":
         return ChatResponse(content=_get_offline_response(request.messages), model="offline-local")
+
+    # Gateway mode does not require httpx; it proxies to the hosted gateway.
+    if provider == "gateway":
+        model = (request.model or default_model).strip()
+        temperature = request.temperature or 0.7
+        max_tokens = request.max_tokens or 2048
+        try:
+            text = await run_in_threadpool(
+                gateway_chat,
+                [{"role": m.role, "content": m.content} for m in request.messages],
+                model or "amazon.nova-lite-v1:0",
+                float(temperature),
+                int(max_tokens),
+            )
+            return ChatResponse(content=text, model=model or "amazon.nova-lite-v1:0")
+        except AIGatewayError as exc:
+            if _offline_chat_enabled():
+                return ChatResponse(content=_get_offline_response(request.messages), model="offline-local")
+            raise HTTPException(status_code=503, detail=str(exc))
 
     model = (request.model or default_model).strip()
     temperature = request.temperature or 0.7

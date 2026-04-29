@@ -44,6 +44,7 @@ from src.api.routers import alerts  # CRMIT-003: Alert System
 from src.api.routers import chat  # P-001: AI Research Chat
 from src.api.routers import nta_ai  # NTA AI Analysis
 from src.api.routers import nanofacs_ai  # NanoFACS AI Analysis
+from src.api.routers import ai_gateway  # Hosted AI Gateway
 from src.api.routers import backup  # DB Backup & Restore
 
 try:
@@ -397,6 +398,13 @@ app.include_router(
     nanofacs_ai.router,
     prefix=f"{settings.api_prefix}",
     tags=["NanoFACS AI"]
+)
+
+# AI Gateway (hosted service)
+app.include_router(
+    ai_gateway.router,
+    prefix=f"{settings.api_prefix}",
+    tags=["AI Gateway"]
 )
 
 # DB Backup & Restore

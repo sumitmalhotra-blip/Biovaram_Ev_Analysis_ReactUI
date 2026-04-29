@@ -27,6 +27,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from loguru import logger
 from src.api.aws_utils import get_bedrock_runtime_client
+from src.api.ai_gateway_client import AIGatewayError, gateway_complete, gateway_health
 router = APIRouter()
 
 
@@ -60,8 +61,26 @@ def _get_bedrock_client():
         raise HTTPException(status_code=503, detail=f"AWS credentials not configured: {exc}")
 
 
+def _ai_provider() -> str:
+    return (os.getenv("AI_PROVIDER") or "bedrock").strip().lower()
+
+
 def _call_bedrock(prompt: str, max_tokens: int = 1500) -> str:
-    """Call AWS Bedrock Mistral model with a prompt."""
+    """Call the configured AI provider with a prompt (Bedrock or hosted gateway)."""
+    provider = _ai_provider()
+
+    if provider == "gateway":
+        model = (os.getenv("CRMIT_AI_MODEL") or "amazon.nova-lite-v1:0").strip() or "amazon.nova-lite-v1:0"
+        try:
+            return gateway_complete(prompt=prompt, model=model, temperature=0.3, max_tokens=max_tokens)
+        except AIGatewayError as exc:
+            if _offline_ai_enabled():
+                return (
+                    "Offline AI mode is active for local testing (gateway unavailable). "
+                    "Configure CRMIT_AI_GATEWAY_URL / CRMIT_AI_GATEWAY_LICENSE_KEY to enable gateway mode."
+                )
+            raise HTTPException(status_code=503, detail=str(exc))
+
     client = _get_bedrock_client()
     if client is None:
         if "exact JSON format" in prompt:
@@ -520,6 +539,18 @@ def _compare_metadata_fields(nta_data: list[dict]) -> tuple[list[dict], list[str
 async def nta_ai_health():
     """Check AWS Bedrock connectivity."""
     try:
+        if _ai_provider() == "gateway":
+            health = gateway_health()
+            return {
+                "status": health.get("status", "error"),
+                "provider": "gateway",
+                "model": os.getenv("CRMIT_AI_MODEL", "amazon.nova-lite-v1:0"),
+                "message": health.get("message"),
+                "gateway": {
+                    "url": os.getenv("CRMIT_AI_GATEWAY_URL", ""),
+                },
+            }
+
         client = _get_bedrock_client()
         if client is None:
             return {

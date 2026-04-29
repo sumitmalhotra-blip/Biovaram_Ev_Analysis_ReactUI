@@ -39,6 +39,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel, Field
 from loguru import logger
 from src.api.aws_utils import get_bedrock_runtime_client
+from src.api.ai_gateway_client import AIGatewayError, gateway_complete, gateway_health
 router = APIRouter()
 
 
@@ -75,6 +76,19 @@ def _get_bedrock_client():
 
 
 def _call_bedrock(prompt: str, max_tokens: int = 1500) -> str:
+    provider = (os.getenv("AI_PROVIDER") or "bedrock").strip().lower()
+    if provider == "gateway":
+        model = (os.getenv("CRMIT_AI_MODEL") or "amazon.nova-lite-v1:0").strip() or "amazon.nova-lite-v1:0"
+        try:
+            return gateway_complete(prompt=prompt, model=model, temperature=0.3, max_tokens=max_tokens)
+        except AIGatewayError as exc:
+            if _offline_ai_enabled():
+                return (
+                    "Offline AI mode is active for local testing (gateway unavailable). "
+                    "Configure CRMIT_AI_GATEWAY_URL / CRMIT_AI_GATEWAY_LICENSE_KEY to enable gateway mode."
+                )
+            raise HTTPException(status_code=503, detail=str(exc))
+
     client = _get_bedrock_client()
     if client is None:
         if "exact JSON format" in prompt:
@@ -471,6 +485,20 @@ def _find_missed_fcs_params(
 async def nanofacs_ai_health():
     """Check AWS Bedrock connectivity for NanoFACS AI."""
     try:
+        provider = (os.getenv("AI_PROVIDER") or "bedrock").strip().lower()
+        if provider == "gateway":
+            health = gateway_health()
+            return {
+                "status": health.get("status", "error"),
+                "provider": "gateway",
+                "model": os.getenv("CRMIT_AI_MODEL", "amazon.nova-lite-v1:0"),
+                "message": health.get("message"),
+                "gateway": {
+                    "url": os.getenv("CRMIT_AI_GATEWAY_URL", ""),
+                },
+                "module": "nanofacs_ai",
+            }
+
         client = _get_bedrock_client()
         if client is None:
             return {

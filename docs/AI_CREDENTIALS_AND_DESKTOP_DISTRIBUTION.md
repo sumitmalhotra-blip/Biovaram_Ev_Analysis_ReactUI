@@ -31,6 +31,15 @@ Where secrets live:
 - AWS credentials live only on the gateway (ENV + AWS Secrets Manager / Parameter Store).
 - The desktop app stores only a revocable token/license (not AWS keys).
 
+### Gateway mode implemented in this repo
+The backend now supports a **gateway provider mode**:
+- Hosted gateway endpoints (server-side):
+  - `GET  /api/v1/ai/gateway/health`
+  - `POST /api/v1/ai/gateway/chat`
+  - `POST /api/v1/ai/gateway/complete`
+- Desktop/EXE proxy mode (client-side):
+  - set `AI_PROVIDER=gateway` and the desktop backend will call the hosted gateway.
+
 Benefits:
 - AI works for every EXE install
 - you can rotate AWS credentials without re-shipping the app
@@ -73,6 +82,27 @@ If you *absolutely* must do it temporarily (not recommended), limit blast radius
 ## Current repo support
 - Desktop builds can load a local env file at `%APPDATA%\BioVaram\.env`.
 - Backend supports alias env vars (`CRMIT_ENV`/`CRMIT_ENVIRONMENT`, `CRMIT_DB_URL`/`CRMIT_DATABASE_URL`).
+
+## How to set up Gateway mode
+### 1) Deploy the hosted gateway (recommended)
+Run the backend in your cloud/VPC (this is the gateway server) with:
+- AWS auth via IAM role/instance profile (preferred) that can call Bedrock.
+- Env vars on the gateway server:
+  - `AWS_REGION=us-east-1` (or your region)
+  - (optional) `CRMIT_AI_GATEWAY_LICENSE_KEYS=key1,key2,...` to require `X-License-Key`
+
+Then expose the gateway base URL, e.g. `https://ai-gateway.yourcompany.com`.
+
+### 2) Configure the desktop/EXE to use the gateway
+On the client machine, create:
+`%APPDATA%\BioVaram\.env`
+
+Set:
+- `AI_PROVIDER=gateway`
+- `CRMIT_AI_GATEWAY_URL=https://ai-gateway.yourcompany.com`
+- `CRMIT_AI_GATEWAY_LICENSE_KEY=<client-issued-key>`
+
+No AWS keys are stored on the client.
 
 ## Next step (implementation)
 If you want, we can implement an `AI_PROVIDER=gateway` mode that:
