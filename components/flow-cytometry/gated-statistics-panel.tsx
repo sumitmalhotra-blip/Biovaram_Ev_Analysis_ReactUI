@@ -20,7 +20,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAnalysisStore, type GatedStatistics, type Gate } from "@/lib/store"
-import { useShallow } from "zustand/shallow"
+import { useShallow } from "zustand/react/shallow"
 import { useApi } from "@/hooks/use-api"
 import {
   Collapsible,

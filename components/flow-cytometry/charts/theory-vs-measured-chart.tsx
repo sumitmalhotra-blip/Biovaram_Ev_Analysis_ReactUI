@@ -13,7 +13,7 @@ import {
   Legend,
 } from "recharts"
 import { useAnalysisStore } from "@/lib/store"
-import { useShallow } from "zustand/shallow"
+import { useShallow } from "zustand/react/shallow"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Eye, EyeOff, Layers } from "lucide-react"

@@ -6,7 +6,7 @@ import { Progress } from "@/components/ui/progress"
 import { Sparkles } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAnalysisStore, type SizeRange } from "@/lib/store"
-import { useShallow } from "zustand/shallow"
+import { useShallow } from "zustand/react/shallow"
 import { useMemo, memo } from "react"
 import { type ScatterDataPoint } from "./charts/scatter-plot-with-selection"
 

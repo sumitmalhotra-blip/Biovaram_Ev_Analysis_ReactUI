@@ -19,6 +19,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
+type LocalChatMessage = {
+  id: string
+  role: "user" | "assistant"
+  content: string
+  parts?: Array<{ type: string; text?: string }>
+}
+
 const suggestedQuestions = [
   "How do I interpret flow cytometry gating strategies?",
   "What are the key parameters for EV characterization?",
@@ -41,18 +48,31 @@ export function ResearchChatTab() {
   // DESKTOP: Chat endpoint on FastAPI backend
   const chatApiUrl = `${getApiBaseUrl()}/api/v1/chat`
 
-  const [messages, setMessages] = useState([])
-  const [status, setStatus] = useState("idle")
+  const [messages, setMessages] = useState<LocalChatMessage[]>([])
+  const [status, setStatus] = useState<"idle" | "streaming">("idle")
   const isLoading = status === "streaming"
-  const sendUserMessage = (text) => {
+  const sendUserMessage = (text: string) => {
     if (!text.trim()) return
-    const userMsg = {id: String(Date.now()), role: "user", content: text}
-    setMessages(prev => [...prev, userMsg])
+    const userMsg: LocalChatMessage = { id: String(Date.now()), role: "user", content: text }
+    setMessages((prev) => [...prev, userMsg])
     setStatus("streaming")
-    fetch(`${getApiBaseUrl()}/api/v1/chat/simple`, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({messages:[...messages, userMsg].map(m=>({role:m.role,content:m.content})),stream:false})})
-      .then(r=>r.json()).then(d=>{setMessages(prev=>[...prev,{id:String(Date.now())+"r",role:"assistant",content:d.content||"No response"}])})
-      .catch(()=>{toast({title:"Chat failed",variant:"destructive"})})
-      .finally(()=>setStatus("idle"))
+    const outbound = [...messages, userMsg]
+    fetch(`${getApiBaseUrl()}/api/v1/chat/simple`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: outbound.map((m) => ({ role: m.role, content: m.content })), stream: false }),
+    })
+      .then((r) => r.json())
+      .then((d: { content?: string }) => {
+        setMessages((prev) => [
+          ...prev,
+          { id: String(Date.now()) + "r", role: "assistant", content: d.content || "No response" },
+        ])
+      })
+      .catch(() => {
+        toast({ title: "Chat failed", variant: "destructive" })
+      })
+      .finally(() => setStatus("idle"))
   }
   const sendMessage = sendUserMessage
 

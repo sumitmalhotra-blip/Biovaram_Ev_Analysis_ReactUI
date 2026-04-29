@@ -50,6 +50,8 @@ type PersistedStore = {
   state: {
     fcsCompareSession?: {
       visibleSampleIds?: string[]
+      scatterBySampleId?: Record<string, unknown>
+      compareItemMetaById?: Record<string, { backendSampleId?: string }>
     }
     fcsCompareGraphInstances?: Array<{
       id: string

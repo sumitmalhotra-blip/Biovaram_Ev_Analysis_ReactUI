@@ -1153,8 +1153,8 @@ export function useApi() {
                     scatterData = scatterWorkerPayload.points.map((point, pointIndex) => ({
                       x: point.x,
                       y: point.y,
-                      index: Number.isFinite(point.index) ? point.index : pointIndex,
-                      diameter: Number.isFinite(point.diameter) ? point.diameter : undefined,
+                      index: (typeof point.index === "number" && Number.isFinite(point.index)) ? point.index : pointIndex,
+                      diameter: (typeof point.diameter === "number" && Number.isFinite(point.diameter)) ? point.diameter : undefined,
                     }))
                     const cacheResult = setFCSSeriesCacheEntry({
                       key: scatterCacheKey,
@@ -1176,8 +1176,8 @@ export function useApi() {
                       .map((point, index) => ({
                         x: point.x,
                         y: point.y,
-                        index: Number.isFinite(point.index) ? point.index : index,
-                        diameter: Number.isFinite(point.diameter) ? point.diameter : undefined,
+                        index: (typeof point.index === "number" && Number.isFinite(point.index)) ? point.index : index,
+                        diameter: (typeof point.diameter === "number" && Number.isFinite(point.diameter)) ? point.diameter : undefined,
                       }))
                   }
                 }

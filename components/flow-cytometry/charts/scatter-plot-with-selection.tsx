@@ -32,7 +32,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { CHART_COLORS, useAnalysisStore, type Gate, type RectangleGate } from "@/lib/store"
-import { useShallow } from "zustand/shallow"
+import { useShallow } from "zustand/react/shallow"
 import {
   Dialog,
   DialogContent,

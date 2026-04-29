@@ -22,7 +22,7 @@ import {
   XCircle,
 } from "lucide-react"
 import { useAnalysisStore } from "@/lib/store"
-import { useShallow } from "zustand/shallow"
+import { useShallow } from "zustand/react/shallow"
 import { getApiBaseUrl } from "@/lib/module-config"
 
 const API_BASE = getApiBaseUrl()

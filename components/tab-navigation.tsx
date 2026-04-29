@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useAnalysisStore, type TabType } from "@/lib/store"
-import { useShallow } from "zustand/shallow"
+import { useShallow } from "zustand/react/shallow"
 import { cn } from "@/lib/utils"
 import { LayoutDashboard, Microscope, Atom, GitCompare, MessageCircle, Brain } from "lucide-react"
 import { isTabEnabled, isSingleModule, getModuleName } from "@/lib/module-config"

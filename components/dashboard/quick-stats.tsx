@@ -3,7 +3,7 @@
 import { useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { useAnalysisStore } from "@/lib/store"
-import { useShallow } from "zustand/shallow"
+import { useShallow } from "zustand/react/shallow"
 import { useApi } from "@/hooks/use-api"
 import { FileText, Calendar, Ruler, Wifi, FlaskConical, BarChart3 } from "lucide-react"
 import { cn } from "@/lib/utils"

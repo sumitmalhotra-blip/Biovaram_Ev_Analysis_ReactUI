@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Loader2, Sparkles, ChevronDown, ChevronUp, BarChart3 } from "lucide-react"
 import { useAnalysisStore } from "@/lib/store"
-import { useShallow } from "zustand/shallow"
+import { useShallow } from "zustand/react/shallow"
 import { getApiBaseUrl } from "@/lib/module-config"
 
 const API_BASE = getApiBaseUrl()

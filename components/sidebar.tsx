@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { useAnalysisStore, DEFAULT_SIDEBAR_WIDTH, defaultNTAAnalysisProfile, type SizeRange } from "@/lib/store"
-import { useShallow } from "zustand/shallow"
+import { useShallow } from "zustand/react/shallow"
 import { useApi } from "@/hooks/use-api"
 import { cn } from "@/lib/utils"
 import { ChevronLeft, ChevronRight, Filter, Settings, FileText, Beaker, Thermometer, Loader2, RefreshCw, Database, SlidersHorizontal, Play, RotateCcw, Plus, Trash2, FlaskConical, Shield, Target, CheckCircle2, XCircle } from "lucide-react"
@@ -395,7 +395,7 @@ function FlowCytometrySidebar() {
   const [showConditionsDialog, setShowConditionsDialog] = useState(false)
 
   // Calibration status for badge
-  const [calStatus, setCalStatus] = useState<{ calibrated: boolean; kit_name?: string; r_squared?: number; n_beads?: number } | null>(null)
+  const [calStatus, setCalStatus] = useState<{ calibrated: boolean; kit_name?: string; r_squared?: number | null; n_beads?: number } | null>(null)
 
   // Fetch calibration status on mount
   useEffect(() => {
@@ -1306,7 +1306,10 @@ function NTASidebar() {
     updateNTASizeProfile(activeBucketProfile.id, { bins: sorted })
   }
 
-  const matchesPreset = useCallback((bins: typeof currentBuckets, preset: typeof NTA_QUICK_PRESETS.standard) => {
+  const matchesPreset = useCallback((
+    bins: ReadonlyArray<{ min: number; max: number }>,
+    preset: ReadonlyArray<{ min: number; max: number }>
+  ) => {
     if (bins.length !== preset.length) return false
 
     const sortedBins = [...bins].sort((a, b) => a.min - b.min)

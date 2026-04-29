@@ -445,21 +445,19 @@ export async function captureChartAsImage(
   }
 ): Promise<SavedImage | null> {
   try {
-    const resolveChartSvgElement = (container: HTMLElement): SVGElement | null => {
-      const svgCandidates = Array.from(container.querySelectorAll("svg")).filter(
-        (svg): svg is SVGElement => svg instanceof SVGElement
-      )
+    const resolveChartSvgElement = (container: HTMLElement): SVGSVGElement | null => {
+      const svgCandidates = Array.from(container.querySelectorAll("svg"))
 
       if (svgCandidates.length === 0) {
         return null
       }
 
-      const getSvgArea = (svg: SVGElement) => {
+      const getSvgArea = (svg: SVGSVGElement) => {
         const rect = svg.getBoundingClientRect()
         return Math.max(0, rect.width) * Math.max(0, rect.height)
       }
 
-      const isChartLikeSvg = (svg: SVGElement) => {
+      const isChartLikeSvg = (svg: SVGSVGElement) => {
         if (svg.classList.contains("recharts-surface")) {
           return true
         }
@@ -560,7 +558,8 @@ export async function captureChartAsImage(
   } catch (error) {
     console.error("Failed to capture chart:", error)
     // Runtime fallback: if html2canvas fails, attempt direct SVG capture.
-    const svgElement = chartElement.querySelector("svg.recharts-surface") || chartElement.querySelector("svg")
+    const svgElement = chartElement.querySelector<SVGSVGElement>("svg.recharts-surface")
+      || chartElement.querySelector<SVGSVGElement>("svg")
     if (svgElement) {
       return await captureSVGAsImage(svgElement, title, source, chartType, options)
     }
@@ -572,7 +571,7 @@ export async function captureChartAsImage(
  * Fallback: Capture SVG element as an image
  */
 async function captureSVGAsImage(
-  svgElement: SVGElement,
+  svgElement: SVGSVGElement,
   title: string,
   source: string,
   chartType: SavedImage['chartType'],

@@ -20,7 +20,7 @@ import {
   Grid3X3
 } from "lucide-react"
 import { useAnalysisStore } from "@/lib/store"
-import { useShallow } from "zustand/shallow"
+import { useShallow } from "zustand/react/shallow"
 import { useApi } from "@/hooks/use-api"
 import { useLazyCharts, LazyChart, FCSChartLoadingProgress } from "@/hooks/use-lazy-charts"
 import { SizeDistributionChart } from "./charts/size-distribution-chart"

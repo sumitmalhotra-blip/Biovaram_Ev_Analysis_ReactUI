@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button"
 import { Info, Eye, EyeOff, Layers } from "lucide-react"
 import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { CHART_COLORS, useAnalysisStore } from "@/lib/store"
-import { useShallow } from "zustand/shallow"
+import { useShallow } from "zustand/react/shallow"
 import { computeCursorZoomWindow, computePannedWindow, getPlotRatiosFromMouse, type ZoomWindow } from "./wheel-zoom-utils"
 
 export interface DiameterDataPoint {

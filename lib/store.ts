@@ -1,6 +1,6 @@
  import { create } from "zustand"
 import { persist, createJSONStorage } from "zustand/middleware"
-import { useShallow } from "zustand/shallow"
+import { useShallow } from "zustand/react/shallow"
 import { useState, useEffect } from "react"
 import type { Sample as APISample, FCSResult, NTAResult, ProcessingJob, FileMetadata } from "./api-client"
 
@@ -966,9 +966,9 @@ interface HydrationState {
   _hasHydrated: boolean
 }
 
-export const useAnalysisStore = create<AnalysisState & HydrationState>()(
-  persist(
-    (set) => ({
+const useAnalysisStoreBase = create<AnalysisState & HydrationState>()(
+  persist<AnalysisState & HydrationState, [], [], Partial<AnalysisState & HydrationState>>(
+    (set, get) => ({
   // Hydration tracking
   _hasHydrated: false,
   
@@ -1098,7 +1098,7 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
   fcsCompareGraphInstances: [initialFCSCompareGraphInstance],
   activeFCSCompareGraphInstanceId: initialFCSCompareGraphInstance.id,
   incrementFCSCompareRequestVersion: () => {
-    const nextVersion = useAnalysisStore.getState().fcsCompareRequestVersion + 1
+    const nextVersion = get().fcsCompareRequestVersion + 1
     set({ fcsCompareRequestVersion: nextVersion })
     return nextVersion
   },
@@ -1135,7 +1135,7 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
     })),
   resetFCSCompareTelemetry: () => set({ fcsCompareTelemetry: initialFCSCompareTelemetry }),
   getFCSSeriesCacheEntry: (key) => {
-    const state = useAnalysisStore.getState()
+    const state = get()
     const cache = state.fcsSeriesCache
     const entry = cache.entriesByKey[key]
 
@@ -1429,7 +1429,7 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
   }),
   clearFCSCompareSession: () => set({ fcsCompareSession: initialFCSCompareSession }),
   createFCSCompareGraphInstance: (title) => {
-    const instance = createDefaultFCSCompareGraphInstance(title, useAnalysisStore.getState().fcsCompareGraphInstances.length)
+    const instance = createDefaultFCSCompareGraphInstance(title, get().fcsCompareGraphInstances.length)
     set((state) => ({
       fcsCompareGraphInstances: [...state.fcsCompareGraphInstances, instance],
       activeFCSCompareGraphInstanceId: instance.id,
@@ -1437,7 +1437,7 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
     return instance.id
   },
   duplicateFCSCompareGraphInstance: (instanceId) => {
-    const state = useAnalysisStore.getState()
+    const state = get()
     const source = state.fcsCompareGraphInstances.find((instance) => instance.id === instanceId)
     if (!source) return null
 
@@ -2093,6 +2093,11 @@ export const useAnalysisStore = create<AnalysisState & HydrationState>()(
     }
   )
 )
+
+// Zustand v5 prefers selector usage, but many components in this repo call
+// `useAnalysisStore()` with no selector. This cast restores a strongly-typed
+// no-arg call signature without changing runtime behavior.
+export const useAnalysisStore = useAnalysisStoreBase as typeof useAnalysisStoreBase & (() => AnalysisState & HydrationState)
 
 // Helper hook for hydration status
 export const useHasHydrated = () => {

@@ -142,12 +142,13 @@ function buildHistogramDataLocal(params: {
   if (hasRealPrimary !== hasRealSecondary && data.length > 0) {
     const realSide = hasRealPrimary ? "primary" : "secondary"
     const gaussSide = hasRealPrimary ? "secondary" : "primary"
-    const maxReal = Math.max(...data.map((entry) => entry[realSide]), 1)
-    const maxGauss = Math.max(...data.map((entry) => entry[gaussSide]), 1)
+    const maxReal = Math.max(...data.map((entry) => Number(entry[realSide]) || 0), 1)
+    const maxGauss = Math.max(...data.map((entry) => Number(entry[gaussSide]) || 0), 1)
     const scale = maxReal / maxGauss
 
     data.forEach((entry) => {
-      entry[gaussSide] = Math.round(entry[gaussSide] * scale)
+      const value = Number(entry[gaussSide]) || 0
+      entry[gaussSide] = Math.round(value * scale)
     })
   }
 
@@ -963,19 +964,19 @@ export function OverlayHistogramChart({
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div>
                   <span className="text-muted-foreground">FSC Mean:</span>
-                  <span className="ml-1 font-medium">{primaryResults.fsc_mean?.toFixed(2) || 'N/A'}</span>
+                  <span className="ml-1 font-medium">{primaryResults?.fsc_mean?.toFixed(2) || 'N/A'}</span>
                 </div>
                 <div>
                   <span className="text-muted-foreground">SSC Mean:</span>
-                  <span className="ml-1 font-medium">{primaryResults.ssc_mean?.toFixed(2) || 'N/A'}</span>
+                  <span className="ml-1 font-medium">{primaryResults?.ssc_mean?.toFixed(2) || 'N/A'}</span>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Events:</span>
-                  <span className="ml-1 font-medium">{primaryResults.total_events?.toLocaleString()}</span>
+                  <span className="ml-1 font-medium">{primaryResults?.total_events?.toLocaleString() || 'N/A'}</span>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Size (D50):</span>
-                  <span className="ml-1 font-medium">{primaryResults.size_statistics?.d50?.toFixed(1) || 'N/A'} nm</span>
+                  <span className="ml-1 font-medium">{primaryResults?.size_statistics?.d50?.toFixed(1) || 'N/A'} nm</span>
                 </div>
               </div>
             </div>

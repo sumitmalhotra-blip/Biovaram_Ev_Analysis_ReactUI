@@ -36,6 +36,14 @@
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "repo-inspection",
+    ".next",
+    "out",
+    "out/**",
+    "dist",
+    "dist-*",
+    "dist-electron",
+    "dist-electron-*"
   ]
 }

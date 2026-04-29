@@ -17,7 +17,7 @@ import {
   Legend,
 } from "recharts"
 import { useAnalysisStore } from "@/lib/store"
-import { useShallow } from "zustand/shallow"
+import { useShallow } from "zustand/react/shallow"
 import { useApi } from "@/hooks/use-api"
 import { computeCursorZoomWindow, computePannedWindow, getPlotRatiosFromMouse, type ZoomWindow } from "./wheel-zoom-utils"
 

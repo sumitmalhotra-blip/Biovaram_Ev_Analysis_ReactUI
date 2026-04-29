@@ -263,7 +263,7 @@ test("FCS compare five-file live-backend checklist", async ({ page, request }) =
   if (downloadPath) {
     exportedCsv = fs.readFileSync(downloadPath, "utf-8")
   }
-  const exportContainsAllVisible = pinSnapshot.visibleWithScatter.every((sampleId) => exportedCsv.includes(`,${sampleId},`))
+  const exportContainsAllVisible = pinSnapshot.visibleWithScatter.every((sampleId: string) => exportedCsv.includes(`,${sampleId},`))
 
   const outDir = path.resolve("temp/perf-reports")
   fs.mkdirSync(outDir, { recursive: true })
@@ -281,7 +281,7 @@ test("FCS compare five-file live-backend checklist", async ({ page, request }) =
       duplicateBackendIdsObserved: snapshot.duplicateBackendCount > 0,
       normalizationWarningTypesBounded: maxWarningTypeCount <= 4,
       multiOverlaySeriesCountMatchesVisibleSamples: overlaySeriesCount === expectedVisibleSeriesCount,
-      pinPayloadContainsAllVisibleSamples: pinSnapshot.visibleWithScatter.every((sampleId) => pinSnapshot.pinnedSampleIds.includes(sampleId)),
+      pinPayloadContainsAllVisibleSamples: pinSnapshot.visibleWithScatter.every((sampleId: string) => pinSnapshot.pinnedSampleIds.includes(sampleId)),
       exportContainsAllVisibleSamples: exportContainsAllVisible,
     },
     warningGuard: {

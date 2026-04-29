@@ -24,7 +24,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAnalysisStore, type SavedImage } from "@/lib/store"
-import { useShallow } from "zustand/shallow"
+import { useShallow } from "zustand/react/shallow"
 import { useToast } from "@/hooks/use-toast"
 import { captureChartAsImage } from "@/components/dashboard/saved-images-gallery"
 

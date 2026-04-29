@@ -88,9 +88,14 @@ export function DiscrepancyChart({ fcsStats, ntaStats, threshold = 15 }: Discrep
                 color: "#f8fafc",
               }}
               labelStyle={{ color: "#94a3b8" }}
-              formatter={(value: number, _name: string, props: { payload: { fcs: number; nta: number } }) => {
-                const { fcs, nta } = props.payload
-                return [`${value.toFixed(1)}% (FCS: ${fcs.toFixed(1)}, NTA: ${nta.toFixed(1)})`, "Discrepancy"]
+              formatter={(value: number, _name: string, item: any) => {
+                const payload = item?.payload as { fcs?: number; nta?: number } | undefined
+                const fcs = payload?.fcs
+                const nta = payload?.nta
+                const detail = (typeof fcs === "number" && typeof nta === "number")
+                  ? ` (FCS: ${fcs.toFixed(1)}, NTA: ${nta.toFixed(1)})`
+                  : ""
+                return [`${value.toFixed(1)}%${detail}`, "Discrepancy"]
               }}
             />
             <ReferenceLine

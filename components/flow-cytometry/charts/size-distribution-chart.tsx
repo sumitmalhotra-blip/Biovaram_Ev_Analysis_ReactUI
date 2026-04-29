@@ -19,7 +19,7 @@ import {
 import { InteractiveChartWrapper, EnhancedChartTooltip } from "@/components/charts/interactive-chart-wrapper"
 import { CHART_COLORS } from "@/lib/store"
 import { useAnalysisStore, type SizeRange, type ScatterDataPoint } from "@/lib/store"
-import { useShallow } from "zustand/shallow"
+import { useShallow } from "zustand/react/shallow"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Eye, EyeOff, Layers, BarChart3, TrendingUp } from "lucide-react"
@@ -500,7 +500,7 @@ export const SizeDistributionChart = memo(function SizeDistributionChart({
           onMouseLeave={handlePanEnd}
         >
         <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1} debounce={80}>
-          <ComposedChart data={overlayData} barCategoryGap={0} margin={{ top: 10, right: 16, left: 6, bottom: 22 }}>
+          <ComposedChart data={overlayData ?? []} barCategoryGap={0} margin={{ top: 10, right: 16, left: 6, bottom: 22 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
             <XAxis
               dataKey="size"
@@ -642,7 +642,7 @@ export const SizeDistributionChart = memo(function SizeDistributionChart({
           onMouseLeave={handlePanEnd}
         >
         <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1} debounce={80}>
-          <ComposedChart data={mergedChartData} barCategoryGap={0} margin={{ top: 10, right: 16, left: 6, bottom: 22 }}>
+          <ComposedChart data={mergedChartData ?? []} barCategoryGap={0} margin={{ top: 10, right: 16, left: 6, bottom: 22 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
             <XAxis
               dataKey="size"

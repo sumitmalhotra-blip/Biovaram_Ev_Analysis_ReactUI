@@ -49,6 +49,8 @@ export interface FCSResult {
   fsc_median?: number;
   ssc_mean?: number;
   ssc_median?: number;
+  // Some backend responses use this alias.
+  median_diameter_nm?: number;
   particle_size_median_nm?: number;
   particle_size_mean_nm?: number;  // Added for P-002 Excel Export
   cd81_positive_pct?: number;
@@ -57,6 +59,8 @@ export interface FCSResult {
   channels?: string[];
   event_count?: number;
   sample_id?: string;
+  // Parquet-first pipeline may include the generated parquet path.
+  parquet_file_path?: string;
   size_distribution?: any;
   size_statistics?: {
     d10: number;
@@ -131,6 +135,8 @@ export interface DistributionFit {
 export interface DistributionOverlay {
   x: number[];
   y: number[];
+  // Some fits include a scaled series for chart overlay.
+  y_scaled?: number[];
   name: string;
 }
 
