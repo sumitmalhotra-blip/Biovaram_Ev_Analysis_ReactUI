@@ -274,8 +274,6 @@ async def _stream_bedrock(messages: list, max_tokens: int, temperature: float):
     client = boto3.client(
         service_name="bedrock-runtime",
         region_name=_os.environ.get("AWS_REGION", "us-east-1"),
-        aws_access_key_id=_os.environ.get("AWS_ACCESS_KEY_ID"),
-        aws_secret_access_key=_os.environ.get("AWS_SECRET_ACCESS_KEY"),
     )
     payload = {
         "messages": [{"role": m.role if m.role != "system" else "user", "content": [{"text": m.content}]} for m in messages],
@@ -480,8 +478,6 @@ async def chat(request: Request):
     client = boto3.client(
         service_name="bedrock-runtime",
         region_name=_os.environ.get("AWS_REGION", "us-east-1"),
-        aws_access_key_id=_os.environ.get("AWS_ACCESS_KEY_ID"),
-        aws_secret_access_key=_os.environ.get("AWS_SECRET_ACCESS_KEY"),
     )
     payload = {
         "messages": [{"role": m["role"] if m["role"] != "system" else "user", "content": [{"text": m["content"]}]} for m in msgs],
@@ -594,10 +590,9 @@ async def _chat_simple(request: ChatRequest):
             elif provider == "bedrock":
                 import boto3, json as _json, os as _os
                 bedrock = boto3.client(
-                    service_name="bedrock-runtime",
+                    "bedrock-runtime",
                     region_name=_os.environ.get("AWS_REGION", "us-east-1"),
-                    aws_access_key_id=_os.environ.get("AWS_ACCESS_KEY_ID"),
-                    aws_secret_access_key=_os.environ.get("AWS_SECRET_ACCESS_KEY"),
+                ),
                 )
                 payload = {
                     "messages": [{"role": m.role if m.role != "system" else "user", "content": [{"text": m.content}]} for m in request.messages],
