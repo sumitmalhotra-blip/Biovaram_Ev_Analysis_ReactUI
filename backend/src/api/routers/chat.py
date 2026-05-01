@@ -50,7 +50,7 @@ def _resolve_provider_config() -> Tuple[str, str, str]:
     provider_env = (os.environ.get("AI_PROVIDER") or "").strip().lower()
 
     if provider_env:
-        if provider_env not in {"openai", "anthropic", "bedrock"}:
+        if provider_env not in {"openai", "anthropic", "bedrock", "gateway"}:
             raise HTTPException(
                 status_code=500,
                 detail=(
@@ -58,6 +58,8 @@ def _resolve_provider_config() -> Tuple[str, str, str]:
                 ),
             )
 
+        if provider_env == "gateway":
+            return "gateway", os.environ.get("CRMIT_AI_GATEWAY_LICENSE_KEY", ""), os.environ.get("CRMIT_AI_GATEWAY_URL", "")
         if provider_env == "bedrock":
             return "bedrock", "bedrock", "amazon.nova-lite-v1:0"
         if provider_env == "anthropic":
@@ -587,12 +589,24 @@ async def _chat_simple(request: ChatRequest):
                 data = resp.json()
                 content = data.get("content", [{}])[0].get("text", "No response")
                 return ChatResponse(content=content, model=model or DEFAULT_ANTHROPIC_MODEL)
+            elif provider == "gateway":
+                gateway_url = api_key  # api_key holds gateway URL for gateway provider
+                license_key = default_model  # default_model holds license key
+                import os as _os2
+                gw_url = _os2.environ.get("CRMIT_AI_GATEWAY_URL", "")
+                gw_key = _os2.environ.get("CRMIT_AI_GATEWAY_LICENSE_KEY", "")
+                resp = await client.post(
+                    f"{gw_url}/api/v1/ai/gateway/chat",
+                    headers={"Content-Type": "application/json", "x-license-key": gw_key},
+                    json={"messages": [{"role": m.role, "content": m.content} for m in request.messages], "max_tokens": max_tokens, "temperature": temperature},
+                )
+                data = resp.json()
+                return ChatResponse(content=data.get("content", "No response"), model=data.get("model", "gateway"))
             elif provider == "bedrock":
                 import boto3, json as _json, os as _os
                 bedrock = boto3.client(
                     "bedrock-runtime",
                     region_name=_os.environ.get("AWS_REGION", "us-east-1"),
-                ),
                 )
                 payload = {
                     "messages": [{"role": m.role if m.role != "system" else "user", "content": [{"text": m.content}]} for m in request.messages],
