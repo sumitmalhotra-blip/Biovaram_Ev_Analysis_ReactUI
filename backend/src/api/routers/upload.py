@@ -608,6 +608,7 @@ async def upload_fcs_file(
         
         # Parse FCS file using professional parser
         fcs_results = None
+        fcs_parquet_path: Optional[Path] = None
         parser = None
         try:
             logger.info(f"🔬 Parsing FCS file with professional parser...")
@@ -624,6 +625,27 @@ async def upload_fcs_file(
                 # Get comprehensive statistics
                 logger.info(f"📊 Calculating comprehensive statistics...")
                 stats = parser.get_statistics()
+
+                try:
+                    safe_sample_id = "".join(
+                        c if c.isalnum() or c in ("-", "_") else "_"
+                        for c in sample_id
+                    )
+                    fcs_parquet_path = settings.parquet_dir / "nanofacs" / f"{timestamp}_{safe_sample_id}.fcs.parquet"
+                    # Ensure subfolder exists; otherwise parquet writing can fail silently
+                    fcs_parquet_path.parent.mkdir(parents=True, exist_ok=True)
+                    parser.to_parquet(
+                        fcs_parquet_path,
+                        metadata={
+                            "sample_id": sample_id,
+                            "sample_type": "fcs",
+                            "source_file": file.filename or "unknown.fcs",
+                        },
+                    )
+                    logger.info(f"🧠 Wrote NanoFACS parquet: {fcs_parquet_path}")
+                except Exception as parquet_error:
+                    logger.warning(f"⚠️ Could not write NanoFACS parquet for {sample_id}: {parquet_error}")
+                    fcs_parquet_path = None  # file was never written; don't return a dead path
                 
                 # Extract channel names and total events
                 event_count = stats.get('_summary', {}).get('total_events', len(parsed_data))
@@ -1185,6 +1207,7 @@ async def upload_fcs_file(
                         particle_size_median_nm=fcs_results.get('particle_size_median_nm'),
                         debris_pct=fcs_results.get('debris_pct'),
                         cd81_positive_pct=fcs_results.get('cd81_positive_pct'),
+                        parquet_file_path=_serialize_file_path(fcs_parquet_path) if fcs_parquet_path else None,
                     )
                     # Mark job as completed
                     await update_job_status(
@@ -1268,6 +1291,10 @@ async def upload_fcs_file(
             # Add ID to fcs_results for frontend compatibility
             fcs_results['id'] = db_id
             fcs_results['sample_id'] = sample_id
+            if fcs_parquet_path:
+                _pq_str = _serialize_file_path(fcs_parquet_path)
+                fcs_results['parquet_file_path'] = _pq_str
+                fcs_results['parquet_file'] = _pq_str  # both keys; frontend checks either
             response_data["fcs_results"] = fcs_results
         
         return response_data

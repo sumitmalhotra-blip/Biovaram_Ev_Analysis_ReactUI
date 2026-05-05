@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import { Send, Sparkles, Loader2, RotateCcw, Upload, FileUp, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,12 +14,65 @@ import { DefaultChatTransport } from "ai"
 import { useToast } from "@/hooks/use-toast"
 import { downloadChatHistory, type ChatMessageForExport } from "@/lib/export-utils"
 import { getApiBaseUrl } from "@/lib/module-config"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+
+function getMessageMarkdown(message: any): string {
+  const parts = Array.isArray(message?.parts) ? (message.parts as any[]) : []
+  const textParts = parts.filter((part) => part?.type === "text" && typeof part.text === "string" && part.text.trim())
+
+  if (textParts.length > 0) {
+    return textParts.map((p) => p.text).join("\n\n")
+  }
+
+  const content = message?.content
+  if (typeof content === "string" && content.trim()) {
+    return content
+  }
+
+  return ""
+}
+
+function MarkdownMessage({ markdown }: { markdown: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        p: ({ children }: any) => <p className="whitespace-pre-wrap wrap-break-word">{children}</p>,
+        ul: ({ children }: any) => <ul className="list-disc pl-5 space-y-1">{children}</ul>,
+        ol: ({ children }: any) => <ol className="list-decimal pl-5 space-y-1">{children}</ol>,
+        li: ({ children }: any) => <li className="whitespace-pre-wrap wrap-break-word">{children}</li>,
+        a: ({ children, href }: any) => (
+          <a
+            className="underline underline-offset-2"
+            href={href}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {children}
+          </a>
+        ),
+        code: ({ inline, children }: any) => {
+          if (inline) {
+            return <code className="rounded bg-muted/40 px-1 py-0.5 font-mono text-xs">{children}</code>
+          }
+          return <code className="font-mono text-xs">{children}</code>
+        },
+        pre: ({ children }: any) => (
+          <pre className="overflow-x-auto rounded-lg bg-muted/30 p-3">{children}</pre>
+        ),
+      }}
+    >
+      {markdown}
+    </ReactMarkdown>
+  )
+}
 
 const suggestedQuestions = [
   "How do I interpret flow cytometry gating strategies?",
@@ -43,27 +96,35 @@ export function ResearchChatTab() {
   // DESKTOP: Chat endpoint on FastAPI backend
   const chatApiUrl = `${getApiBaseUrl()}/api/v1/chat`
 
+  const chatTransport = useMemo(() => {
+    return new DefaultChatTransport({ api: chatApiUrl })
+  }, [chatApiUrl])
+
+  const handleChatError = useCallback((error: Error) => {
+    const message = error instanceof Error ? error.message : "Chat request failed."
+    toast({
+      title: "Chat request failed",
+      description: message,
+      variant: "destructive",
+    })
+  }, [])
+
   const { messages, sendMessage, status, setMessages } = useChat({
-    transport: new DefaultChatTransport({ api: chatApiUrl }),
-    onError: (error) => {
-      const message = error instanceof Error ? error.message : "Chat request failed."
-      toast({
-        title: "Chat request failed",
-        description: message,
-        variant: "destructive",
-      })
-    },
+    transport: chatTransport,
+    // Throttle UI updates to max once per 50 ms during streaming to prevent
+    // React from exceeding its nested-update limit on fast AI responses.
+    experimental_throttle: 50,
+    onError: handleChatError,
   })
 
   // Derive isLoading from status
   const isLoading = status === 'streaming' || status === 'submitted'
   
-  // Helper to send user message - sendMessage expects the message content as a string
-  const sendUserMessage = (content: string) => {
-    if (content.trim()) {
-      // Use type assertion through unknown to handle AI SDK type variations
-      void (sendMessage as unknown as (msg: string) => Promise<void>)(content)
-    }
+  const sendUserMessage = (text: string, files?: File[] | FileList) => {
+    const hasText = Boolean(text && text.trim())
+    const hasFiles = Array.isArray(files) ? files.length > 0 : Boolean(files && files.length > 0)
+    if (!hasText && !hasFiles) return
+    void sendMessage({ text, files } as any)
   }
 
   useEffect(() => {
@@ -106,10 +167,11 @@ export function ResearchChatTab() {
     return () => {
       cancelled = true
     }
-  }, [chatApiUrl, toast])
+  }, [chatApiUrl])
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || [])
+    const fileList = e.target.files
+    const files = Array.from(fileList || [])
     files.forEach((file) => {
       const fileInfo = {
         name: file.name,
@@ -127,9 +189,22 @@ export function ResearchChatTab() {
         analyzed: false,
       })
 
-      // Send message about uploaded file
-      sendUserMessage(`I've uploaded a file: ${file.name}. It contains ${fileInfo.type.toUpperCase()} data. Please analyze it and provide insights about the particle distribution, concentration, and any anomalies.`)
     })
+
+    // Send a single message containing all attachments.
+    if (fileList && fileList.length > 0) {
+      const summary = files
+        .map((f) => {
+          const t = f.name.endsWith(".fcs") ? "FCS" : f.name.endsWith(".csv") ? "CSV" : "NTA"
+          return `${f.name} (${t})`
+        })
+        .join(", ")
+
+      sendUserMessage(
+        `I've uploaded file(s): ${summary}. Please analyze them and provide insights about the particle distribution, concentration, and any anomalies.`,
+        fileList,
+      )
+    }
 
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
@@ -181,20 +256,20 @@ export function ResearchChatTab() {
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full p-4 md:p-6 gap-4">
+    <div className="flex-1 flex flex-col h-full p-2 md:p-3 gap-2">
       {/* Header */}
-      <div className="card-3d p-4 md:p-6 rounded-2xl">
+      <div className="card-3d p-3 md:p-4 rounded-2xl">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-linear-to-br from-primary to-accent flex items-center justify-center">
-              <Sparkles className="h-5 w-5 text-white" />
+          <div className="flex items-center gap-2">
+            <div className="w-9 h-9 rounded-lg bg-linear-to-br from-primary to-accent flex items-center justify-center flex-shrink-0">
+              <Sparkles className="h-4 w-4 text-white" />
             </div>
-            <div>
-              <h2 className="text-xl md:text-2xl font-bold">AI Research Assistant</h2>
-              <p className="text-xs md:text-sm text-muted-foreground">Your intelligent guide for EV analysis</p>
+            <div className="min-w-0">
+              <h2 className="text-lg md:text-xl font-bold">AI Research Assistant</h2>
+              <p className="text-xs text-muted-foreground hidden md:block">Your intelligent guide for EV analysis</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 flex-shrink-0">
             {messages.length > 0 && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -225,15 +300,15 @@ export function ResearchChatTab() {
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col min-h-0 gap-4 card-3d p-4 md:p-6 rounded-2xl border border-border/50 overflow-hidden">
+      <div className="flex-1 flex flex-col min-h-0 gap-2 card-3d p-3 md:p-4 rounded-2xl border border-border/50 overflow-hidden">
         {!chatAvailable && (
-          <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+          <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
             <p className="font-medium">AI chat is currently unavailable</p>
-            <p className="mt-1">{chatStatusMessage || "Configure provider and API key, then retry."}</p>
+            <p className="mt-0.5">{chatStatusMessage || "Configure provider and API key, then retry."}</p>
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto custom-scrollbar">
+        <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-6 text-center min-h-full py-8">
               <div className="space-y-2">
@@ -289,40 +364,39 @@ export function ResearchChatTab() {
               </div>
             </div>
           ) : (
-            <div className="space-y-4 pb-4">
+            <div className="space-y-3 pb-3">
               {messages.map((message) => (
                 <div
                   key={message.id}
                   className={cn(
-                    "flex gap-3 animate-in fade-in slide-in-from-bottom-2",
+                    "flex gap-2 animate-in fade-in slide-in-from-bottom-2",
                     message.role === "user" ? "justify-end" : "justify-start",
                   )}
                 >
                   <div
                     className={cn(
-                      "card-3d max-w-md md:max-w-2xl p-4 rounded-xl",
+                      "card-3d max-w-sm md:max-w-3xl p-3 rounded-lg text-sm",
                       message.role === "user"
                         ? "bg-primary/20 text-foreground rounded-bl-none"
                         : "bg-secondary/50 text-foreground rounded-tl-none border border-border/50",
                     )}
                   >
-                    <div className="text-sm leading-relaxed space-y-2">
-                      {message.parts?.map((part, idx) => {
-                        if (part.type === "text") {
-                          return <p key={idx}>{part.text}</p>
-                        }
-                        return null
-                      })}
+                    <div className="leading-relaxed space-y-1">
+                      {(() => {
+                        const markdown = getMessageMarkdown(message as any)
+                        if (!markdown) return null
+                        return <MarkdownMessage markdown={markdown} />
+                      })()}
                     </div>
                   </div>
                 </div>
               ))}
 
               {isLoading && (
-                <div className="flex gap-3">
-                  <div className="card-3d bg-secondary/50 p-4 rounded-xl rounded-tl-none flex gap-2 items-center">
-                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                    <span className="text-sm text-muted-foreground">AI Assistant analyzing...</span>
+                <div className="flex gap-2">
+                  <div className="card-3d bg-secondary/50 p-2 rounded-lg rounded-tl-none flex gap-2 items-center">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                    <span className="text-xs text-muted-foreground">AI Assistant analyzing...</span>
                   </div>
                 </div>
               )}
@@ -330,54 +404,52 @@ export function ResearchChatTab() {
           )}
         </div>
 
-        {/* Uploaded Files Display */}
+        {/* Uploaded Files Display - Compact */}
         {uploadedFiles.length > 0 && (
-          <Card className="card-3d bg-secondary/30 border-border/50">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Uploaded Files</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 max-h-24 overflow-y-auto custom-scrollbar">
+          <div className="card-3d bg-secondary/20 border border-border/30 rounded-lg p-2">
+            <div className="text-xs font-medium text-muted-foreground mb-1">Files ({uploadedFiles.length})</div>
+            <div className="space-y-0.5 max-h-16 overflow-y-auto custom-scrollbar">
               {uploadedFiles.map((file, idx) => (
-                <div key={idx} className="flex items-center gap-2 text-sm">
-                  <FileUp className="h-4 w-4 text-primary shrink-0" />
-                  <span className="flex-1 truncate">{file.name}</span>
-                  <span className="text-xs text-muted-foreground shrink-0">{(file.size / 1024).toFixed(2)} KB</span>
+                <div key={idx} className="flex items-center gap-1.5 text-xs">
+                  <FileUp className="h-3 w-3 text-primary shrink-0" />
+                  <span className="flex-1 truncate font-medium">{file.name}</span>
+                  <span className="text-xs text-muted-foreground shrink-0">({(file.size / 1024).toFixed(0)}KB)</span>
                 </div>
               ))}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         )}
       </div>
 
       {/* Input Area */}
-      <div className="space-y-3">
+      <div className="space-y-1.5">
         {messages.length > 0 && (
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-1 flex-wrap">
             <Button
-              variant="outline"
-              size="sm"
+              variant="ghost"
+              size="xs"
               onClick={() => fileInputRef.current?.click()}
-              className="gap-2 rounded-xl bg-transparent"
+              className="gap-1.5 h-7 px-2 text-xs rounded-lg"
             >
-              <Upload className="h-4 w-4" />
-              Upload More Files
+              <Upload className="h-3 w-3" />
+              <span className="hidden sm:inline">Add Files</span>
             </Button>
             <Button
-              variant="outline"
-              size="sm"
+              variant="ghost"
+              size="xs"
               onClick={handleResetTab}
-              className="gap-2 rounded-xl bg-transparent"
+              className="gap-1.5 h-7 px-2 text-xs rounded-lg"
             >
-              <RotateCcw className="h-4 w-4" />
-              Start New Analysis
+              <RotateCcw className="h-3 w-3" />
+              <span className="hidden sm:inline">New</span>
             </Button>
           </div>
         )}
 
-        <div className="card-3d flex items-center gap-2 p-2 rounded-xl border border-border/50">
+        <div className="card-3d flex items-center gap-1.5 p-2 rounded-lg border border-border/50">
           <Input
-            placeholder="Ask me anything about your data or analysis methodology..."
-            className="flex-1 border-0 bg-transparent focus-visible:ring-0 text-sm md:text-base"
+            placeholder="Ask me anything about your data or analysis..."
+            className="flex-1 border-0 bg-transparent focus-visible:ring-0 text-sm h-8"
             disabled={isLoading || !chatAvailable}
             onKeyPress={(e) => {
               if (e.key === "Enter" && !isLoading) {
@@ -391,8 +463,8 @@ export function ResearchChatTab() {
           />
           <Button
             disabled={isLoading || !chatAvailable}
-            size="icon"
-            className="h-8 w-8 rounded-lg shrink-0"
+            size="sm"
+            className="h-7 w-7 rounded-md shrink-0 p-0"
             onClick={(e) => {
               const inputEl = e.currentTarget.parentElement?.querySelector("input") as HTMLInputElement
               if (inputEl?.value.trim() && !isLoading) {
@@ -401,7 +473,7 @@ export function ResearchChatTab() {
               }
             }}
           >
-            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
           </Button>
         </div>
       </div>

@@ -40,6 +40,7 @@ import { EVSizeCategoryBarChart } from "./charts/ev-size-category-bar-chart"
 import { NTAStatisticsCards } from "./statistics-cards"
 import { NTASizeDistributionBreakdown } from "./size-distribution-breakdown"
 import { SupplementaryMetadataTable } from "./supplementary-metadata-table"
+import { NTAAIPanel } from "./nta-ai-panel"
 import { 
   generateMarkdownReport, 
   downloadMarkdownReport,
@@ -988,6 +989,8 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
           </Tabs>
         </CardContent>
       </Card>
+
+      <NTAAIPanel sampleId={sampleId} />
     </div>
   )
 }

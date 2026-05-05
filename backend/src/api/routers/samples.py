@@ -25,11 +25,14 @@ from sqlalchemy.ext.asyncio import AsyncSession  # type: ignore[import-not-found
 from sqlalchemy import select, func  # type: ignore[import-not-found]
 from loguru import logger
 
+from src.api.config import get_settings
+
 from src.database.connection import get_session
 from src.database.models import Sample, FCSResult, NTAResult, QCReport, ProcessingJob  # type: ignore[import-not-found]
 from src.api.auth_middleware import optional_auth
 
 router = APIRouter()
+settings = get_settings()
 
 
 # ============================================================================
@@ -742,6 +745,31 @@ async def get_fcs_results(
             size_distribution_histogram = None
             size_stats_computed = None
             parquet_path = getattr(fcs, 'parquet_file_path', None)
+
+            if not parquet_path:
+                candidate_dirs = [
+                    settings.parquet_dir / "nanofacs",
+                    settings.parquet_dir,
+                ]
+                search_terms = [sample_id.lower()]
+
+                if getattr(sample, "biological_sample_id", None):
+                    search_terms.append(str(sample.biological_sample_id).lower())
+
+                for base_dir in candidate_dirs:
+                    if parquet_path or not base_dir.exists():
+                        continue
+
+                    for term in search_terms:
+                        matches = sorted(base_dir.rglob(f"*{term}*.fcs.parquet"))
+                        if matches:
+                            parquet_path = str(matches[0])
+                            break
+                        matches = sorted(base_dir.rglob(f"*{term}*.parquet"))
+                        if matches:
+                            parquet_path = str(matches[0])
+                            break
+
             
             if parquet_path:
                 try:
@@ -799,7 +827,8 @@ async def get_fcs_results(
                 "debris_pct": fcs.debris_pct,
                 "doublets_pct": fcs.doublets_pct,
                 "processed_at": processed.isoformat() if processed else None,
-                "parquet_file": fcs.parquet_file_path,
+                "parquet_file": parquet_path,
+                "parquet_file_path": parquet_path,
                 "size_distribution": size_distribution_histogram,
                 "size_statistics": size_stats_computed,
             })

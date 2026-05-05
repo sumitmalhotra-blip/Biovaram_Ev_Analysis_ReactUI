@@ -114,6 +114,8 @@ export interface FCSResult {
       d90?: number;
     };
   };
+  parquet_file_path?: string;
+  parquet_file?: string;  // alias; backend sets both keys
 }
 
 // Distribution Analysis Response types
@@ -1384,9 +1386,12 @@ class ApiClient {
     }, CACHE_TTL.SAMPLE_DETAIL);
   }
 
-  async getFCSResults(sampleId: string): Promise<{ sample_id: string; results: FCSResult[] }> {
+  async getFCSResults(
+    sampleId: string,
+    options?: { bypassCache?: boolean }
+  ): Promise<{ sample_id: string; results: FCSResult[] }> {
     const cacheKey = `sample:${sampleId}:fcs`;
-    return this.cache.dedup(cacheKey, async () => {
+    const fetchResults = async () => {
       try {
         const response = await fetch(`${this.baseUrl}/samples/${sampleId}/fcs`, {
           method: "GET",
@@ -1398,6 +1403,14 @@ class ApiClient {
       } catch (error) {
         this.handleNetworkError(error);
       }
+    };
+
+    if (options?.bypassCache) {
+      return fetchResults();
+    }
+
+    return this.cache.dedup(cacheKey, async () => {
+      return fetchResults();
     }, CACHE_TTL.FCS_RESULTS);
   }
 

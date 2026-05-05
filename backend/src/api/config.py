@@ -15,6 +15,14 @@ from pydantic_settings import BaseSettings  # type: ignore[import-not-found]
 from functools import lru_cache
 
 
+REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _resolve_repo_path(path: Path) -> Path:
+    """Resolve relative paths against repository root for stable behavior."""
+    return path if path.is_absolute() else (REPO_ROOT / path).resolve()
+
+
 class Settings(BaseSettings):
     """
     Application settings loaded from environment variables.
@@ -107,7 +115,22 @@ def get_settings() -> Settings:
         settings = get_settings()
         print(settings.database_url)
     """
-    return Settings()
+    settings = Settings()
+
+    # Make file storage paths stable regardless of launch directory.
+    settings.upload_dir = _resolve_repo_path(settings.upload_dir)
+    settings.parquet_dir = _resolve_repo_path(settings.parquet_dir)
+    settings.temp_dir = _resolve_repo_path(settings.temp_dir)
+
+    # Normalize relative SQLite URLs (sqlite:///./data/crmit.db) to repo-root absolute path.
+    for prefix in ("sqlite+aiosqlite:///./", "sqlite:///./"):
+        if settings.database_url.startswith(prefix):
+            rel_db = settings.database_url[len(prefix):]
+            abs_db = (REPO_ROOT / rel_db).resolve().as_posix()
+            settings.database_url = f"{prefix.split('./')[0]}{abs_db}"
+            break
+
+    return settings
 
 
 # Create directories on module import

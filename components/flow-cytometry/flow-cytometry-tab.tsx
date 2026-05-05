@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { FileUploadZone } from "./file-upload-zone"
 import { DualFileUploadZone } from "./dual-file-upload-zone"
 import { OverlayHistogramChart } from "./overlay-histogram-chart"
@@ -31,11 +31,30 @@ export function FlowCytometryTab() {
     sidebarCollapsed: s.sidebarCollapsed,
     resetFCSAnalysis: s.resetFCSAnalysis,
   })))
-  const { checkHealth } = useApi()
+  const { checkHealth, getFCSResults } = useApi()
   const { toast } = useToast()
   const [showConditionsDialog, setShowConditionsDialog] = useState(false)
   const [justUploadedSampleId, setJustUploadedSampleId] = useState<string | null>(null)
   const [uploadMode, setUploadMode] = useState<"single" | "comparison">("single")
+  // Paths available immediately from the store (set synchronously during render so the AI
+  // panel always receives the correct value the moment "Open NanoFACS AI" is clicked).
+  const storeParquetPaths = useMemo(() => [
+    fcsAnalysis.results?.parquet_file_path,
+    fcsAnalysis.results?.parquet_file,
+    secondaryFcsAnalysis.results?.parquet_file_path,
+    secondaryFcsAnalysis.results?.parquet_file,
+  ].filter((p): p is string => Boolean(p)), [
+    fcsAnalysis.results?.parquet_file_path,
+    fcsAnalysis.results?.parquet_file,
+    secondaryFcsAnalysis.results?.parquet_file_path,
+    secondaryFcsAnalysis.results?.parquet_file,
+  ])
+
+  // Async-hydrated paths: used only when the upload response had no parquet path
+  // (e.g., re-loading a previously analysed sample by sample ID).
+  const [hydratedPaths, setHydratedPaths] = useState<string[]>([])
+
+  const nanofacsFilePaths = storeParquetPaths.length > 0 ? storeParquetPaths : hydratedPaths
 
   // ── Main inner tab: FCS or NanoFACS AI ──
   const [mainTab, setMainTab] = useState<"fcs" | "ai">("fcs")
@@ -51,6 +70,39 @@ export function FlowCytometryTab() {
       setShowConditionsDialog(true)
     }
   }, [fcsAnalysis.results, fcsAnalysis.sampleId, fcsAnalysis.experimentalConditions])
+
+  // Async fallback: hydrate paths from API when the store result has no parquet path
+  // (happens when loading a previously-analysed sample rather than a fresh upload).
+  useEffect(() => {
+    if (storeParquetPaths.length > 0) {
+      setHydratedPaths([])  // clear stale hydrated paths once store has fresh ones
+      return
+    }
+
+    const sampleIds = [fcsAnalysis.sampleId, secondaryFcsAnalysis.sampleId]
+      .filter((id): id is string => Boolean(id))
+    if (sampleIds.length === 0) return
+
+    let cancelled = false
+    const hydrate = async () => {
+      const fetched: string[] = []
+      for (const sampleId of sampleIds) {
+        const results = await getFCSResults(sampleId, true)
+        const first = results?.[0]
+        const p = first?.parquet_file_path ?? first?.parquet_file
+        if (p) fetched.push(p)
+      }
+      if (!cancelled && fetched.length > 0) setHydratedPaths(fetched)
+    }
+
+    hydrate().catch(() => {})
+    return () => { cancelled = true }
+  }, [
+    storeParquetPaths.length,
+    fcsAnalysis.sampleId,
+    secondaryFcsAnalysis.sampleId,
+    getFCSResults,
+  ])
 
   const handleSaveConditions = (conditions: ExperimentalConditions) => {
     setFCSExperimentalConditions(conditions)
@@ -70,7 +122,6 @@ export function FlowCytometryTab() {
   const hasResults = fcsAnalysis.results !== null
   const hasSecondaryResults = secondaryFcsAnalysis.results !== null
   const error = fcsAnalysis.error || secondaryFcsAnalysis.error
-
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-6">
 
@@ -251,6 +302,23 @@ export function FlowCytometryTab() {
           {uploadMode === "comparison" && (hasResults || hasSecondaryResults) && (
             <ComparisonAnalysisView />
           )}
+
+          {(hasResults || hasSecondaryResults) && (
+            <Card className="card-3d">
+              <CardContent className="p-4 md:p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                  <p className="font-medium">NanoFACS AI is ready</p>
+                  <p className="text-sm text-muted-foreground">
+                    Open the AI tab to analyze the parquet files generated from this upload.
+                  </p>
+                </div>
+                <Button onClick={() => setMainTab("ai")} className="gap-2">
+                  <Brain className="h-4 w-4" />
+                  Open NanoFACS AI
+                </Button>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 
@@ -262,10 +330,11 @@ export function FlowCytometryTab() {
       {mainTab === "ai" && (
         <div>
           <NanoFACSAIPanel
-            filePaths={[]}
+            filePaths={nanofacsFilePaths}
+            sampleId={fcsAnalysis.sampleId || secondaryFcsAnalysis.sampleId || undefined}
             experimentDescription="PC3 NanoFACS EV Analysis"
             parametersOfInterest={["Size", "MeanIntensity"]}
-            sameample={true}
+            sameSample={uploadMode === "single"}
           />
         </div>
       )}

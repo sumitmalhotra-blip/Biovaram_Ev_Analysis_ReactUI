@@ -31,7 +31,13 @@
 
 import { useState, useCallback, useEffect } from "react"
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+import { getApiBaseUrl } from "@/lib/module-config"
+
+let API_BASE = getApiBaseUrl()
+// Safety: prevent double prefix if env var includes /api/v1
+if (API_BASE.endsWith("/api/v1")) {
+  API_BASE = API_BASE.replace(/\/api\/v1$/, "")
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -82,6 +88,7 @@ interface ChatMsg { role: "user" | "assistant"; content: string }
 
 interface Props {
   filePaths?: string[]
+  sampleId?: string
   experimentDescription?: string
   parametersOfInterest?: string[]
   sameSample?: boolean
@@ -91,6 +98,7 @@ interface Props {
 
 export function NanoFACSAIPanel({
   filePaths: externalPaths = [],
+  sampleId,
   experimentDescription = "NanoFACS EV Analysis",
   parametersOfInterest = ["Size", "MeanIntensity"],
   sameSample = true,
@@ -116,6 +124,48 @@ export function NanoFACSAIPanel({
   const [showPicker, setShowPicker] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadMsg, setUploadMsg] = useState("")
+  // true once the list-files fetch (or externalPaths injection) has resolved
+  const [filesChecked, setFilesChecked] = useState(false)
+
+  useEffect(() => {
+    if (externalPaths.length > 0) {
+      setFilePaths(externalPaths)
+      setSelectedPaths(new Set(externalPaths))
+      setResult(null)
+      setCompareResult(null)
+      setFilesChecked(true)
+    }
+  }, [externalPaths])
+
+  useEffect(() => {
+    if (externalPaths.length > 0 || !sampleId) return
+
+    let cancelled = false
+    setFilesChecked(false)
+
+    fetch(`${API_BASE}/api/v1/samples/${sampleId}/fcs`)
+      .then(r => r.json())
+      .then(data => {
+        if (cancelled) return
+
+        const first = data.results?.[0]
+        const path = first?.parquet_file_path ?? first?.parquet_file
+        if (path) {
+          setFilePaths([path])
+          setSelectedPaths(new Set([path]))
+          setAllFiles([{ path, name: path.split(/[/\\]/).pop() || path, folder: "sample" }])
+          setFilesChecked(true)
+          return
+        }
+
+        setFilesChecked(true)
+      })
+      .catch(() => {
+        if (!cancelled) setFilesChecked(true)
+      })
+
+    return () => { cancelled = true }
+  }, [externalPaths.length, sampleId])
 
   const handleParquetUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
@@ -142,10 +192,10 @@ export function NanoFACSAIPanel({
         .then(r => r.json())
         .then(data => {
           if (data.files?.length > 0) {
-            const files = data.files.map((f: { path: string; name: string }) => ({
+              const files = data.files.map((f: { path: string; name: string }) => ({
               path: f.path,
               name: f.name,
-              folder: f.path.split("/").slice(-2, -1)[0] || "files"
+                folder: f.path.split(/[/\\]/).slice(-2, -1)[0] || "files"
             }))
             setAllFiles(files)
             // Auto-select newly uploaded files
@@ -170,17 +220,17 @@ export function NanoFACSAIPanel({
           const files = data.files.map((f: { path: string; name: string }) => ({
             path: f.path,
             name: f.name,
-            folder: f.path.split("/").slice(-2, -1)[0] || "files"
+            folder: f.path.split(/[/\\]/).slice(-2, -1)[0] || "files"
           }))
           setAllFiles(files)
-          // Select all by default
           const paths = files.map((f: {path: string}) => f.path)
           setFilePaths(paths)
           setSelectedPaths(new Set(paths))
         }
+        setFilesChecked(true)
       })
-      .catch(() => {})
-  }, [])
+      .catch(() => { setFilesChecked(true) })
+  }, [externalPaths])
 
   const toggleFile = (path: string) => {
     setSelectedPaths(prev => {
@@ -232,6 +282,16 @@ export function NanoFACSAIPanel({
     }
   }, [filePaths, experimentDescription, parametersOfInterest, sameSample])
 
+  // Auto-run analysis when file paths arrive from the FCS tab
+  useEffect(() => {
+    if (filePaths.length > 0 && !result && !loading) {
+      const timer = setTimeout(() => {
+        runAnalysis()
+      }, 500)
+      return () => clearTimeout(timer)
+    }
+  }, [filePaths, result, loading, runAnalysis])
+
   const runCompare = useCallback(async () => {
     setCompareLoading(true)
     try {
@@ -268,7 +328,55 @@ export function NanoFACSAIPanel({
     }
   }, [question, filePaths])
 
-  if (!filePaths.length) return null
+  useEffect(() => {
+    if (externalPaths.length > 0 && filePaths.length > 0 && !result && !loading) {
+      const timer = setTimeout(() => {
+        runAnalysis()
+      }, 500)
+      return () => clearTimeout(timer)
+    }
+  }, [externalPaths.length, filePaths, result, loading, runAnalysis])
+
+  if (!filesChecked) {
+    return (
+      <div style={s.card}>
+        <div style={{textAlign: "center", padding: "40px 20px", color: "#6b7280"}}>
+          <p style={{fontSize: 14}}>Loading available parquet files…</p>
+          <p style={{fontSize: 12, marginTop: 8}}>This may take a few seconds.</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!filePaths.length && allFiles.length === 0) {
+    return (
+      <div style={s.card}>
+        <div style={{textAlign: "center", padding: "40px 20px", color: "#6b7280"}}>
+          <p style={{fontSize: 15, fontWeight: 600, color: "#374151", marginBottom: 8}}>No parquet files available</p>
+          <p style={{fontSize: 13, marginBottom: 16}}>
+            Upload an FCS file on the <strong>FCS Analysis</strong> tab — a parquet file is generated automatically and will appear here.
+          </p>
+          <p style={{fontSize: 12, color: "#9ca3af"}}>
+            Or upload a <code>.fcs.parquet</code> file directly using the button below.
+          </p>
+          <div style={{marginTop: 16}}>
+            <label style={s.btnUpload}>
+              ⬆ Upload Parquet File
+              <input
+                type="file"
+                accept=".parquet"
+                multiple
+                onChange={handleParquetUpload}
+                style={{ display: "none" }}
+                disabled={uploading}
+              />
+            </label>
+            {uploadMsg && <p style={{fontSize: 12, color: "#059669", marginTop: 8}}>{uploadMsg}</p>}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   const tabs = [
     { id: "data",     label: "1. Data Overview" },

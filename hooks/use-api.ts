@@ -407,7 +407,12 @@ export function useApi() {
           console.log("[uploadFCS] FCS results:", response.fcs_results)
           console.log("[uploadFCS] File metadata:", response.file_metadata)
 
-          if (response.fcs_results) {
+          const freshResults = await apiClient.getFCSResults(response.sample_id, { bypassCache: true }).catch(() => null)
+          const firstFreshResult = freshResults?.results?.[0]
+
+          if (firstFreshResult) {
+            setFCSResults(firstFreshResult)
+          } else if (response.fcs_results) {
             setFCSResults(response.fcs_results)
           }
           
@@ -565,11 +570,11 @@ export function useApi() {
   )
 
   const getFCSResults = useCallback(
-    async (sampleId: string): Promise<FCSResult[] | null> => {
+    async (sampleId: string, bypassCache = false): Promise<FCSResult[] | null> => {
       if (apiClient.offline) return null
       
       try {
-        const response = await apiClient.getFCSResults(sampleId)
+        const response = await apiClient.getFCSResults(sampleId, { bypassCache })
         return response.results
       } catch (error) {
         if (!isNetworkError(error)) {

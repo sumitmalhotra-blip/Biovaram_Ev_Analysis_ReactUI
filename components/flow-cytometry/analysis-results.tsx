@@ -1004,7 +1004,7 @@ export function AnalysisResults() {
                   Diameter vs SSC
                 </TabsTrigger>
               </TabsList>
-              <div className="absolute right-0 top-0 h-full w-8 bg-gradient-to-l from-background to-transparent pointer-events-none" />
+              <div className="absolute right-0 top-0 h-full w-8 bg-linear-to-l from-background to-transparent pointer-events-none" />
             </div>
 
             <TabsContent value="dashboard" className="space-y-4">
@@ -1432,13 +1432,14 @@ export function AnalysisResults() {
         </Card>
       </div>
 
-      {/* NanoFACS AI Panel */}
-      {fcsAnalysis.results && (
+      {/* NanoFACS AI Panel — only shown when a parquet file was produced for this upload */}
+      {(fcsAnalysis.results?.parquet_file_path || fcsAnalysis.results?.parquet_file) && (
         <NanoFACSAIPanel
-          filePaths={fcsAnalysis.results.parquet_file_path ? [fcsAnalysis.results.parquet_file_path] : []}
+          filePaths={[fcsAnalysis.results.parquet_file_path || fcsAnalysis.results.parquet_file || ""]}
+          sampleId={fcsAnalysis.sampleId || undefined}
           experimentDescription={fcsAnalysis.experimentalConditions?.notes || "FCS EV Analysis"}
           parametersOfInterest={["Size", "MeanIntensity"]}
-          sameample={true}
+          sameSample={true}
         />
       )}
 
