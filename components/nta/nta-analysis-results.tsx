@@ -41,6 +41,7 @@ import { NTAStatisticsCards } from "./statistics-cards"
 import { NTASizeDistributionBreakdown } from "./size-distribution-breakdown"
 import { SupplementaryMetadataTable } from "./supplementary-metadata-table"
 import { NTAMetadataCompareTable } from "./nta-metadata-compare-table"
+import { NTAAIPanel } from "./nta-ai-panel"
 import { captureChartAsImage } from "@/components/dashboard/saved-images-gallery"
 import { 
   generateMarkdownReport, 
@@ -1248,6 +1249,8 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
           </Tabs>
         </CardContent>
       </Card>
+
+      <NTAAIPanel sampleId={sampleId} />
     </div>
   )
 }

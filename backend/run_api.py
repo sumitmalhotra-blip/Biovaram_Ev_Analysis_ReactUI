@@ -1,4 +1,5 @@
 """Startup script for CRMIT FastAPI backend."""
+import os
 import sys
 from pathlib import Path
 
@@ -8,7 +9,13 @@ sys.path.insert(0, str(backend_dir))
 
 import uvicorn
 from dotenv import load_dotenv
-load_dotenv(Path(__file__).parent / ".env")
+
+default_env_path = Path(__file__).parent / ".env"
+override_env = (os.environ.get("CRMIT_ENV_FILE") or "").strip()
+env_path = Path(override_env) if override_env else default_env_path
+
+# Keep this silent; callers may have secrets in env files.
+load_dotenv(env_path)
 from src.api.main import app
 
 if __name__ == "__main__":

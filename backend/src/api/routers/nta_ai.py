@@ -19,7 +19,12 @@ Date: March 2026
 
 import os
 import json
-import boto3
+from pathlib import Path
+import numpy as np
+try:
+    import boto3  # type: ignore
+except ImportError:  # pragma: no cover
+    boto3 = None  # type: ignore
 from typing import Optional
 from datetime import datetime
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ProfileNotFound  # type: ignore
@@ -52,6 +57,15 @@ def _get_bedrock_client():
         has_profile = bool((os.getenv("AWS_PROFILE") or "").strip())
         if not (has_env_creds or has_profile):
             return None
+
+    if boto3 is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "AWS Bedrock is not available because 'boto3' is not installed. "
+                "Install backend requirements or run: pip install boto3"
+            ),
+        )
 
     try:
         return get_bedrock_runtime_client()
@@ -261,6 +275,8 @@ async def _fetch_nta_results(sample_id: str) -> dict:
         from src.database.models import NTAResult, Sample
         from sqlalchemy import select, or_
 
+        from src.parsers.nta_parser import NTAParser
+
         import os
         os.chdir(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))))
 
@@ -280,49 +296,265 @@ async def _fetch_nta_results(sample_id: str) -> dict:
                 logger.warning(f"Sample not found: {sample_id}")
                 return {}
 
-            nta_result = await session.execute(
-                select(NTAResult).where(NTAResult.sample_id == sample.id)
-            )
-            nta = nta_result.scalars().first()
+            # IMPORTANT: Do not select the full ORM entity here.
+            # The deployed DB schema (especially SQLite) may lag behind the SQLAlchemy model.
+            # Selecting `NTAResult` would request columns that don't exist and crash.
+            nta_row = (
+                await session.execute(
+                    select(
+                        NTAResult.mean_size_nm,
+                        NTAResult.median_size_nm,
+                        NTAResult.mode_size_nm,
+                        NTAResult.d10_nm,
+                        NTAResult.d50_nm,
+                        NTAResult.d90_nm,
+                        NTAResult.std_dev_nm,
+                        NTAResult.concentration_particles_ml,
+                        NTAResult.bin_50_80nm_pct,
+                        NTAResult.bin_80_100nm_pct,
+                        NTAResult.bin_100_120nm_pct,
+                        NTAResult.bin_120_150nm_pct,
+                        NTAResult.bin_150_200nm_pct,
+                        NTAResult.temperature_celsius,
+                        NTAResult.ph,
+                        NTAResult.conductivity,
+                        NTAResult.parquet_file_path,
+                        NTAResult.measurement_date,
+                    ).where(NTAResult.sample_id == sample.id)
+                )
+            ).first()
 
-            if not nta:
-                logger.warning(f"No NTA result for sample DB id: {sample.id}")
-                return {}
+            def _resolve_existing_file_path(raw_path: str) -> Path:
+                candidate = Path(raw_path)
+                if candidate.exists():
+                    return candidate
+
+                if not candidate.is_absolute():
+                    cwd_candidate = Path.cwd() / candidate
+                    if cwd_candidate.exists():
+                        return cwd_candidate
+
+                raise FileNotFoundError(f"Sample NTA file not found: {raw_path}")
+
+            def _calculate_nta_results_from_parsed_df(parsed_data) -> dict:
+                size_col = None
+                count_col = None
+                conc_col = None
+
+                for col in parsed_data.columns:
+                    col_lower = col.lower()
+                    if size_col is None and (col_lower == "size_nm" or ("size" in col_lower and "nm" in col_lower)):
+                        size_col = col
+                    if count_col is None and (col_lower == "particle_count" or "particle_count" in col_lower):
+                        count_col = col
+                    if conc_col is None and (col_lower == "concentration_particles_ml" or ("concentration" in col_lower and "particles" in col_lower)):
+                        conc_col = col
+
+                if not size_col:
+                    raise ValueError("Could not find a size column in NTA parsed data")
+
+                sizes = np.asarray(parsed_data[size_col].values, dtype=np.float64)
+                if count_col and count_col in parsed_data.columns:
+                    counts = np.asarray(parsed_data[count_col].values, dtype=np.float64)
+                else:
+                    counts = np.ones_like(sizes)
+
+                valid_mask = np.isfinite(sizes) & np.isfinite(counts) & (counts > 0)
+                sizes_valid = np.asarray(sizes[valid_mask], dtype=np.float64)
+                counts_valid = np.asarray(counts[valid_mask], dtype=np.float64)
+
+                if len(sizes_valid) == 0 or float(np.sum(counts_valid)) <= 0:
+                    raise ValueError("NTA parsed data has no valid size bins")
+
+                sort_idx = np.argsort(sizes_valid)
+                sizes_sorted = sizes_valid[sort_idx]
+                counts_sorted = counts_valid[sort_idx]
+                cumsum = np.cumsum(counts_sorted)
+                total_particles = float(cumsum[-1])
+
+                d10 = float(sizes_sorted[min(np.searchsorted(cumsum, total_particles * 0.1), len(sizes_sorted) - 1)])
+                d50 = float(sizes_sorted[min(np.searchsorted(cumsum, total_particles * 0.5), len(sizes_sorted) - 1)])
+                d90 = float(sizes_sorted[min(np.searchsorted(cumsum, total_particles * 0.9), len(sizes_sorted) - 1)])
+                mean_size = float(np.average(sizes_valid, weights=counts_valid))
+                weighted_var = float(np.average((sizes_valid - mean_size) ** 2, weights=counts_valid))
+                weighted_std = float(np.sqrt(weighted_var))
+
+                total_concentration = None
+                if conc_col and conc_col in parsed_data.columns:
+                    conc_values = parsed_data[conc_col].dropna()
+                    if len(conc_values) > 0:
+                        total_concentration = float(conc_values.sum())
+
+                bin_30_50 = float(np.sum(counts_valid[(sizes_valid >= 30) & (sizes_valid < 50)])) / total_particles * 100
+                bin_50_80 = float(np.sum(counts_valid[(sizes_valid >= 50) & (sizes_valid < 80)])) / total_particles * 100
+                bin_80_100 = float(np.sum(counts_valid[(sizes_valid >= 80) & (sizes_valid < 100)])) / total_particles * 100
+                bin_100_120 = float(np.sum(counts_valid[(sizes_valid >= 100) & (sizes_valid < 120)])) / total_particles * 100
+                bin_120_150 = float(np.sum(counts_valid[(sizes_valid >= 120) & (sizes_valid < 150)])) / total_particles * 100
+                bin_150_200 = float(np.sum(counts_valid[(sizes_valid >= 150) & (sizes_valid < 200)])) / total_particles * 100
+
+                return {
+                    "mean_size_nm": mean_size,
+                    "median_size_nm": d50,
+                    "d10_nm": d10,
+                    "d50_nm": d50,
+                    "d90_nm": d90,
+                    "std_dev_nm": weighted_std,
+                    "concentration_particles_ml": total_concentration,
+                    "total_particles": int(total_particles),
+                    "bin_30_50nm_pct": bin_30_50,
+                    "bin_50_80nm_pct": bin_50_80,
+                    "bin_80_100nm_pct": bin_80_100,
+                    "bin_100_120nm_pct": bin_100_120,
+                    "bin_120_150nm_pct": bin_120_150,
+                    "bin_150_200nm_pct": bin_150_200,
+                }
+
+            def _parse_measurement_datetime(raw_metadata: dict) -> Optional[datetime]:
+                date_str = raw_metadata.get("date")
+                time_str = raw_metadata.get("time")
+                if not date_str:
+                    return None
+                candidate = date_str.strip() + (f" {time_str.strip()}" if time_str else "")
+                for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+                    try:
+                        return datetime.strptime(candidate, fmt)
+                    except Exception:
+                        continue
+                return None
+
+            parsed_metadata: dict = {}
+            parsed_measurement_params: dict = {}
+
+            if nta_row and getattr(sample, "file_path_nta", None):
+                try:
+                    nta_file_path = _resolve_existing_file_path(str(getattr(sample, "file_path_nta")))
+                    parser = NTAParser(nta_file_path)
+                    if not parser.validate():
+                        logger.warning(f"NTA validation failed for '{sample_id}' ({nta_file_path})")
+                    _ = parser.parse()
+                    parsed_metadata = getattr(parser, "raw_metadata", {}) or {}
+                    parsed_measurement_params = getattr(parser, "measurement_params", {}) or {}
+                except Exception as meta_err:
+                    logger.warning(f"Failed to parse NTA metadata for '{sample_id}': {type(meta_err).__name__}: {meta_err}")
+
+            if not nta_row:
+                logger.warning(f"No NTA result for sample DB id: {sample.id}; attempting on-demand parse/backfill")
+
+                raw_path = getattr(sample, "file_path_nta", None)
+                if not raw_path:
+                    return {}
+
+                try:
+                    nta_file_path = _resolve_existing_file_path(str(raw_path))
+                except Exception as file_err:
+                    logger.warning(f"NTA file path could not be resolved for '{sample_id}': {file_err}")
+                    return {}
+
+                try:
+                    parser = NTAParser(nta_file_path)
+                    if not parser.validate():
+                        logger.warning(f"NTA validation failed for '{sample_id}' ({nta_file_path})")
+
+                    parsed_df = parser.parse()
+                    computed = _calculate_nta_results_from_parsed_df(parsed_df)
+
+                    temperature = parser.measurement_params.get("temperature")
+                    measurement_date = _parse_measurement_datetime(getattr(parser, "raw_metadata", {}) or {})
+
+                    # NOTE: We intentionally do NOT write back to the DB here.
+                    # In some environments, the SQLite schema may lag behind the SQLAlchemy model,
+                    # and ORM INSERTs will reference columns that don't exist. Parsing-on-demand
+                    # ensures NTA AI works even when migrations haven't been applied.
+                except Exception as parse_err:
+                    logger.warning(f"On-demand NTA parse/backfill failed for '{sample_id}': {type(parse_err).__name__}: {parse_err}")
+                    return {}
+
+                # Return computed + parsed metadata (even if DB backfill was skipped)
+                return {
+                    "sample_id": sample_id,
+
+                    "mean_size_nm": computed.get("mean_size_nm"),
+                    "median_size_nm": computed.get("median_size_nm"),
+                    "mode_size_nm": None,
+                    "d10_nm": computed.get("d10_nm"),
+                    "d50_nm": computed.get("d50_nm"),
+                    "d90_nm": computed.get("d90_nm"),
+                    "std_dev_nm": computed.get("std_dev_nm"),
+                    "concentration_particles_ml": computed.get("concentration_particles_ml"),
+
+                    "bin_50_80nm_pct": computed.get("bin_50_80nm_pct"),
+                    "bin_80_100nm_pct": computed.get("bin_80_100nm_pct"),
+                    "bin_100_120nm_pct": computed.get("bin_100_120nm_pct"),
+                    "bin_120_150nm_pct": computed.get("bin_120_150nm_pct"),
+                    "bin_150_200nm_pct": computed.get("bin_150_200nm_pct"),
+
+                    "temperature_celsius": float(parser.measurement_params.get("temperature")) if parser.measurement_params.get("temperature") is not None else None,
+                    "ph": float(parser.measurement_params.get("ph")) if parser.measurement_params.get("ph") is not None else None,
+                    "conductivity": float(parser.measurement_params.get("conductivity")) if parser.measurement_params.get("conductivity") is not None else None,
+                    "viscosity": float(parser.measurement_params.get("viscosity")) if parser.measurement_params.get("viscosity") is not None else None,
+                    "laser_wavelength_nm": float(parser.measurement_params.get("laser_wavelength")) if parser.measurement_params.get("laser_wavelength") is not None else None,
+                    "dilution_factor": float(parser.measurement_params.get("dilution")) if parser.measurement_params.get("dilution") is not None else None,
+                    "operator": getattr(sample, "operator", None) or (getattr(parser, "raw_metadata", {}) or {}).get("operator"),
+                    "instrument": (getattr(parser, "raw_metadata", {}) or {}).get("instrument_serial"),
+                    "sensitivity": float(parser.measurement_params.get("sensitivity")) if parser.measurement_params.get("sensitivity") is not None else None,
+                    "shutter": float(parser.measurement_params.get("shutter")) if parser.measurement_params.get("shutter") is not None else None,
+                    "positions": int(parser.measurement_params.get("num_positions")) if parser.measurement_params.get("num_positions") is not None else None,
+                    "number_of_traces": int(parser.measurement_params.get("num_traces")) if parser.measurement_params.get("num_traces") is not None else None,
+                }
+
+            (
+                mean_size_nm,
+                median_size_nm,
+                mode_size_nm,
+                d10_nm,
+                d50_nm,
+                d90_nm,
+                std_dev_nm,
+                concentration_particles_ml,
+                bin_50_80nm_pct,
+                bin_80_100nm_pct,
+                bin_100_120nm_pct,
+                bin_120_150nm_pct,
+                bin_150_200nm_pct,
+                temperature_celsius,
+                ph,
+                conductivity,
+                parquet_file_path,
+                measurement_date,
+            ) = nta_row
 
             return {
-                # Identity
                 "sample_id": sample_id,
 
-                # NTA Result Parameters (full list)
-                "mean_size_nm":               nta.mean_size_nm,
-                "median_size_nm":             nta.median_size_nm,
-                "mode_size_nm":               getattr(nta, "mode_size_nm", None),
-                "d10_nm":                     nta.d10_nm,
-                "d50_nm":                     nta.d50_nm,
-                "d90_nm":                     nta.d90_nm,
-                "std_dev_nm":                 getattr(nta, "std_dev_nm", None),
-                "concentration_particles_ml": nta.concentration_particles_ml,
+                "mean_size_nm": mean_size_nm,
+                "median_size_nm": median_size_nm,
+                "mode_size_nm": mode_size_nm,
+                "d10_nm": d10_nm,
+                "d50_nm": d50_nm,
+                "d90_nm": d90_nm,
+                "std_dev_nm": std_dev_nm,
+                "concentration_particles_ml": concentration_particles_ml,
 
-                # Size bins
-                "bin_50_80nm_pct":   nta.bin_50_80nm_pct,
-                "bin_80_100nm_pct":  nta.bin_80_100nm_pct,
-                "bin_100_120nm_pct": nta.bin_100_120nm_pct,
-                "bin_120_150nm_pct": nta.bin_120_150nm_pct,
-                "bin_150_200nm_pct": nta.bin_150_200nm_pct,
+                "bin_50_80nm_pct": bin_50_80nm_pct,
+                "bin_80_100nm_pct": bin_80_100nm_pct,
+                "bin_100_120nm_pct": bin_100_120nm_pct,
+                "bin_120_150nm_pct": bin_120_150nm_pct,
+                "bin_150_200nm_pct": bin_150_200nm_pct,
 
-                # Metadata parameters (full list)
-                "temperature_celsius": nta.temperature_celsius,
-                "ph":                  nta.ph,
-                "conductivity":        nta.conductivity,
-                "viscosity":           getattr(nta, "viscosity", None),
-                "laser_wavelength_nm": getattr(nta, "laser_wavelength_nm", None),
-                "dilution_factor":     getattr(nta, "dilution_factor", None),
-                "operator":            getattr(sample, "operator", None),
-                "instrument":          getattr(nta, "instrument", None),
-                "sensitivity":         getattr(nta, "sensitivity", None),
-                "shutter":             getattr(nta, "shutter", None),
-                "positions":           getattr(nta, "positions", None),
-                "number_of_traces":    getattr(nta, "number_of_traces", None),
+                "temperature_celsius": temperature_celsius,
+                "ph": ph,
+                "conductivity": conductivity,
+                "viscosity": float(parsed_measurement_params.get("viscosity")) if parsed_measurement_params.get("viscosity") is not None else None,
+                "laser_wavelength_nm": float(parsed_measurement_params.get("laser_wavelength")) if parsed_measurement_params.get("laser_wavelength") is not None else None,
+                "dilution_factor": float(parsed_measurement_params.get("dilution")) if parsed_measurement_params.get("dilution") is not None else None,
+                "operator": getattr(sample, "operator", None) or parsed_metadata.get("operator"),
+                "instrument": parsed_metadata.get("instrument_serial"),
+                "sensitivity": float(parsed_measurement_params.get("sensitivity")) if parsed_measurement_params.get("sensitivity") is not None else None,
+                "shutter": float(parsed_measurement_params.get("shutter")) if parsed_measurement_params.get("shutter") is not None else None,
+                "positions": int(parsed_measurement_params.get("num_positions")) if parsed_measurement_params.get("num_positions") is not None else None,
+                "number_of_traces": int(parsed_measurement_params.get("num_traces")) if parsed_measurement_params.get("num_traces") is not None else None,
+                "parquet_file_path": parquet_file_path,
+                "measurement_date": measurement_date,
             }
 
     except Exception as e:

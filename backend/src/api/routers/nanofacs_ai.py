@@ -28,7 +28,10 @@ Date: April 2026
 
 import os
 import json
-import boto3
+try:
+    import boto3  # type: ignore
+except ImportError:  # pragma: no cover
+    boto3 = None  # type: ignore
 import numpy as np
 import pandas as pd
 from typing import Optional
@@ -40,7 +43,11 @@ from pydantic import BaseModel, Field
 from loguru import logger
 from src.api.aws_utils import get_bedrock_runtime_client
 from src.api.ai_gateway_client import AIGatewayError, gateway_complete, gateway_health
+from src.api.config import get_settings
+from src.physics.mie_scatter import MieScatterCalculator
+from src.physics.bead_calibration import get_active_calibration, get_fcmpass_calibration
 router = APIRouter()
+settings = get_settings()
 
 
 # ============================================================================
@@ -66,6 +73,15 @@ def _get_bedrock_client():
         has_profile = bool((os.getenv("AWS_PROFILE") or "").strip())
         if not (has_env_creds or has_profile):
             return None
+
+    if boto3 is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "AWS Bedrock is not available because 'boto3' is not installed. "
+                "Install backend requirements or run: pip install boto3"
+            ),
+        )
 
     try:
         return get_bedrock_runtime_client()
@@ -253,6 +269,174 @@ def _read_fcs_parquet(file_path: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+def _pick_first_column(columns: list[str], candidates: list[str]) -> Optional[str]:
+    for c in candidates:
+        if c in columns:
+            return c
+    return None
+
+
+def _find_scatter_channels(columns: list[str]) -> tuple[Optional[str], Optional[str]]:
+    """Heuristically detect FSC/SSC-like channel names in FCS parquet files."""
+    # Common exact names we see in ZE5/Bio-Rad exports and our pipeline.
+    fsc_exact = [
+        "VFSC-H",
+        "VFSC-A",
+        "FSC-H",
+        "FSC-A",
+        "FSC1-H",
+        "FSC1-A",
+    ]
+    ssc_exact = [
+        "VSSC_MAX",
+        "VSSC1-H",
+        "VSSC-H",
+        "SSC-H",
+        "SSC-A",
+        "SSC1-H",
+        "SSC1-A",
+    ]
+
+    fsc = _pick_first_column(columns, fsc_exact)
+    ssc = _pick_first_column(columns, ssc_exact)
+
+    # Fallback: pattern match
+    if fsc is None:
+        fsc_candidates = [c for c in columns if "FSC" in c.upper()]
+        # Prefer height over area, and avoid fluorescence channels if possible.
+        fsc = _pick_first_column(fsc_candidates, [c for c in fsc_candidates if c.upper().endswith("-H")])
+        if fsc is None and fsc_candidates:
+            fsc = fsc_candidates[0]
+
+    if ssc is None:
+        ssc_candidates = [c for c in columns if "SSC" in c.upper() or "VSSC" in c.upper()]
+        ssc = _pick_first_column(ssc_candidates, [c for c in ssc_candidates if c.upper().endswith("-H")])
+        if ssc is None and ssc_candidates:
+            ssc = ssc_candidates[0]
+
+    return fsc, ssc
+
+
+def _safe_numeric_series(df: pd.DataFrame, col: str) -> pd.Series:
+    vals = pd.to_numeric(df[col], errors="coerce")
+    vals = vals.replace([np.inf, -np.inf], np.nan).dropna()
+    return vals
+
+
+def _derive_size_stats_from_fcs_channels(df: pd.DataFrame) -> tuple[Optional[dict], Optional[str], Optional[str]]:
+    """Derive a Size-like stats block from raw FCS scatter channels.
+
+    Returns:
+        (size_stats, sizing_method, sizing_channel)
+    """
+    fsc_channel, ssc_channel = _find_scatter_channels(list(df.columns))
+    sizing_channel = fsc_channel or ssc_channel
+    if sizing_channel is None or sizing_channel not in df.columns:
+        return None, None, None
+
+    scatter_vals = _safe_numeric_series(df, sizing_channel)
+    scatter_vals = scatter_vals[scatter_vals > 0]
+    if scatter_vals.empty:
+        return None, None, sizing_channel
+
+    # Defaults match the backend upload pipeline's uncalibrated Mie sizing assumptions.
+    wavelength_nm = 405.0
+    n_particle = 1.37
+    n_medium = 1.33
+
+    particle_size_median_nm: Optional[float] = None
+    sizing_method_used: Optional[str] = None
+
+    # === FCMPASS k-based median (highest priority) ===
+    try:
+        fcmpass_cal = get_fcmpass_calibration()
+        if fcmpass_cal and getattr(fcmpass_cal, "calibrated", False):
+            fcmpass_channel = None
+            for ch in ["VSSC1-H", "VSSC-H", "VSSC1_H"]:
+                if ch in df.columns:
+                    fcmpass_channel = ch
+                    break
+            if fcmpass_channel is None and ssc_channel and ssc_channel in df.columns:
+                fcmpass_channel = ssc_channel
+
+            if fcmpass_channel is not None:
+                _ssc = _safe_numeric_series(df, fcmpass_channel)
+                _ssc = _ssc[_ssc > 0]
+                if not _ssc.empty:
+                    median_ssc = float(_ssc.median())
+                    d, _in_range = fcmpass_cal.predict_batch(np.array([median_ssc]))
+                    if not np.isnan(d[0]) and d[0] > 0:
+                        particle_size_median_nm = float(d[0])
+                        sizing_method_used = "fcmpass_k_based"
+                        sizing_channel = fcmpass_channel
+    except Exception as e:
+        logger.warning(f"⚠️ FCMPASS sizing failed in NanoFACS AI: {e}")
+
+    # === Bead-calibrated FSC path ===
+    if particle_size_median_nm is None and fsc_channel and fsc_channel in df.columns:
+        try:
+            active_cal = get_active_calibration()
+            if active_cal and getattr(active_cal, "is_fitted", False):
+                median_fsc = float(_safe_numeric_series(df, fsc_channel).median())
+                if median_fsc > 0:
+                    cal_diameter = active_cal.diameter_from_fsc(
+                        np.array([median_fsc]),
+                        target_ri=n_particle,
+                        medium_ri=n_medium,
+                    )
+                    particle_size_median_nm = float(cal_diameter[0])
+                    sizing_method_used = "bead_calibrated"
+                    sizing_channel = fsc_channel
+        except Exception as e:
+            logger.warning(f"⚠️ Bead-calibrated sizing failed in NanoFACS AI: {e}")
+
+    # === Uncalibrated Mie fallback (median only) ===
+    if particle_size_median_nm is None:
+        try:
+            mie_calc = MieScatterCalculator(
+                wavelength_nm=wavelength_nm,
+                n_particle=n_particle,
+                n_medium=n_medium,
+            )
+            median_scatter = float(scatter_vals.median())
+            if median_scatter > 0:
+                diameter_nm, success = mie_calc.diameter_from_scatter(fsc_intensity=median_scatter)
+                if success and diameter_nm > 0:
+                    particle_size_median_nm = float(diameter_nm)
+                    sizing_method_used = "uncalibrated_mie"
+        except Exception as e:
+            logger.warning(f"⚠️ Mie sizing failed in NanoFACS AI: {e}")
+
+    if particle_size_median_nm is None:
+        return None, sizing_method_used, sizing_channel
+
+    # Populate a full stats block so the frontend doesn't render `undefined`.
+    # For now we only have a reliable median, so we keep the rest consistent.
+    size_stats = {
+        "mean": round(float(particle_size_median_nm), 3),
+        "median": round(float(particle_size_median_nm), 3),
+        "std": 0.0,
+        "min": round(float(particle_size_median_nm), 3),
+        "max": round(float(particle_size_median_nm), 3),
+        "p10": round(float(particle_size_median_nm), 3),
+        "p90": round(float(particle_size_median_nm), 3),
+    }
+    return size_stats, sizing_method_used, sizing_channel
+
+
+def _dedupe_file_paths(file_paths: list[str]) -> list[str]:
+    """Deduplicate file paths while preserving input order."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for fp in file_paths:
+        key = str(Path(fp).resolve())
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(fp)
+    return out
+
+
 # ============================================================================
 # Helper — compute per-file statistics
 # ============================================================================
@@ -263,6 +447,47 @@ def _compute_fcs_stats(df: pd.DataFrame, file_name: str) -> dict:
         return {}
 
     stats = {"file": file_name, "total_events": len(df)}
+
+    # If this is a raw FCS parquet (channels like FSC/SSC) rather than the
+    # imaging-style schema documented at the top of this file, derive a Size
+    # block so AI Q&A can answer median-size questions.
+    if "Size" not in df.columns:
+        derived_size, method, channel = _derive_size_stats_from_fcs_channels(df)
+        if derived_size:
+            stats["Size"] = derived_size
+            if method:
+                stats["sizing_method"] = method
+            if channel:
+                stats["sizing_channel"] = channel
+
+        fsc_channel, ssc_channel = _find_scatter_channels(list(df.columns))
+        if fsc_channel and fsc_channel in df.columns:
+            vals = _safe_numeric_series(df, fsc_channel)
+            if not vals.empty:
+                stats["FSC"] = {
+                    "channel": fsc_channel,
+                    "mean": round(float(vals.mean()), 3),
+                    "median": round(float(vals.median()), 3),
+                    "std": round(float(vals.std()), 3),
+                    "min": round(float(vals.min()), 3),
+                    "max": round(float(vals.max()), 3),
+                    "p10": round(float(np.percentile(vals, 10)), 3),
+                    "p90": round(float(np.percentile(vals, 90)), 3),
+                }
+
+        if ssc_channel and ssc_channel in df.columns:
+            vals = _safe_numeric_series(df, ssc_channel)
+            if not vals.empty:
+                stats["SSC"] = {
+                    "channel": ssc_channel,
+                    "mean": round(float(vals.mean()), 3),
+                    "median": round(float(vals.median()), 3),
+                    "std": round(float(vals.std()), 3),
+                    "min": round(float(vals.min()), 3),
+                    "max": round(float(vals.max()), 3),
+                    "p10": round(float(np.percentile(vals, 10)), 3),
+                    "p90": round(float(np.percentile(vals, 90)), 3),
+                }
 
     for col in ["Size", "MeanIntensity", "MaxIntensity", "Area",
                 "Solidity", "AspectRatio", "TraceLength", "V_nmsec-1", "Intensity/Area"]:
@@ -286,6 +511,10 @@ def _compute_fcs_stats(df: pd.DataFrame, file_name: str) -> dict:
             str(int(k)): int(v) for k, v in cluster_counts.items()
         }
         stats["num_clusters"] = len(cluster_counts)
+    else:
+        # Avoid frontend rendering `undefined`
+        stats["cluster_distribution"] = {}
+        stats["num_clusters"] = 0
 
     # Position distribution
     if "Position" in df.columns:
@@ -534,6 +763,8 @@ async def analyze_fcs_with_ai(request: FCSAnalyzeRequest):
     if not request.file_paths:
         raise HTTPException(status_code=422, detail="At least one file path required")
 
+    request.file_paths = _dedupe_file_paths(request.file_paths)
+
     logger.info(f"NanoFACS AI analysis: {request.file_paths}")
 
     # Read all files and compute stats
@@ -647,6 +878,8 @@ async def compare_fcs_files(request: FCSCompareRequest):
     Compare multiple NanoFACS FCS parquet files.
     Checks for shifts in size, intensity, cluster distribution across files.
     """
+    request.file_paths = _dedupe_file_paths(request.file_paths)
+
     if len(request.file_paths) < 2:
         raise HTTPException(
             status_code=422,
@@ -758,6 +991,8 @@ async def ask_about_fcs_data(request: FCSAskRequest):
     if not request.file_paths:
         raise HTTPException(status_code=422, detail="File paths required")
 
+    request.file_paths = _dedupe_file_paths(request.file_paths)
+
     if not request.question.strip():
         raise HTTPException(status_code=422, detail="Question cannot be empty")
 
@@ -805,23 +1040,31 @@ Keep the answer to 3-5 sentences maximum."""
 @router.get("/ai/nanofacs/list-files")
 async def list_nanofacs_parquet_files():
     """List all available NanoFACS FCS parquet files on the server."""
-    import glob
-    base_dir = Path(__file__).parent.parent.parent.parent / "data" / "nanofacs_parquet"
+    base_dirs = [
+        settings.parquet_dir / "nanofacs",
+        Path(__file__).parent.parent.parent.parent / "data" / "nanofacs_parquet",
+    ]
     
+    seen_paths: set[str] = set()
     files = []
-    if base_dir.exists():
-        for f in base_dir.rglob("*.fcs.parquet"):
-            files.append({
-                "path": str(f),
-                "name": f.name,
-                "folder": f.parent.name,
-                "size_kb": round(f.stat().st_size / 1024, 1)
-            })
+    for base_dir in base_dirs:
+        if base_dir.exists():
+            for f in base_dir.rglob("*.fcs.parquet"):
+                p = str(f.resolve())
+                if p in seen_paths:
+                    continue
+                seen_paths.add(p)
+                files.append({
+                    "path": p,
+                    "name": f.name,
+                    "folder": f.parent.name,
+                    "size_kb": round(f.stat().st_size / 1024, 1)
+                })
     
     return {
         "files": sorted(files, key=lambda x: x["name"]),
         "total": len(files),
-        "base_dir": str(base_dir)
+        "base_dir": str(base_dirs[0])
     }
 
 

@@ -18,10 +18,13 @@ Date: March 3, 2026
 import os
 import json
 import time
-from typing import Optional, Tuple
+import base64
+import tempfile
+from pathlib import Path
+from typing import Optional, Tuple, AsyncIterable, Any
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
@@ -33,6 +36,95 @@ from src.api.aws_utils import get_bedrock_runtime_client
 from src.api.ai_gateway_client import AIGatewayError, gateway_chat
 
 router = APIRouter()
+
+
+UI_MESSAGE_STREAM_HEADERS = {
+    "content-type": "text/event-stream",
+    "cache-control": "no-cache",
+    "connection": "keep-alive",
+    "x-vercel-ai-ui-message-stream": "v1",
+    "x-accel-buffering": "no",
+}
+
+
+def _sse_data_line(data: str) -> str:
+    return f"data: {data}\n\n"
+
+
+def _sse_json(obj: Any) -> str:
+    return _sse_data_line(json.dumps(obj, ensure_ascii=False))
+
+
+async def _vercel_data_stream_to_ui_message_stream(
+    source: AsyncIterable[Any],
+    *,
+    text_id: str = "text-0",
+) -> AsyncIterable[str]:
+    """Translate legacy Vercel AI data stream frames (0:/e:/d:) into UI message stream SSE."""
+
+    buffer = ""
+    done = False
+
+    try:
+        yield _sse_json({"type": "text-start", "id": text_id})
+
+        async for chunk in source:
+            if isinstance(chunk, memoryview):
+                chunk = chunk.tobytes()
+            if isinstance(chunk, (bytes, bytearray)):
+                chunk = chunk.decode("utf-8", errors="ignore")
+            if not isinstance(chunk, str):
+                chunk = str(chunk)
+
+            buffer += chunk
+            while "\n" in buffer:
+                line, buffer = buffer.split("\n", 1)
+                line = line.rstrip("\r")
+                if not line:
+                    continue
+
+                if line.startswith("0:"):
+                    payload = line[2:]
+                    try:
+                        value = json.loads(payload)
+                    except Exception:
+                        value = payload
+
+                    delta = value if isinstance(value, str) else str(value)
+                    if delta:
+                        yield _sse_json({"type": "text-delta", "id": text_id, "delta": delta})
+
+                elif line.startswith("e:"):
+                    # e: frames are "step finish" events in the Vercel AI data stream
+                    # protocol — they carry finishReason/usage metadata, NOT errors.
+                    # Only emit an error event when the payload explicitly marks failure.
+                    err_payload = line[2:]
+                    try:
+                        err_obj = json.loads(err_payload)
+                        if isinstance(err_obj, dict):
+                            finish = err_obj.get("finishReason", "")
+                            explicit_err = err_obj.get("error") or err_obj.get("errorText") or err_obj.get("message")
+                            if explicit_err:
+                                yield _sse_json({"type": "error", "errorText": str(explicit_err)})
+                            elif finish and finish not in ("stop", "length", "tool_calls", "end_turn", ""):
+                                # Non-standard finish reason — surface as informational error
+                                yield _sse_json({"type": "error", "errorText": f"Stream ended with reason: {finish}"})
+                            # Normal stop/length finish — consume silently, no error event
+                    except Exception:
+                        pass  # Unparseable e: frame — ignore
+
+                elif line.startswith("d:"):
+                    done = True
+                    break
+
+            if done:
+                break
+
+    except Exception as e:
+        yield _sse_json({"type": "error", "errorText": f"Stream error: {str(e)}"})
+
+    yield _sse_json({"type": "text-end", "id": text_id})
+    yield _sse_data_line("[DONE]")
 
 
 # ============================================================================
@@ -92,6 +184,8 @@ def _resolve_provider_config() -> Tuple[str, str, str]:
                 ),
             )
 
+        if provider_env == "gateway":
+            return "gateway", os.environ.get("CRMIT_AI_GATEWAY_LICENSE_KEY", ""), os.environ.get("CRMIT_AI_GATEWAY_URL", "")
         if provider_env == "bedrock":
             return "bedrock", "bedrock", "amazon.nova-lite-v1:0"
 
@@ -196,6 +290,10 @@ class ChatMessage(BaseModel):
     @classmethod
     def __get_validators__(cls):
         yield cls.validate_message
+
+    @classmethod
+    def validate_message(cls, v):
+        return v
     """A single chat message."""
     role: str = Field(..., description="Message role: 'user', 'assistant', or 'system'")
     content: str = Field(..., description="Message text content")
@@ -311,6 +409,182 @@ def _get_offline_response(messages: list[ChatMessage]) -> str:
         return OFFLINE_RESPONSES["size"]
     
     return OFFLINE_RESPONSES["default"]
+
+
+# ============================================================================
+# FCS / CSV file summary extraction for chat context
+# ============================================================================
+
+_MAX_FILE_BYTES_FOR_PARSE = 150 * 1024 * 1024  # 150 MB cap
+
+
+def _extract_fcs_summary_from_bytes(data: bytes, filename: str) -> str:
+    """Parse an FCS file from raw bytes and return a compact stats summary."""
+    import numpy as np
+
+    try:
+        import flowio  # type: ignore
+    except ImportError:
+        return f"Attached FCS file: {filename} (flowio not installed; cannot extract statistics)"
+
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".fcs", delete=False) as tmp:
+            tmp.write(data)
+            tmp_path = tmp.name
+
+        fcs = flowio.FlowData(tmp_path)
+        n_channels = fcs.channel_count
+        txt = getattr(fcs, "text", {}) or {}
+
+        # Extract channel names using the same logic as the existing FCS parser
+        channel_names = []
+        for i in range(1, n_channels + 1):
+            name = (
+                txt.get(f"p{i}s", "") or txt.get(f"p{i}n", "") or
+                txt.get(f"$P{i}S", "") or txt.get(f"$P{i}N", "") or
+                txt.get(f"P{i}S", "") or txt.get(f"P{i}N", "") or
+                f"Channel_{i}"
+            )
+            channel_names.append(name.strip())
+
+        # Event matrix
+        raw = np.array(fcs.events, dtype=float).reshape(-1, n_channels)
+        n_events = raw.shape[0]
+
+        # Build per-channel stats (limit to 15 channels to keep prompt concise)
+        ch_stats = []
+        for i, name in enumerate(channel_names[:15]):
+            col = raw[:, i]
+            ch_stats.append(
+                f"  {name}: mean={col.mean():.1f}, median={np.median(col):.1f}, "
+                f"std={col.std():.1f}, min={col.min():.1f}, max={col.max():.1f}"
+            )
+
+        # Highlight FSC/SSC scatter parameters
+        fsc_idx = next((i for i, n in enumerate(channel_names) if "FSC" in n.upper()), None)
+        ssc_idx = next((i for i, n in enumerate(channel_names) if "SSC" in n.upper()), None)
+        ev_lines = []
+        if fsc_idx is not None:
+            fsc = raw[:, fsc_idx]
+            ev_lines.append(f"  FSC: median={np.median(fsc):.1f}, mean={fsc.mean():.1f}, std={fsc.std():.1f}")
+        if ssc_idx is not None:
+            ssc = raw[:, ssc_idx]
+            ev_lines.append(f"  SSC: median={np.median(ssc):.1f}, mean={ssc.mean():.1f}, std={ssc.std():.1f}")
+
+        sample_id = (
+            txt.get("$SRC") or txt.get("src") or txt.get("$SMNO") or
+            txt.get("TUBE NAME") or txt.get("tube name") or filename
+        )
+        cytometer = txt.get("$CYT") or txt.get("cyt") or txt.get("CYTOMETER") or "Unknown"
+        date_str = txt.get("$DATE") or txt.get("date") or "Unknown"
+
+        summary_lines = [
+            f"=== FCS File Analysis: {filename} ===",
+            f"Sample ID: {sample_id}",
+            f"Cytometer: {cytometer}",
+            f"Acquisition date: {date_str}",
+            f"Total events recorded: {n_events:,}",
+            f"Channels ({n_channels}): {', '.join(channel_names)}",
+            "",
+            "Per-channel statistics:",
+        ] + ch_stats
+
+        if ev_lines:
+            summary_lines += ["", "Scatter channel summary:"] + ev_lines
+
+        summary_lines += [
+            "",
+            "Please analyze this FCS data for extracellular vesicle (EV) characterization. "
+            "Provide insights on particle distribution, scatter profile, concentration estimates, "
+            "size population breakdown, and any notable quality control observations.",
+        ]
+
+        return "\n".join(summary_lines)
+
+    except Exception as exc:
+        logger.warning(f"FCS parse failed for {filename}: {exc}")
+        return f"Attached FCS file: {filename} (could not extract statistics: {exc})"
+    finally:
+        if tmp_path:
+            try:
+                Path(tmp_path).unlink(missing_ok=True)
+            except Exception:
+                pass
+
+
+def _extract_csv_summary_from_bytes(data: bytes, filename: str) -> str:
+    """Parse a CSV/NTA file and return a compact stats summary."""
+    import io
+    import numpy as np
+
+    try:
+        import pandas as pd  # type: ignore
+    except ImportError:
+        return f"Attached CSV file: {filename} (pandas not installed)"
+
+    try:
+        df = pd.read_csv(io.BytesIO(data), nrows=100_000)
+        rows, cols = df.shape
+        numeric = df.select_dtypes(include=[np.number])
+        stats_lines = []
+        for col in numeric.columns[:20]:  # cap at 20 columns
+            s = numeric[col]
+            stats_lines.append(
+                f"  {col}: mean={s.mean():.3g}, median={s.median():.3g}, "
+                f"std={s.std():.3g}, min={s.min():.3g}, max={s.max():.3g}"
+            )
+        return "\n".join([
+            f"=== CSV/NTA File Analysis: {filename} ===",
+            f"Rows: {rows:,}, Columns: {cols}",
+            "Numeric column statistics:",
+            *stats_lines,
+            "",
+            "Please analyze this NTA/CSV data for extracellular vesicle characterization.",
+        ])
+    except Exception as exc:
+        logger.warning(f"CSV parse failed for {filename}: {exc}")
+        return f"Attached CSV file: {filename} (could not parse: {exc})"
+
+
+def _summarize_file_part(part: dict) -> str:
+    """Extract a statistics summary from a file message part."""
+    filename = (part.get("filename") or part.get("name") or "unknown").strip()
+    media_type = part.get("mediaType") or part.get("mimeType") or ""
+    raw_data = part.get("data") or part.get("url") or ""
+
+    # Decode base64 → bytes
+    file_bytes: bytes | None = None
+    if isinstance(raw_data, str):
+        # Data URLs: "data:<mime>;base64,<payload>"
+        if raw_data.startswith("data:"):
+            try:
+                _, b64 = raw_data.split(",", 1)
+                file_bytes = base64.b64decode(b64)
+            except Exception:
+                pass
+        else:
+            try:
+                file_bytes = base64.b64decode(raw_data)
+            except Exception:
+                pass
+
+    if file_bytes is None or len(file_bytes) == 0:
+        return f"Attached file: {filename}" + (f" ({media_type})" if media_type else "")
+
+    if len(file_bytes) > _MAX_FILE_BYTES_FOR_PARSE:
+        return (
+            f"Attached file: {filename} ({len(file_bytes) // 1024 / 1024:.1f} MB — "
+            "file is too large to parse inline; only metadata was received)"
+        )
+
+    fname_lower = filename.lower()
+    if fname_lower.endswith(".fcs"):
+        return _extract_fcs_summary_from_bytes(file_bytes, filename)
+    elif fname_lower.endswith((".csv", ".tsv", ".txt")):
+        return _extract_csv_summary_from_bytes(file_bytes, filename)
+    else:
+        return f"Attached file: {filename}" + (f" ({media_type})" if media_type else "")
 
 
 # ============================================================================
@@ -521,6 +795,7 @@ async def _stream_anthropic(messages: list[ChatMessage], api_key: str, model: st
 
 @router.post("/chat")
 async def chat(request: Request):
+    """Streaming chat endpoint compatible with the Vercel AI SDK useChat()."""
     raw = await request.json()
 
     # Normalize payload to ChatRequest shape (frontend sometimes sends content as parts).
@@ -530,64 +805,84 @@ async def chat(request: Request):
         content = m.get("content", "")
         if isinstance(content, list):
             content = " ".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in content)
-        content = str(content)
-        if content.strip():
-            messages.append(ChatMessage(role=role, content=content))
+            content = combined
 
-    if not messages and "query" in raw:
-        messages = [ChatMessage(role="user", content=str(raw["query"]))]
+        if isinstance(content, str) and content.strip():
+            normalized.append(ChatMessage(role=role, content=content))
 
-    chat_request = ChatRequest(
-        messages=messages,
-        model=str(raw.get("model") or "gpt-4o-mini"),
-        temperature=raw.get("temperature", 0.7),
-        max_tokens=raw.get("max_tokens", 2048),
-        stream=raw.get("stream", True),
+    if not normalized and isinstance(raw, dict) and isinstance(raw.get("query"), str) and raw.get("query", "").strip():
+        normalized = [ChatMessage(role="user", content=raw["query"]) ]
+
+    chat_req = ChatRequest(
+        messages=normalized,
+        # Leave blank when not provided so we can use provider defaults later.
+        model=(raw.get("model") if isinstance(raw, dict) else None) or "",
+        temperature=(raw.get("temperature") if isinstance(raw, dict) else None),
+        max_tokens=(raw.get("max_tokens") if isinstance(raw, dict) else None),
+        stream=(raw.get("stream") if isinstance(raw, dict) else None),
     )
-
-    _validate_chat_payload(chat_request)
-    logger.info(f"Chat request: {len(chat_request.messages)} messages, stream={chat_request.stream}")
+    _validate_chat_payload(chat_req)
 
     provider, api_key, default_model = _resolve_provider_config()
-    model = _effective_model(provider, chat_request.model, default_model)
-    temperature = chat_request.temperature or 0.7
-    max_tokens = chat_request.max_tokens or 2048
+    model = (chat_req.model or default_model).strip()
+    temperature = chat_req.temperature or 0.7
+    max_tokens = chat_req.max_tokens or 2048
 
-    if chat_request.stream is False:
-        return await _chat_simple(chat_request)
+    if chat_req.stream is False:
+        return await _chat_simple(chat_req)
 
-    if provider == "offline":
-        generator = _stream_text_as_vercel(_get_offline_response(chat_request.messages))
-    elif provider == "gateway":
-        try:
-            text = await run_in_threadpool(
-                gateway_chat,
-                [{"role": m.role, "content": m.content} for m in chat_request.messages],
-                model or "amazon.nova-lite-v1:0",
-                float(temperature),
-                int(max_tokens),
-            )
-        except AIGatewayError as exc:
-            if _offline_chat_enabled():
-                text = _get_offline_response(chat_request.messages)
-            else:
-                raise HTTPException(status_code=503, detail=str(exc))
-        generator = _stream_text_as_vercel(text)
-    elif provider == "anthropic":
-        generator = _stream_anthropic(chat_request.messages, api_key, model, temperature, max_tokens)
+    # Gateway is non-streaming upstream; we wrap it in a one-chunk Vercel stream.
+    if provider == "gateway":
+        async def gen_gateway():
+            try:
+                import httpx  # type: ignore[import-untyped]
+
+                gw_url = (os.environ.get("CRMIT_AI_GATEWAY_URL") or "").rstrip("/")
+                gw_key = (os.environ.get("CRMIT_AI_GATEWAY_LICENSE_KEY") or "").strip()
+                if not gw_url or not gw_key:
+                    raise RuntimeError("Gateway is not configured (missing CRMIT_AI_GATEWAY_URL or CRMIT_AI_GATEWAY_LICENSE_KEY).")
+
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    resp = await client.post(
+                        f"{gw_url}/api/v1/ai/gateway/chat",
+                        headers={"Content-Type": "application/json", "x-license-key": gw_key},
+                        json={
+                            "messages": [{"role": m.role, "content": m.content} for m in chat_req.messages],
+                            "max_tokens": max_tokens,
+                            "temperature": temperature,
+                            "model": model,
+                        },
+                    )
+                    resp.raise_for_status()
+                    data = resp.json() if resp.content else {}
+                    text = (data.get("content") or "").strip() or "No response"
+
+                yield f"0:{json.dumps(text)}\n"
+                yield 'd:{"finishReason":"stop","usage":{"promptTokens":0,"completionTokens":0}}\n'
+            except Exception as e:
+                msg = f"Gateway request failed: {str(e)}"
+                yield f"0:{json.dumps(msg)}\n"
+                yield 'd:{"finishReason":"error","usage":{"promptTokens":0,"completionTokens":0}}\n'
+
+        return StreamingResponse(
+            _vercel_data_stream_to_ui_message_stream(gen_gateway()),
+            media_type="text/event-stream",
+            headers=UI_MESSAGE_STREAM_HEADERS,
+        )
+
+    # Other providers stream directly.
+    if provider == "anthropic":
+        generator = _stream_anthropic(chat_req.messages, api_key, model, temperature, max_tokens)
     elif provider == "bedrock":
-        generator = _stream_bedrock(chat_request.messages, max_tokens, temperature)
+        generator = _stream_bedrock(chat_req.messages, max_tokens, temperature)
     else:
-        generator = _stream_openai(chat_request.messages, api_key, model, temperature, max_tokens)
+        generator = _stream_openai(chat_req.messages, api_key, model, temperature, max_tokens)
+>>>>>>> charmi-ai-features
 
     return StreamingResponse(
-        generator,
-        media_type="text/plain; charset=utf-8",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Vercel-AI-Data-Stream": "v1",
-        },
+        _vercel_data_stream_to_ui_message_stream(generator),
+        media_type="text/event-stream",
+        headers=UI_MESSAGE_STREAM_HEADERS,
     )
 
 

@@ -1,160 +1,210 @@
+"""AI Gateway Router
+=================
+
+Hosted AI Gateway endpoints.
+
+This router is used when deploying a hosted gateway service that desktop
+clients can call using a license key (so AWS/provider credentials never
+ship in the desktop app).
+
+Notes:
+- This module is intentionally dependency-light so the main API can boot
+  even if optional provider SDKs (e.g., boto3) are not installed.
+- The desktop/local app does not need to call these endpoints.
+
+Endpoints:
+- GET  /ai/gateway/health
+- POST /ai/gateway/chat
+
+"""
+
 from __future__ import annotations
 
-import json
 import os
+import json
 from typing import Optional
 
-from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ProfileNotFound  # type: ignore
-from fastapi import APIRouter, Header, HTTPException
-from loguru import logger
+from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel, Field
-
-from src.api.aws_utils import get_bedrock_runtime_client
+from loguru import logger
 
 router = APIRouter()
 
 
-def _offline_ai_enabled() -> bool:
-    return (os.getenv("CRMIT_ENABLE_OFFLINE_AI") or "").strip().lower() in {"1", "true", "yes", "on"}
+VALID_ROLES = {"user", "assistant", "system"}
+DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
+DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
 
 
-def _allowed_license_keys() -> list[str]:
-    raw = (os.getenv("CRMIT_AI_GATEWAY_LICENSE_KEYS") or "").strip()
-    if not raw:
-        return []
-    return [k.strip() for k in raw.split(",") if k.strip()]
-
-
-def _require_license(x_license_key: Optional[str]) -> None:
-    allowed = _allowed_license_keys()
-    if not allowed:
-        return
-    if not x_license_key or x_license_key.strip() not in allowed:
-        raise HTTPException(status_code=401, detail="Invalid or missing X-License-Key")
+class GatewayMessage(BaseModel):
+    role: str = Field(...)
+    content: str = Field(...)
 
 
 class GatewayChatRequest(BaseModel):
-    messages: list[dict] = Field(..., description="Chat messages (role/content)")
-    model: str = Field("amazon.nova-lite-v1:0")
-    temperature: float = Field(0.7)
-    max_tokens: int = Field(2048)
+    messages: list[GatewayMessage]
+    model: Optional[str] = None
+    temperature: Optional[float] = 0.7
+    max_tokens: Optional[int] = 2048
 
 
-class GatewayCompleteRequest(BaseModel):
-    prompt: str
-    model: str = Field("amazon.nova-lite-v1:0")
-    temperature: float = Field(0.3)
-    max_tokens: int = Field(1500)
+class GatewayChatResponse(BaseModel):
+    content: str
+    model: str
+    provider: str
+
+
+def _require_license(x_license_key: Optional[str]) -> None:
+    expected = (os.environ.get("CRMIT_AI_GATEWAY_LICENSE_KEY") or "").strip()
+    if not expected:
+        raise HTTPException(
+            status_code=503,
+            detail="Gateway is not configured (missing CRMIT_AI_GATEWAY_LICENSE_KEY).",
+        )
+    if not x_license_key or x_license_key.strip() != expected:
+        raise HTTPException(status_code=401, detail="Invalid or missing license key.")
+
+
+def _resolve_provider() -> tuple[str, str, str]:
+    """Return (provider, api_key, default_model)."""
+
+    provider_env = (os.environ.get("AI_PROVIDER") or "").strip().lower()
+    if provider_env in {"openai", "anthropic", "bedrock"}:
+        provider = provider_env
+    else:
+        # Prefer Anthropic if present, else OpenAI.
+        provider = "anthropic" if (os.environ.get("ANTHROPIC_API_KEY") or "").strip() else "openai"
+
+    if provider == "anthropic":
+        key = (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("CRMIT_AI_API_KEY") or "").strip()
+        if not key:
+            raise HTTPException(status_code=503, detail="Anthropic API key missing.")
+        model = (os.environ.get("ANTHROPIC_MODEL") or os.environ.get("CRMIT_AI_MODEL") or DEFAULT_ANTHROPIC_MODEL).strip()
+        return provider, key, model
+
+    if provider == "bedrock":
+        # Optional dependency. Only used in hosted gateway deployments.
+        try:
+            import boto3  # type: ignore
+        except ImportError as e:
+            raise HTTPException(status_code=503, detail="Bedrock provider requires boto3.") from e
+
+        # Bedrock does not use an API key in the same way.
+        return provider, "bedrock", (os.environ.get("BEDROCK_MODEL") or "amazon.nova-lite-v1:0").strip()
+
+    # OpenAI
+    key = (os.environ.get("OPENAI_API_KEY") or os.environ.get("CRMIT_AI_API_KEY") or "").strip()
+    if not key:
+        raise HTTPException(status_code=503, detail="OpenAI API key missing.")
+    model = (os.environ.get("OPENAI_MODEL") or os.environ.get("CRMIT_AI_MODEL") or DEFAULT_OPENAI_MODEL).strip()
+    return "openai", key, model
 
 
 @router.get("/ai/gateway/health")
-async def gateway_health():
-    """Health/status endpoint for hosted gateway."""
-    return {
-        "status": "ok",
-        "mode": "gateway",
-        "requires_license": bool(_allowed_license_keys()),
-        "region": os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION") or "us-east-1",
-        "model": "amazon.nova-lite-v1:0",
-    }
+async def health():
+    """Basic health check for the hosted gateway router."""
+    return {"ok": True}
 
 
-@router.post("/ai/gateway/chat")
-async def gateway_chat_endpoint(payload: GatewayChatRequest, x_license_key: Optional[str] = Header(default=None)):
+@router.post("/ai/gateway/chat", response_model=GatewayChatResponse)
+async def gateway_chat(
+    request: GatewayChatRequest,
+    x_license_key: Optional[str] = Header(default=None, alias="x-license-key"),
+):
     _require_license(x_license_key)
 
-    bedrock = get_bedrock_runtime_client()
+    if not request.messages:
+        raise HTTPException(status_code=422, detail="'messages' must not be empty.")
 
-    # Convert to Bedrock Nova message format.
-    messages = []
-    for m in payload.messages:
-        role = (m.get("role") or "user")
-        content = m.get("content") or ""
-        if isinstance(content, list):
-            content = " ".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in content)
-        messages.append({
-            "role": role if role != "system" else "user",
-            "content": [{"text": str(content)}],
-        })
+    for idx, m in enumerate(request.messages):
+        if m.role not in VALID_ROLES:
+            raise HTTPException(status_code=422, detail=f"messages[{idx}].role is invalid")
+        if not m.content or not m.content.strip():
+            raise HTTPException(status_code=422, detail=f"messages[{idx}].content must be non-empty")
 
-    body = {
-        "messages": messages,
-        "inferenceConfig": {
-            "maxTokens": int(payload.max_tokens),
-            "temperature": float(payload.temperature),
-        },
-    }
+    provider, api_key, default_model = _resolve_provider()
+    model = (request.model or default_model).strip() or default_model
+    temperature = 0.7 if request.temperature is None else float(request.temperature)
+    max_tokens = 2048 if request.max_tokens is None else int(request.max_tokens)
 
     try:
-        response = bedrock.invoke_model(
-            modelId=payload.model or "amazon.nova-lite-v1:0",
-            contentType="application/json",
-            accept="application/json",
-            body=json.dumps(body),
-        )
-        result = json.loads(response["body"].read())
-        text = result["output"]["message"]["content"][0]["text"].strip()
-        return {
-            "content": text,
-            "model": payload.model,
-            "provider": "bedrock",
-        }
-    except (NoCredentialsError, PartialCredentialsError, ProfileNotFound) as exc:
-        if _offline_ai_enabled():
-            return {
-                "content": (
-                    "Offline AI mode is active for local testing (no AWS credentials configured on gateway). "
-                    "Deploy the gateway with an IAM role/credentials to enable real AI."
-                ),
-                "model": payload.model,
-                "provider": "offline_local",
-            }
-        raise HTTPException(status_code=503, detail=f"AWS credentials not configured on gateway: {exc}")
-    except Exception as exc:
-        logger.error(f"Gateway chat failed: {exc}")
-        raise HTTPException(status_code=500, detail=f"Gateway chat failed: {exc}")
-
-
-@router.post("/ai/gateway/complete")
-async def gateway_complete_endpoint(payload: GatewayCompleteRequest, x_license_key: Optional[str] = Header(default=None)):
-    _require_license(x_license_key)
-
-    bedrock = get_bedrock_runtime_client()
-
-    # Use Nova message format with a single user prompt.
-    body = {
-        "messages": [{"role": "user", "content": [{"text": payload.prompt}]}],
-        "inferenceConfig": {
-            "maxTokens": int(payload.max_tokens),
-            "temperature": float(payload.temperature),
-        },
-    }
+        import httpx  # type: ignore[import-not-found]
+    except ImportError as e:
+        raise HTTPException(status_code=503, detail="httpx is required for gateway providers.") from e
 
     try:
-        response = bedrock.invoke_model(
-            modelId=payload.model or "amazon.nova-lite-v1:0",
-            contentType="application/json",
-            accept="application/json",
-            body=json.dumps(body),
-        )
-        result = json.loads(response["body"].read())
-        text = result["output"]["message"]["content"][0]["text"].strip()
-        return {
-            "text": text,
-            "model": payload.model,
-            "provider": "bedrock",
-        }
-    except (NoCredentialsError, PartialCredentialsError, ProfileNotFound) as exc:
-        if _offline_ai_enabled():
-            return {
-                "text": (
-                    "Offline AI mode is active for local testing (no AWS credentials configured on gateway). "
-                    "Deploy the gateway with an IAM role/credentials to enable real AI."
-                ),
-                "model": payload.model,
-                "provider": "offline_local",
-            }
-        raise HTTPException(status_code=503, detail=f"AWS credentials not configured on gateway: {exc}")
-    except Exception as exc:
-        logger.error(f"Gateway completion failed: {exc}")
-        raise HTTPException(status_code=500, detail=f"Gateway completion failed: {exc}")
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            if provider == "anthropic":
+                resp = await client.post(
+                    "https://api.anthropic.com/v1/messages",
+                    headers={
+                        "x-api-key": api_key,
+                        "anthropic-version": "2023-06-01",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": model,
+                        "messages": [{"role": m.role, "content": m.content} for m in request.messages if m.role != "system"],
+                        "temperature": temperature,
+                        "max_tokens": max_tokens,
+                    },
+                )
+                if resp.status_code != 200:
+                    raise HTTPException(status_code=resp.status_code, detail=resp.text)
+                data = resp.json()
+                text = (data.get("content") or [{}])[0].get("text") or ""
+                return GatewayChatResponse(content=text, model=model, provider=provider)
+
+            if provider == "bedrock":
+                # Keep this minimal; hosted deployment should ensure boto3 + AWS creds.
+                import boto3  # type: ignore
+
+                bedrock = boto3.client(
+                    "bedrock-runtime",
+                    region_name=os.environ.get("AWS_REGION", "us-east-1"),
+                )
+                payload = {
+                    "messages": [
+                        {
+                            "role": (m.role if m.role != "system" else "user"),
+                            "content": [{"text": m.content}],
+                        }
+                        for m in request.messages
+                    ],
+                    "inferenceConfig": {"maxTokens": max_tokens, "temperature": temperature},
+                }
+                response = bedrock.invoke_model(
+                    modelId=model,
+                    contentType="application/json",
+                    accept="application/json",
+                    body=json.dumps(payload),
+                )
+                result = json.loads(response["body"].read())
+                text = result["output"]["message"]["content"][0]["text"].strip()
+                return GatewayChatResponse(content=text, model=model, provider=provider)
+
+            # OpenAI
+            resp = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": model,
+                    "messages": [{"role": m.role, "content": m.content} for m in request.messages],
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                },
+            )
+            if resp.status_code != 200:
+                raise HTTPException(status_code=resp.status_code, detail=resp.text)
+            data = resp.json()
+            text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            return GatewayChatResponse(content=text, model=model, provider=provider)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Gateway chat error: {e}")
+        raise HTTPException(status_code=500, detail=f"Gateway error: {str(e)}")
