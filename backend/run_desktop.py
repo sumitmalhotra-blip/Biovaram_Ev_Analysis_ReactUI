@@ -47,6 +47,20 @@ def _is_truthy_env(name: str) -> bool:
     """Interpret common truthy environment variable values."""
     return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
+
+def _load_env_file(path: Path, *, override: bool = False) -> bool:
+    """Load a dotenv file when available."""
+    try:
+        from dotenv import load_dotenv  # type: ignore
+    except Exception:
+        return False
+
+    if not path.exists():
+        return False
+
+    load_dotenv(path, override=override)
+    return True
+
 # =============================================================================
 # Path Setup
 # =============================================================================
@@ -194,19 +208,34 @@ def create_desktop_app():
     # ---------------------------------------------------------------------
     # In source/dev: allow backend/.env to configure the API.
     # In frozen builds: allow %APPDATA%/BioVaram/.env (Windows) to override.
-    try:
-        from dotenv import load_dotenv  # type: ignore
-    except Exception:
-        load_dotenv = None  # type: ignore[assignment]
+    if getattr(sys, 'frozen', False):
+        env_root = Path(os.environ.get('APPDATA', os.path.expanduser('~'))) / 'BioVaram'
+        env_path = env_root / '.env'
+    else:
+        env_path = Path(__file__).parent / '.env'
 
-    if load_dotenv is not None:
-        if getattr(sys, 'frozen', False):
-            env_root = Path(os.environ.get('APPDATA', os.path.expanduser('~'))) / 'BioVaram'
-            env_path = env_root / '.env'
-        else:
-            env_path = Path(__file__).parent / '.env'
-        if env_path.exists():
-            load_dotenv(env_path)
+    _load_env_file(env_path)
+
+    gateway_candidates = [
+        Path(__file__).parent / '.env.gateway',
+        APP_DIR / '.env.gateway',
+        Path(os.environ.get('APPDATA', os.path.expanduser('~'))) / 'BioVaram' / '.env.gateway',
+    ]
+    gateway_loaded = False
+    for gateway_path in gateway_candidates:
+        if _load_env_file(gateway_path, override=getattr(sys, 'frozen', False)):
+            gateway_loaded = True
+            break
+
+    gateway_url = (os.getenv('CRMIT_AI_GATEWAY_URL') or '').strip()
+    gateway_key = (os.getenv('CRMIT_AI_GATEWAY_LICENSE_KEY') or '').strip()
+    if gateway_loaded or (gateway_url and gateway_key):
+        os.environ['AI_PROVIDER'] = 'gateway'
+        if gateway_url:
+            os.environ.setdefault('CRMIT_AI_GATEWAY_URL', gateway_url)
+        if gateway_key:
+            os.environ.setdefault('CRMIT_AI_GATEWAY_LICENSE_KEY', gateway_key)
+        os.environ.setdefault('CRMIT_AI_MODEL', 'amazon.nova-lite-v1:0')
 
     # Set environment variables before importing the app
     data_root = setup_data_directories()

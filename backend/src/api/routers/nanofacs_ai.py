@@ -97,18 +97,33 @@ def _get_bedrock_client():
 
 
 def _call_bedrock(prompt: str, max_tokens: int = 1500) -> str:
+    def _gateway_fallback() -> str:
+        if "exact JSON format" in prompt:
+            return json.dumps(
+                {
+                    "anomalies": [],
+                    "cluster_findings": [],
+                    "missed_parameters": [],
+                    "suggestions": [
+                        "Gateway unavailable; using local NanoFACS analysis fallback.",
+                        "Verify CRMIT_AI_GATEWAY_URL and CRMIT_AI_GATEWAY_LICENSE_KEY on the packaged desktop build.",
+                    ],
+                    "summary": "Gateway request failed, so the app fell back to local NanoFACS analysis without cloud interpretation.",
+                }
+            )
+        return (
+            "Gateway request failed, so the app fell back to local NanoFACS analysis without cloud interpretation. "
+            "Verify CRMIT_AI_GATEWAY_URL and CRMIT_AI_GATEWAY_LICENSE_KEY on the packaged desktop build."
+        )
+
     provider = (os.getenv("AI_PROVIDER") or "bedrock").strip().lower()
     if provider == "gateway":
         model = (os.getenv("CRMIT_AI_MODEL") or "amazon.nova-lite-v1:0").strip() or "amazon.nova-lite-v1:0"
         try:
             return gateway_complete(prompt=prompt, model=model, temperature=0.3, max_tokens=max_tokens)
         except AIGatewayError as exc:
-            if _offline_ai_enabled():
-                return (
-                    "Offline AI mode is active for local testing (gateway unavailable). "
-                    "Configure CRMIT_AI_GATEWAY_URL / CRMIT_AI_GATEWAY_LICENSE_KEY to enable gateway mode."
-                )
-            raise HTTPException(status_code=503, detail=str(exc))
+            logger.warning(f"Gateway request failed for NanoFACS analysis: {exc}")
+            return _gateway_fallback()
 
     client = _get_bedrock_client()
     if client is None:
