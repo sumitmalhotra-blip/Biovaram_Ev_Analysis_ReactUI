@@ -3,7 +3,10 @@ from __future__ import annotations
 import os
 from typing import Any, Optional
 
-import boto3
+try:
+    import boto3  # type: ignore
+except ImportError:  # pragma: no cover
+    boto3 = None  # type: ignore
 
 
 def get_aws_region(default: str = "us-east-1") -> str:

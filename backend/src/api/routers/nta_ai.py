@@ -27,7 +27,12 @@ except ImportError:  # pragma: no cover
     boto3 = None  # type: ignore
 from typing import Optional
 from datetime import datetime
-from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ProfileNotFound  # type: ignore
+try:
+    from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ProfileNotFound  # type: ignore
+except ImportError:  # pragma: no cover
+    NoCredentialsError = Exception  # type: ignore
+    PartialCredentialsError = Exception  # type: ignore
+    ProfileNotFound = Exception  # type: ignore
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from loguru import logger

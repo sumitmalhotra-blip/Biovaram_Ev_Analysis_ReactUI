@@ -30,7 +30,12 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from loguru import logger
 
-from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ProfileNotFound  # type: ignore
+try:
+    from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ProfileNotFound  # type: ignore
+except ImportError:  # pragma: no cover
+    NoCredentialsError = Exception  # type: ignore
+    PartialCredentialsError = Exception  # type: ignore
+    ProfileNotFound = Exception  # type: ignore
 
 from src.api.aws_utils import get_bedrock_runtime_client
 from src.api.ai_gateway_client import AIGatewayError, gateway_chat
@@ -877,7 +882,6 @@ async def chat(request: Request):
         generator = _stream_bedrock(chat_req.messages, max_tokens, temperature)
     else:
         generator = _stream_openai(chat_req.messages, api_key, model, temperature, max_tokens)
->>>>>>> charmi-ai-features
 
     return StreamingResponse(
         _vercel_data_stream_to_ui_message_stream(generator),
