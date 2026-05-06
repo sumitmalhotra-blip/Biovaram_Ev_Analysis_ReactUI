@@ -70,7 +70,6 @@ function MarkdownMessage({ markdown }: { markdown: string }) {
       {markdown}
     </ReactMarkdown>
   )
->>>>>>> charmi-ai-features
 }
 
 const suggestedQuestions = [
