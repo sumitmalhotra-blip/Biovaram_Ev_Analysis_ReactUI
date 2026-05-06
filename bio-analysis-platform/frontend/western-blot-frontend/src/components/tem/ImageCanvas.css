@@ -957,7 +957,8 @@
 
 /* Search */
 .temSearchInput{
-  width:80%;
+  flex:1;
+  min-width:0;
   padding:9px 12px;
   border-radius:10px;
   border:1px solid var(--tem-border);
@@ -1006,6 +1007,22 @@
 .temUploadBtn:hover{
   box-shadow:0 6px 20px rgba(37,99,235,0.5);
   transform:translateY(-1px);
+}
+.temRecoverBtn{
+  background: transparent;
+  color: #94a3b8;
+  padding: 7px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  border: 1px solid #334155;
+  transition: color 0.2s, border-color 0.2s;
+}
+.temRecoverBtn:hover{
+  color: #38bdf8;
+  border-color: #38bdf8;
 }
 
 /* List area */

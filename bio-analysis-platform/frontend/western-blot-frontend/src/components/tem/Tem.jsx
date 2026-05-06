@@ -49,7 +49,18 @@ function TiffSafeImage({ src, alt, className }) {
     return () => { cancelled = true; };
   }, [src]);
 
-  return <img src={resolvedSrc} alt={alt} className={className} />;
+  return (
+    <img
+      src={resolvedSrc}
+      alt={alt}
+      className={className}
+      onError={(e) => {
+        e.target.onerror = null;
+        e.target.style.opacity = "0.25";
+        e.target.style.filter = "grayscale(1)";
+      }}
+    />
+  );
 }
 
 const makeId = () => `${Date.now()}_${Math.random().toString(16).slice(2)}`;
@@ -239,8 +250,26 @@ function Tem() {
   };
 
   useEffect(() => {
-    fetchImages();
+    // Auto-recover orphaned files on mount, then refresh the list
+    fetch(`${API}/recover-images/${userId}`, { method: "POST" })
+      .then(() => fetchImages())
+      .catch(() => fetchImages());
   }, [userId]);
+
+  const recoverImages = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/recover-images/${userId}`, { method: "POST" });
+      const data = await res.json();
+      showToastFn(`Recovered ${data.recovered} image(s), removed ${data.purged} stale record(s)`);
+      await fetchImages();
+    } catch (err) {
+      console.error(err);
+      showToastFn("Recovery failed");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const MAX_FILE_SIZE = 5 * 1024 * 1024;
   const MAX_FILES = 5;
@@ -514,6 +543,13 @@ function Tem() {
                 onChange={uploadImage}
               />
             </label>
+            <button
+              className="temRecoverBtn"
+              title="Recover images that exist on disk but are missing from the list"
+              onClick={recoverImages}
+            >
+              ↺ Recover
+            </button>
           </div>
         </div>
 

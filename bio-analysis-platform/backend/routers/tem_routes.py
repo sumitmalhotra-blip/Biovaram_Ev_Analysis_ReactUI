@@ -138,6 +138,17 @@ async def upload_images(
         db.close()
 
 
+def _resolve_display_url(rec) -> str:
+    """Returns the best available URL whose file actually exists on disk.
+    Falls back display_image_url → original_image_url → image_url."""
+    for url in [rec.display_image_url, rec.original_image_url, rec.image_url]:
+        if url:
+            path = image_path_from_url(url)
+            if path and os.path.exists(path):
+                return url
+    return get_display_url(rec)
+
+
 @router.get("/images/{user_id}")
 def get_user_images(user_id: str):
     db = db_session()
@@ -149,7 +160,7 @@ def get_user_images(user_id: str):
                 min_nm = get_min_nm_value(r.min_nm)
                 npp = get_nm_per_pixel_for_record(r)
                 out[r.image_id] = {
-                    "image_url": get_display_url(r),
+                    "image_url": _resolve_display_url(r),
                     "original_image_url": get_original_url(r),
                     "scale": r.scale,
                     "min_nm": min_nm,
@@ -856,6 +867,93 @@ def shape_classify_existing_with_feedback(
                 fallback_nm_per_pixel=npp,
             ),
         }
+    finally:
+        db.close()
+
+
+@router.post("/recover-images/{user_id}")
+def recover_images(user_id: str):
+    """
+    Two-pass recovery:
+    1. Remove DB records whose files are all missing from disk.
+    2. Create DB records for orphaned original image files on disk (no matching record).
+    """
+    db = db_session()
+    try:
+        # --- Pass 1: purge stale records ---
+        rows = db.query(ImageRecord).filter(ImageRecord.user_id == user_id).all()
+        purged = 0
+        for r in rows:
+            has_file = False
+            for url in [r.display_image_url, r.original_image_url, r.image_url]:
+                if url:
+                    p = image_path_from_url(url)
+                    if p and os.path.exists(p):
+                        has_file = True
+                        break
+            if not has_file:
+                db.delete(r)
+                purged += 1
+        db.commit()
+
+        # --- Pass 2: create records for orphaned files ---
+        # Collect all image_urls already tracked in DB (after purge)
+        existing_rows = db.query(ImageRecord).filter(ImageRecord.user_id == user_id).all()
+        tracked_urls = set()
+        for r in existing_rows:
+            for url in [r.display_image_url, r.original_image_url, r.image_url]:
+                if url:
+                    tracked_urls.add(url)
+
+        SKIP_SUFFIXES = (
+            "_shape_classified", "_shape_feedback", "_clean_mask",
+            "_shape_classified_existing", "_shape_feedback_existing",
+        )
+        IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".tif", ".tiff"}
+        recovered = 0
+
+        if os.path.exists(UPLOAD_DIR):
+            for fname in sorted(os.listdir(UPLOAD_DIR)):
+                ext = os.path.splitext(fname)[1].lower()
+                if ext not in IMAGE_EXTS:
+                    continue
+                stem = os.path.splitext(fname)[0]
+                if any(s in stem for s in SKIP_SUFFIXES):
+                    continue
+
+                url = f"/uploads/tem/{fname}"
+                if url in tracked_urls:
+                    continue
+
+                # fname pattern: {uuid}_{original_name}.ext
+                parts = fname.split("_", 1)
+                if len(parts) < 2:
+                    continue
+                image_id = parts[0]
+                # uuid is 36 chars with dashes — quick sanity check
+                if len(image_id) != 36:
+                    continue
+
+                rec = ImageRecord(
+                    user_id=user_id,
+                    image_id=image_id,
+                    image_url=url,
+                    original_image_url=url,
+                    display_image_url=url,
+                    boxes=[],
+                    scale=None,
+                    min_nm=DEFAULT_MIN_NM,
+                    analysis_method="cnn",
+                )
+                db.add(rec)
+                recovered += 1
+
+        db.commit()
+        return {"status": "ok", "purged": purged, "recovered": recovered}
+    except Exception as e:
+        db.rollback()
+        print(f"[ERROR] recover_images failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         db.close()
 
