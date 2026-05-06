@@ -1,0 +1,15 @@
+{
+  "img_size": 128,
+  "class_names": [
+    "non_viable",
+    "viable"
+  ],
+  "timestamp": "2026-03-03T20:57:45.248516",
+  "architecture": "MobileNetV2_TransferLearning",
+  "input_shape": [
+    128,
+    128,
+    3
+  ],
+  "notes": "Phase1=feature_extraction, Phase2=fine_tuning"
+}

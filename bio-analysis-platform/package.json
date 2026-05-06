@@ -1,0 +1,79 @@
+{
+  "name": "bio-analysis-platform",
+  "version": "1.0.17",
+  "description": "BioLab Suite – desktop analysis platform",
+  "main": "electron/main.js",
+  "type": "commonjs",
+  "scripts": {
+    "electron:dev": "electron .",
+    "build:frontend": "cd frontend/western-blot-frontend && npm run build",
+    "build:installer": "electron-builder --win --x64",
+    "release": "npm run build:frontend && npm run build:installer"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.3",
+    "react-router-dom": "^7.13.2",
+    "utif": "^3.1.0"
+  },
+  "build": {
+    "appId": "com.crmit.biolabsuite",
+    "productName": "BioLab Suite",
+    "copyright": "Copyright © 2025 CRMIT",
+    "directories": {
+      "output": "dist-build"
+    },
+    "files": [
+      "electron/**/*",
+      "!electron/dist{,/**/*}",
+      "!electron/resources{,/**/*}",
+      "!electron/node_modules{,/**/*}"
+    ],
+    "extraResources": [
+      {
+        "from": "backend/dist/BioLabBackend",
+        "to": "BioLabBackend"
+      },
+      {
+        "from": "frontend/western-blot-frontend/dist",
+        "to": "frontend"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "BioLab Suite"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "dineshchandran-chan",
+      "repo": "BioLab",
+      "releaseType": "release"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dineshchandran-chan/BioLab.git"
+  },
+  "author": "CRMIT Solutions",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/dineshchandran-chan/BioLab/issues"
+  },
+  "homepage": "https://github.com/dineshchandran-chan/BioLab#readme"
+}

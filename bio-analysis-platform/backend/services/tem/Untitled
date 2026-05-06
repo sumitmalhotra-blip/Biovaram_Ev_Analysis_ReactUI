@@ -1,0 +1,1 @@
+echo "Key set:" ${#AWS_ACCESS_KEY_ID} "chars"
