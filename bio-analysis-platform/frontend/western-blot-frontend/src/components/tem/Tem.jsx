@@ -548,7 +548,7 @@ function Tem() {
               title="Recover images that exist on disk but are missing from the list"
               onClick={recoverImages}
             >
-              ↺ Recover
+              ↺ 
             </button>
           </div>
         </div>
