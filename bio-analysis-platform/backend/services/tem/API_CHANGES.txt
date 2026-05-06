@@ -1,0 +1,182 @@
+# API Changes Documentation
+
+## Overview
+The TEM backend now supports 3 analysis methods:
+1. **rulebased** - Original threshold-based classification
+2. **voronoi** - Spatial density using Voronoi tessellation
+3. **ai** - Claude AI-powered analysis
+
+## Modified Files
+
+### 1. main.py
+**Changes:**
+- Added `analysis_method` column to ImageRecord model
+- Updated imports for all three analyzers
+- Modified `/upload-multiple-images/{user_id}` to accept method parameter
+- Added `/images/{user_id}/{image_id}/reanalyze` endpoint
+- Updated all GET endpoints to return `analysis_method`
+
+### 2. tem_analyzer.py
+**Changes:**
+- Renamed function to `analyze_image_rulebased`
+- No logic changes
+
+### 3. tem_analyzer_voronoi.py (NEW)
+**Features:**
+- Voronoi tessellation-based density analysis
+- Monte Carlo simulation for baseline
+- Statistical threshold (A*) calculation
+- Edge effect correction
+- Returns additional metadata: `voronoi_area`, `density_threshold`
+
+### 4. tem_analyzer_ai.py (NEW)
+**Features:**
+- Claude API integration
+- Support for few-shot learning with example images
+- Async/sync analysis methods
+- Automatic result enrichment with intensity data
+
+### 5. requirements.txt (NEW)
+Added dependency: `httpx` for Claude API calls
+
+## API Endpoints
+
+### Upload Images with Method Selection
+```
+POST /upload-multiple-images/{user_id}?method=rulebased|voronoi|ai
+```
+**Query Parameters:**
+- `method` (optional): "rulebased" (default), "voronoi", or "ai"
+
+**Response:**
+```json
+[{
+  "image_id": "uuid",
+  "image_url": "/uploads/filename",
+  "boxes": [...],
+  "scale": null,
+  "min_nm": 30.0,
+  "analysis_method": "voronoi"
+}]
+```
+
+### Reanalyze Image
+```
+POST /images/{user_id}/{image_id}/reanalyze?method=voronoi
+```
+**Query Parameters:**
+- `method` (required): "rulebased", "voronoi", or "ai"
+
+**Response:**
+```json
+{
+  "status": "success",
+  "analysis_method": "voronoi",
+  "boxes": [...],
+  "scale": {...},
+  "min_nm": 30.0
+}
+```
+
+### Get Image (Updated)
+```
+GET /images/{user_id}/{image_id}
+```
+**Response now includes:**
+```json
+{
+  "image_url": "...",
+  "boxes": [...],
+  "scale": {...},
+  "min_nm": 30.0,
+  "analysis_method": "rulebased"
+}
+```
+
+## Database Migration
+
+The database schema has changed. You need to add the `analysis_method` column:
+
+```sql
+ALTER TABLE images ADD COLUMN analysis_method VARCHAR DEFAULT 'rulebased';
+```
+
+Or drop and recreate tables (will lose data):
+```python
+Base.metadata.drop_all(bind=engine)
+Base.metadata.create_all(bind=engine)
+```
+
+## Algorithm Details
+
+### Rule-Based (Original)
+- Uses solidity, focus (Laplacian), and contrast thresholds
+- Fast, deterministic
+- Fixed classification rules
+
+### Voronoi Tessellation
+- Computes spatial density using Voronoi polygons
+- Runs Monte Carlo simulations for statistical baseline
+- Automatically finds threshold A* where experimental PDF crosses random PDF
+- More robust against image degradation
+- Slower (Monte Carlo requires 50 iterations)
+
+### AI (Claude)
+- Sends image to Claude API
+- Can learn from expert-labeled examples (few-shot)
+- Most flexible, adapts to image quality
+- Requires API calls (network latency)
+- Optional: Pass example images for better accuracy
+
+## Usage Examples
+
+### Python Client
+```python
+import requests
+
+# Upload with Voronoi
+files = {'files': open('tem_image.tif', 'rb')}
+response = requests.post(
+    'http://localhost:8000/upload-multiple-images/user123?method=voronoi',
+    files=files
+)
+
+# Reanalyze with AI
+response = requests.post(
+    'http://localhost:8000/images/user123/image-id/reanalyze?method=ai'
+)
+```
+
+### Frontend Integration
+```javascript
+// Upload with method selection
+const formData = new FormData();
+formData.append('files', file);
+
+const response = await fetch(
+  `/upload-multiple-images/${userId}?method=${selectedMethod}`,
+  { method: 'POST', body: formData }
+);
+
+// Reanalyze existing image
+const reanalyze = await fetch(
+  `/images/${userId}/${imageId}/reanalyze?method=${newMethod}`,
+  { method: 'POST' }
+);
+```
+
+## Performance Comparison
+
+| Method     | Speed | Accuracy | Robustness | Cost  |
+|------------|-------|----------|------------|-------|
+| rulebased  | Fast  | Good     | Medium     | Free  |
+| voronoi    | Slow  | Better   | High       | Free  |
+| ai         | Medium| Best     | Highest    | API $ |
+
+## Future Enhancements
+
+1. **Hybrid Mode**: Combine all three methods
+2. **Training Data Management**: Store expert labels for AI training
+3. **Batch Analysis**: Process multiple images with same method
+4. **Result Comparison**: Side-by-side view of different methods
+5. **Confidence Scores**: Return confidence levels for each classification

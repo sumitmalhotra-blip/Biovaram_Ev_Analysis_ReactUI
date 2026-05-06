@@ -1,0 +1,53 @@
+{
+  "name": "biolab-electron",
+  "version": "1.0.17",
+  "description": "BioLab Electron App",
+  "main": "main.js",
+  "author": "Dinesh",
+  "license": "ISC",
+  "type": "commonjs",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "com.biolab.app",
+    "productName": "BioLab Suite",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/BioLabBackend",
+        "to": "BioLabBackend"
+      },
+      {
+        "from": "../frontend/western-blot-frontend/dist",
+        "to": "frontend"
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "dineshchandran-chan",
+      "repo": "BioLab",
+      "releaseType": "release"
+    }
+  },
+  "devDependencies": {
+    "electron": "^41.2.2",
+    "electron-builder": "^26.8.1"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.3"
+  }
+}

@@ -1,0 +1,288 @@
+:root {
+  --text: #6b6375;
+  --text-h: #08060d;
+  --bg: #fff;
+  --border: #e5e4e7;
+  --code-bg: #f4f3ec;
+  --accent: #aa3bff;
+  --accent-bg: rgba(170, 59, 255, 0.1);
+  --accent-border: rgba(170, 59, 255, 0.5);
+  --social-bg: rgba(244, 243, 236, 0.5);
+  --shadow:
+    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+
+  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, Consolas, monospace;
+
+  font: 18px/145% var(--sans);
+  letter-spacing: 0.18px;
+  color-scheme: light;
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  @media (max-width: 1024px) {
+    font-size: 16px;
+  }
+
+  /* ─── App theme variables — dark is the default ─── */
+  --home-body-bg: #070b14;
+  --home-radial: rgba(255,255,255,0.03);
+  --home-bg-from: #08111f;
+  --home-bg-to: #050912;
+  --overlay-from: rgba(6,10,18,0.78);
+  --overlay-to: rgba(6,10,18,0.48);
+  --panel-bg: transparent;
+  --panel-card-shadow: none;
+  --bg-img-opacity: 0.14;
+  --divider-color: rgba(255,255,255,0.12);
+  --clock-time-color: rgba(255,255,255,0.72);
+  --clock-date-color: rgba(255,255,255,0.32);
+  --greeting-label-color: rgba(255,255,255,0.3);
+  --greeting-title-color: rgba(255,255,255,0.9);
+  --greeting-strong-color: #ffffff;
+  --panel-title-color: #ffffff;
+  --panel-sub-color: rgba(255,255,255,0.68);
+  --panel-desc-color: rgba(255,255,255,0.5);
+  --panel-border: rgba(255,255,255,0.08);
+  --dock-bg: rgba(255,255,255,0.055);
+  --dock-border: rgba(255,255,255,0.07);
+  --dock-text: rgba(255,255,255,0.32);
+  --dock-sep: rgba(255,255,255,0.1);
+  --app-bg: #0f1117;
+  --header-bg: #000000;
+  --surface-text: #ffffff;
+
+  /* ─── Western Blot panel variables (dark default) ─── */
+  --wb-bg:          #0a0e1a;
+  --wb-surface:     #111827;
+  --wb-surface2:    #1a2436;
+  --wb-border:      rgba(55,75,130,0.32);
+  --wb-text:        #e2e8f0;
+  --wb-text-muted:  #94a3b8;
+  --wb-input-bg:    #0d1421;
+  --wb-th-bg:       rgba(59,130,246,0.12);
+  --wb-row-hover:   rgba(59,130,246,0.06);
+  --wb-row-sel:     rgba(59,130,246,0.15);
+  --dropdown-bg: rgba(20,24,34,0.98);
+  --dropdown-border: rgba(255,255,255,0.08);
+  --dropdown-text: rgba(255,255,255,0.88);
+  --dropdown-hover: rgba(255,255,255,0.08);
+  --version-text: rgba(255,255,255,0.25);
+  --feedback-color: #8d8c8c;
+  --feedback-border: #323131;
+  --icon-btn-bg: rgba(255,255,255,0.06);
+  --icon-btn-border: rgba(255,255,255,0.12);
+  --icon-btn-hover: rgba(255,255,255,0.12);
+  --toggle-bg: rgba(255,255,255,0.08);
+  --toggle-border: rgba(255,255,255,0.15);
+  --toggle-color: rgba(255,255,255,0.75);
+  --toggle-hover: rgba(255,255,255,0.15);
+
+  /* ─── TEM semantic section colors (dark default) ─── */
+  --tem-section-review-bg:     rgba(245,158,11,0.10);
+  --tem-section-review-border: rgba(245,158,11,0.30);
+  --tem-section-review-text:   #fbbf24;
+  --tem-section-intact-bg:     rgba(34,197,94,0.08);
+  --tem-section-intact-border: rgba(34,197,94,0.22);
+  --tem-section-intact-text:   #4ade80;
+  --tem-section-bad-bg:        rgba(239,68,68,0.08);
+  --tem-section-bad-border:    rgba(239,68,68,0.22);
+  --tem-section-bad-text:      #f87171;
+
+  /* ─── TEM panel variables (dark default) ─── */
+  --tem-bg:          #0a0e1a;
+  --tem-surface:     #111827;
+  --tem-surface2:    #1a2436;
+  --tem-border:      rgba(55,75,130,0.32);
+  --tem-border-accent: rgba(59,130,246,0.5);
+  --tem-text:        #e2e8f0;
+  --tem-text-muted:  #94a3b8;
+  --tem-input-bg:    #0d1421;
+  --tem-card-sel:    rgba(59,130,246,0.13);
+  --tem-accent:      #3b82f6;
+  --tem-accent-dim:  rgba(59,130,246,0.18);
+  --tem-accent-purple: #8b5cf6;
+  --tem-header-gradient: linear-gradient(135deg,#0d1421 0%,#111827 100%);
+  --tem-overlay-bg:  rgba(10,14,26,0.88);
+  --wb-error-bg:     rgba(239,68,68,0.12);
+  --wb-error-text:   #f87171;
+  --wb-error-border: rgba(239,68,68,0.28);
+  --wb-warn-bg:      rgba(245,158,11,0.10);
+  --wb-warn-text:    #fbbf24;
+  --wb-warn-border:  rgba(245,158,11,0.28);
+}
+
+/* ─── Light theme overrides ─── */
+[data-theme="light"] {
+  --home-body-bg: #c9d9f0;
+  --home-radial: rgba(255,255,255,0.18);
+  --home-bg-from: #c4d4ed;
+  --home-bg-to: #c8c8e8;
+  --overlay-from: rgba(196,212,237,0.70);
+  --overlay-to: rgba(196,212,237,0.40);
+  --divider-color: rgba(30,64,175,0.25);
+  --panel-bg: rgba(255,255,255,0.82);
+  --panel-card-shadow: 0 8px 32px rgba(30,64,175,0.14), 0 2px 8px rgba(0,0,0,0.08);
+  --bg-img-opacity: 0.10;
+  --clock-time-color: rgba(15,23,42,0.75);
+  --clock-date-color: rgba(15,23,42,0.5);
+  --greeting-label-color: rgba(15,23,42,0.5);
+  --greeting-title-color: rgba(15,23,42,0.88);
+  --greeting-strong-color: #0f172a;
+  --panel-title-color: #0f172a;
+  --panel-sub-color: rgba(30,41,59,0.75);
+  --panel-desc-color: rgba(51,65,85,0.65);
+  --panel-border: rgba(59,130,246,0.22);
+  --dock-bg: rgba(255,255,255,0.72);
+  --dock-border: rgba(59,130,246,0.18);
+  --dock-text: rgba(15,23,42,0.55);
+  --dock-sep: rgba(59,130,246,0.15);
+  --app-bg: #f8fafc;
+  --header-bg: #ffffff;
+  --surface-text: #0f172a;
+  --dropdown-bg: rgba(255,255,255,0.98);
+  --dropdown-border: rgba(0,0,0,0.1);
+  --dropdown-text: rgba(15,23,42,0.88);
+  --dropdown-hover: rgba(0,0,0,0.06);
+  --version-text: rgba(15,23,42,0.3);
+  --feedback-color: #475569;
+  --feedback-border: #cbd5e1;
+  --icon-btn-bg: rgba(0,0,0,0.06);
+  --icon-btn-border: rgba(0,0,0,0.12);
+  --icon-btn-hover: rgba(0,0,0,0.1);
+  --toggle-bg: rgba(0,0,0,0.07);
+  --toggle-border: rgba(0,0,0,0.15);
+  --toggle-color: rgba(15,23,42,0.75);
+  --toggle-hover: rgba(0,0,0,0.12);
+
+  /* ─── Western Blot panel variables (light) ─── */
+  --wb-bg:          #f4f7fb;
+  --wb-surface:     #ffffff;
+  --wb-surface2:    #f1f5f9;
+  --wb-border:      #e2e8f0;
+  --wb-text:        #1f2937;
+  --wb-text-muted:  #6b7280;
+  --wb-input-bg:    #ffffff;
+  --wb-th-bg:       #eff6ff;
+  --wb-row-hover:   #f6f9ff;
+  --wb-row-sel:     #e8f0ff;
+
+  /* ─── TEM semantic section colors (light) ─── */
+  --tem-section-review-bg:     #fff7ed;
+  --tem-section-review-border: #f59e0b;
+  --tem-section-review-text:   #b45309;
+  --tem-section-intact-bg:     #ecfdf5;
+  --tem-section-intact-border: #d1fae5;
+  --tem-section-intact-text:   #166534;
+  --tem-section-bad-bg:        #fff1f2;
+  --tem-section-bad-border:    #fecaca;
+  --tem-section-bad-text:      #991b1b;
+
+  /* ─── TEM panel variables (light) ─── */
+  --tem-bg:          #f0f4f8;
+  --tem-surface:     #ffffff;
+  --tem-surface2:    #f8fafc;
+  --tem-border:      #dde3ed;
+  --tem-border-accent:#93c5fd;
+  --tem-text:        #0f172a;
+  --tem-text-muted:  #64748b;
+  --tem-input-bg:    #f8fafc;
+  --tem-card-sel:    #eff6ff;
+  --tem-accent:      #2563eb;
+  --tem-accent-dim:  rgba(37,99,235,0.1);
+  --tem-accent-purple: #7c3aed;
+  --tem-header-gradient: linear-gradient(135deg,#1e3a5f 0%,#1e293b 100%);
+  --tem-overlay-bg:  rgba(240,244,248,0.92);
+  --wb-error-bg:     #fee2e2;
+  --wb-error-text:   #991b1b;
+  --wb-error-border: #fecaca;
+  --wb-warn-bg:      #fff7ed;
+  --wb-warn-text:    #9a3412;
+  --wb-warn-border:  #fdba74;
+}
+
+/* ─── Theme toggle button (global) ─── */
+.theme-toggle-btn {
+  background: var(--toggle-bg);
+  border: 1px solid var(--toggle-border);
+  color: var(--toggle-color);
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.2s ease, color 0.2s ease;
+  flex-shrink: 0;
+}
+
+.theme-toggle-btn:hover {
+  background: var(--toggle-hover);
+}
+
+#root {
+  /* width: 1126px;
+  max-width: 100%;
+  margin: 0 auto; */
+  text-align: center;
+  border-inline: 1px solid var(--border);
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+h1,
+h2 {
+  font-family: var(--heading);
+  font-weight: 500;
+  color: var(--text-h);
+}
+
+h1 {
+  font-size: 56px;
+  letter-spacing: -1.68px;
+  margin: 32px 0;
+  @media (max-width: 1024px) {
+    font-size: 36px;
+    margin: 20px 0;
+  }
+}
+h2 {
+  font-size: 24px;
+  line-height: 118%;
+  letter-spacing: -0.24px;
+  margin: 0 0 8px;
+  @media (max-width: 1024px) {
+    font-size: 20px;
+  }
+}
+p {
+  margin: 0;
+}
+
+code,
+.counter {
+  font-family: var(--mono);
+  display: inline-flex;
+  border-radius: 4px;
+  color: var(--text-h);
+}
+
+code {
+  font-size: 15px;
+  line-height: 135%;
+  padding: 4px 8px;
+  background: var(--code-bg);
+}

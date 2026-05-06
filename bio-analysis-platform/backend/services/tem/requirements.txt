@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+python-multipart
+opencv-python
+scipy
+scikit-image
+scikit-learn
+sqlalchemy
+psycopg2-binary
+httpx
+tensorflow==2.15.0
+keras==2.15.0
+numpy==1.26.4
+boto3

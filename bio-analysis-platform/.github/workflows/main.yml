@@ -1,0 +1,142 @@
+name: Build Electron App
+
+# ─────────────────────────────────────────────
+# Triggers
+#   push to main  → build only (no publish)
+#   push a tag    → build + publish to GitHub Releases
+#
+# To release a new version:
+#   1. Bump version in electron/package.json
+#   2. git commit -m "chore: bump to v1.x.x"
+#   3. git tag v1.x.x && git push origin v1.x.x
+# ─────────────────────────────────────────────
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write   # required to create/update GitHub Releases
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0   # full history needed for changelog generation
+
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      # Cache pip packages to speed up subsequent builds
+      - name: Cache pip
+        uses: actions/cache@v3
+        with:
+          path: ~\AppData\Local\pip\Cache
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      # Install backend deps + PyInstaller
+      - name: Install backend dependencies
+        run: |
+          cd backend
+          pip install pyinstaller
+          pip install -r requirements.txt
+
+      # Build backend (--onedir mode) — produces BioLabBackend/ folder
+      # No temp extraction at runtime → no Windows Defender false-positive
+      - name: Build backend
+        run: |
+          cd backend
+          pyinstaller BioLabBackend.spec --distpath ../electron/resources
+
+      # Install frontend deps
+      - name: Install frontend
+        run: |
+          cd frontend/western-blot-frontend
+          npm install
+
+      # Build frontend
+      - name: Build frontend
+        run: |
+          cd frontend/western-blot-frontend
+          npm run build
+
+      # Install electron deps (includes electron-updater)
+      - name: Install electron
+        run: |
+          cd electron
+          npm install
+
+      # Read version from electron/package.json
+      - name: Get app version
+        id: version
+        run: |
+          $version = (Get-Content electron/package.json | ConvertFrom-Json).version
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+
+      # ── PUBLISH only on tag pushes ──────────────────────────────────────
+      # On branch push: build to verify nothing is broken, but don't publish.
+      # On tag push (v*): build + publish + auto-generate release notes.
+      - name: Build Electron (branch — no publish)
+        if: github.ref_type != 'tag'
+        run: |
+          cd electron
+          npx electron-builder --publish never
+
+      - name: Build and publish Electron (tag release)
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd electron
+          npx electron-builder --publish always
+
+      # ── Smoke checks ────────────────────────────────────────────────────
+      - name: Smoke check artifacts
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $setupExe = "electron/dist/BioLab Suite Setup $version.exe"
+          if (-not (Test-Path $setupExe)) {
+            throw "SMOKE FAIL: Installer not found at: $setupExe"
+          }
+          $latestYml = "electron/dist/latest.yml"
+          if (("${{ github.ref_type }}" -eq "tag") -and (-not (Test-Path $latestYml))) {
+            throw "SMOKE FAIL: latest.yml not found (required for auto-update)"
+          }
+          Write-Host "Smoke check passed — installer and update metadata present"
+
+      # ── Auto-generate release notes (tag releases only) ─────────────────
+      - name: Generate release notes
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release edit "v${{ steps.version.outputs.version }}" --generate-notes
+        continue-on-error: true   # don't fail build if release note update fails
+
+      # Upload artifacts for direct download from Actions run page
+      # continue-on-error: artifact storage quota may be hit — the release
+      # is already published to GitHub Releases so this step is optional.
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: BioLab-Suite-Setup-v${{ steps.version.outputs.version }}
+          path: |
+            electron/dist/*.exe
+            electron/dist/*.blockmap
+            electron/dist/latest.yml
