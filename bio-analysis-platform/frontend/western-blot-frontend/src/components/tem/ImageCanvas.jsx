@@ -1230,7 +1230,21 @@ function ImageCanvas({
     img.onload = draw;
     img.onerror = () => {
       console.error("Failed to load image:", finalImageUrl);
-      showToastFn("Failed to load image preview");
+      showToastFn("Image file not found on server — it may have been deleted");
+      if (canvasRef.current) {
+        const c = canvasRef.current;
+        c.width = 480;
+        c.height = 320;
+        const ctx2 = c.getContext("2d");
+        ctx2.fillStyle = "#111";
+        ctx2.fillRect(0, 0, c.width, c.height);
+        ctx2.fillStyle = "#555";
+        ctx2.font = "18px Arial";
+        ctx2.textAlign = "center";
+        ctx2.fillText("Image file not available", c.width / 2, c.height / 2 - 12);
+        ctx2.font = "13px Arial";
+        ctx2.fillText("Re-upload to restore", c.width / 2, c.height / 2 + 16);
+      }
     };
     if (img.complete) draw();
 
