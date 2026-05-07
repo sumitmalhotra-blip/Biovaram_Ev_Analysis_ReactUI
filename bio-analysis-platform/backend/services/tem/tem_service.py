@@ -11,6 +11,7 @@ from .shape_classifier import (
     get_shape_classification_rules,
     run_shape_classification_pipeline,
     find_nearest_particle,
+    parse_feedback_text,
 )
 
 import os

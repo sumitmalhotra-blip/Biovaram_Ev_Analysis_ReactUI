@@ -285,3 +285,68 @@ def run_shape_classification_pipeline(
         )
 
     return overlay, clean_mask, particles
+
+
+# ---------------------------------------------------------------------------
+# Natural-language feedback → structured action
+# Adapted from app.py (Charmi, 2025-05)
+# ---------------------------------------------------------------------------
+
+def parse_feedback_text(text: str, current_status: str = "Intact") -> dict:
+    """
+    Convert free-text user feedback into a structured action dict.
+
+    Returns:
+        {"action": "green" | "red" | "skip", "note": <original text>}
+
+    Strategy:
+      1. Fast keyword match — no API call for unambiguous phrases.
+      2. Fallback to Mistral via AWS Bedrock for ambiguous input.
+      3. Final fallback: preserve current classification.
+    """
+    t = text.lower()
+
+    # --- fast keyword path ---
+    if any(w in t for w in ["ignore", "skip", "remove", "hide", "noise", "artifact"]):
+        return {"action": "skip", "note": text}
+
+    if any(w in t for w in [
+        "non-intact", "non intact", "broken", "damage", "bad",
+        "wrong", "not intact", "not good",
+    ]):
+        return {"action": "red", "note": text}
+
+    if any(w in t for w in [
+        "intact", "green", "fine", "good", "correct",
+        "keep", "this is intact", "make it green",
+    ]):
+        return {"action": "green", "note": text}
+
+    # --- Bedrock/Mistral fallback for ambiguous phrasing ---
+    try:
+        client = get_bedrock_client()
+        if client is None:
+            raise ValueError("AWS credentials not configured")
+
+        prompt = (
+            f'Particle currently: "{current_status}". User says: "{text}". '
+            f'Return ONLY JSON: {{"action":"green"|"red"|"skip","note":"brief summary"}} '
+            f"green=intact, red=non-intact, skip=ignore/remove."
+        )
+        payload = {"messages": [{"role": "user", "content": prompt}]}
+        response = client.invoke_model(
+            modelId="mistral.mistral-large-2402-v1:0",
+            contentType="application/json",
+            accept="application/json",
+            body=json.dumps(payload),
+        )
+        raw = json.loads(response["body"].read())
+        content = raw["choices"][0]["message"]["content"].strip()
+        content = content.replace("```json", "").replace("```", "").strip()
+        return json.loads(content)
+
+    except Exception as e:
+        print(f"[WARN] parse_feedback_text Bedrock call failed: {e}")
+        # Preserve the current classification as the safest default
+        default_action = "green" if current_status.lower() == "intact" else "red"
+        return {"action": default_action, "note": text}

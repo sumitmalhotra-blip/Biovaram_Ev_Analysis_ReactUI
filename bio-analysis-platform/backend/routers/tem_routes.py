@@ -1,4 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, Query, HTTPException, Form
+from pydantic import BaseModel
 from typing import List, Optional
 import os
 import uuid
@@ -37,6 +38,7 @@ from services.tem.tem_service import (
     run_shape_pipeline_on_bgr,
     build_table_response,
     find_nearest_particle,
+    parse_feedback_text,
     DEFAULT_MIN_NM,
     DEFAULT_NM_PER_PIXEL,
     ALLOWED_TYPES,
@@ -48,9 +50,34 @@ from services.tem.tem_service import (
 router = APIRouter()
 
 
+# ---------------------------------------------------------------------------
+# Request model for NL feedback parsing (from Charmi's app.py, 2025-05)
+# ---------------------------------------------------------------------------
+
+class ParseFeedbackRequest(BaseModel):
+    text: str
+    current_status: str = "Intact"   # "Intact" or "Non-intact"
+
+
 @router.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@router.post("/parse-feedback-text")
+def parse_feedback_text_endpoint(req: ParseFeedbackRequest):
+    """
+    Convert free-text user feedback into a structured action.
+
+    Body:  {"text": "this is actually intact", "current_status": "Non-intact"}
+    Returns: {"action": "green"|"red"|"skip", "note": "..."}
+
+    Uses keyword matching first; falls back to Mistral via AWS Bedrock for
+    ambiguous phrasing.  All existing shape-classify endpoints are unchanged.
+    """
+    if not req.text or not req.text.strip():
+        raise HTTPException(status_code=400, detail="text must not be empty")
+    return parse_feedback_text(req.text, req.current_status)
 
 
 @router.post("/upload-multiple-images/{user_id}")
