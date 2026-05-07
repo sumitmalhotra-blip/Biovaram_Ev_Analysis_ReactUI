@@ -348,7 +348,13 @@ function ImageCanvas({
         return;
       }
 
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch (jsonErr) {
+        const text = await res.text();
+        throw new Error(text || "Shape classify failed");
+      }
 
       if (!res.ok) {
         throw new Error(data?.detail || "Shape classify failed");
@@ -420,7 +426,13 @@ function ImageCanvas({
         return;
       }
 
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch (jsonErr) {
+        const text = await res.text();
+        throw new Error(text || "Shape feedback classify failed");
+      }
 
       if (!res.ok) {
         throw new Error(data?.detail || "Shape feedback classify failed");

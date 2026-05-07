@@ -111,6 +111,37 @@ def apply_shape_rules(rules, circularity, solidity, convexity):
     return (0, 0, 255)
 
 
+def extract_circle_from_contour(cnt):
+    """
+    Extract circle center and radius from a contour.
+    Uses the equivalent circle concept: radius = sqrt(area / pi)
+    Returns (center_x, center_y, radius_px) or None if invalid.
+    """
+    area = cv2.contourArea(cnt)
+    if area <= 0:
+        return None
+
+    # Fit ellipse if possible for better center estimation
+    if len(cnt) >= 5:
+        try:
+            ellipse = cv2.fitEllipse(cnt)
+            (cx, cy), (minor_axis, major_axis), angle = ellipse
+            radius = (minor_axis + major_axis) / 4.0
+            return float(cx), float(cy), float(radius)
+        except Exception:
+            pass
+
+    # Fallback: use moments for centroid
+    M = cv2.moments(cnt)
+    if M["m00"] > 0:
+        cx = M["m10"] / M["m00"]
+        cy = M["m01"] / M["m00"]
+        radius = np.sqrt(area / np.pi)
+        return float(cx), float(cy), float(radius)
+
+    return None
+
+
 def compute_shape_features(cnt, gray):
     area = cv2.contourArea(cnt)
     perimeter = cv2.arcLength(cnt, True)
@@ -128,7 +159,7 @@ def compute_shape_features(cnt, gray):
     convexity = hull_perimeter / perimeter if perimeter > 0 else 1.0
 
     mask = np.zeros(gray.shape, dtype=np.uint8)
-    cv2.drawContours(mask, [cnt], -1, 255, -1)
+    cv2.fillPoly(mask, [cnt], 255)
     mean_gray = float(cv2.mean(gray, mask=mask)[0])
     depth = round(mean_gray / 255.0, 4)
 
@@ -159,6 +190,10 @@ def resolve_feedback_for_particle(feedbacks, idx):
 
 
 def find_nearest_particle(cx, cy, particles):
+    """
+    Find nearest particle to point (cx, cy).
+    Works with both circle-based (center_x, center_y) and bbox-based particles.
+    """
     best = None
     best_dist = float("inf")
 
@@ -166,18 +201,30 @@ def find_nearest_particle(cx, cy, particles):
         if p.get("color_name") == "skipped":
             continue
 
-        bbox = p.get("bbox", {})
-        x = bbox.get("x", 0)
-        y = bbox.get("y", 0)
-        w = bbox.get("w", 0)
-        h = bbox.get("h", 0)
+        # Try circle-based coordinates first (preferred)
+        if "center_x" in p and "center_y" in p:
+            pcx = float(p["center_x"])
+            pcy = float(p["center_y"])
+            radius = float(p.get("radius_px", 10))
+            d = (pcx - cx) ** 2 + (pcy - cy) ** 2
 
-        pcx = x + (w / 2)
-        pcy = y + (h / 2)
-        d = (pcx - cx) ** 2 + (pcy - cy) ** 2
+            # Reduce distance if click is inside circle
+            if d <= radius ** 2:
+                d -= 1e9
+        else:
+            # Fallback to bbox-based coordinates
+            bbox = p.get("bbox", {})
+            x = bbox.get("x", 0)
+            y = bbox.get("y", 0)
+            w = bbox.get("w", 0)
+            h = bbox.get("h", 0)
 
-        if x <= cx <= x + w and y <= cy <= y + h:
-            d -= 1e9
+            pcx = x + (w / 2)
+            pcy = y + (h / 2)
+            d = (pcx - cx) ** 2 + (pcy - cy) ** 2
+
+            if x <= cx <= x + w and y <= cy <= y + h:
+                d -= 1e9
 
         if d < best_dist:
             best_dist = d
@@ -193,9 +240,13 @@ def run_shape_classification_pipeline(
     min_area=300,
     close_kernel=5,
     close_iterations=2,
+    nm_per_pixel: float = 0.5,
+    min_diameter_nm: float = 30.0,
 ):
     gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-    base_color = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+    overlay = img_bgr.copy()
+    if nm_per_pixel is None:
+        nm_per_pixel = 0.5
 
     smooth = cv2.bilateralFilter(gray, 9, 75, 75)
 
@@ -231,7 +282,7 @@ def run_shape_classification_pipeline(
         cv2.CHAIN_APPROX_SIMPLE,
     )
 
-    overlay = base_color.copy()
+    filtered_mask = np.zeros_like(clean_mask)
     particles = []
 
     for idx, cnt in enumerate(contours):
@@ -239,16 +290,36 @@ def run_shape_classification_pipeline(
         if features is None:
             continue
 
-        perimeter = features["perimeter"]
-        epsilon = 0.001 * perimeter
-        smooth_cnt = cv2.approxPolyDP(cnt, epsilon, True)
+        # Extract circle parameters from contour
+        circle_data = extract_circle_from_contour(cnt)
+        if circle_data is None:
+            continue
+
+        center_x, center_y, radius_px = circle_data
+        radius_px = max(1.0, radius_px)
+        diameter_nm = 2.0 * radius_px * float(nm_per_pixel)
+        if diameter_nm < float(min_diameter_nm):
+            continue
+
         x, y, w, h = cv2.boundingRect(cnt)
 
         forced_color, skip, note = resolve_feedback_for_particle(feedbacks, idx)
         if skip:
+            cv2.circle(
+                filtered_mask,
+                (int(center_x), int(center_y)),
+                int(radius_px),
+                255,
+                thickness=-1,
+                lineType=cv2.LINE_AA,
+            )
             particles.append(
                 {
                     "idx": idx,
+                    "center_x": center_x,
+                    "center_y": center_y,
+                    "radius_px": radius_px,
+                    "diameter_nm": round(diameter_nm, 2),
                     "bbox": {"x": int(x), "y": int(y), "w": int(w), "h": int(h)},
                     "features": features,
                     "color_name": "skipped",
@@ -269,14 +340,24 @@ def run_shape_classification_pipeline(
             fill_color = forced_color
             feedback_note = note
 
-        cv2.drawContours(overlay, [smooth_cnt], -1, fill_color, -1)
-        cv2.drawContours(overlay, [smooth_cnt], -1, (255, 0, 0), 2, lineType=cv2.LINE_AA)
+        cv2.circle(
+            filtered_mask,
+            (int(center_x), int(center_y)),
+            int(radius_px),
+            255,
+            thickness=-1,
+            lineType=cv2.LINE_AA,
+        )
 
         color_name = "green" if fill_color == (0, 255, 0) else "red"
 
         particles.append(
             {
                 "idx": idx,
+                "center_x": center_x,
+                "center_y": center_y,
+                "radius_px": radius_px,
+                "diameter_nm": round(diameter_nm, 2),
                 "bbox": {"x": int(x), "y": int(y), "w": int(w), "h": int(h)},
                 "features": features,
                 "color_name": color_name,
@@ -284,7 +365,7 @@ def run_shape_classification_pipeline(
             }
         )
 
-    return overlay, clean_mask, particles
+    return overlay, filtered_mask, particles
 
 
 # ---------------------------------------------------------------------------

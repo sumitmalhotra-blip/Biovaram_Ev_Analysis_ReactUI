@@ -659,25 +659,31 @@ async def shape_classify(
     if not validate_image(content):
         raise HTTPException(status_code=400, detail="Invalid image file")
 
-    img_bgr = decode_upload_to_bgr(content)
-    if img_bgr is None:
-        raise HTTPException(status_code=400, detail="Failed to decode image")
+    try:
+        img_bgr = decode_upload_to_bgr(content)
+        if img_bgr is None:
+            raise HTTPException(status_code=400, detail="Failed to decode image")
 
-    shape_result = run_shape_pipeline_on_bgr(
-        img_bgr=img_bgr,
-        client_instructions=client_instructions,
-        use_ai_rules=use_ai_rules,
-        feedbacks=[],
-        min_area=min_area,
-        close_kernel=close_kernel,
-        close_iterations=close_iterations,
-    )
+        shape_result = run_shape_pipeline_on_bgr(
+            img_bgr=img_bgr,
+            client_instructions=client_instructions,
+            use_ai_rules=use_ai_rules,
+            feedbacks=[],
+            min_area=min_area,
+            close_kernel=close_kernel,
+            close_iterations=close_iterations,
+            nm_per_pixel=DEFAULT_NM_PER_PIXEL,
+        )
 
-    result_image_url, clean_mask_url = save_shape_outputs(
-        shape_result["overlay"],
-        shape_result["clean_mask"],
-        suffix_prefix="shape_classified",
-    )
+        result_image_url, clean_mask_url = save_shape_outputs(
+            shape_result["overlay"],
+            shape_result["clean_mask"],
+            suffix_prefix="shape_classified",
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     boxes = shape_particles_to_boxes(
         shape_result["particles"],
@@ -717,19 +723,25 @@ async def shape_classify_with_feedback(
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid payload JSON")
 
-    img_bgr = decode_upload_to_bgr(content)
-    if img_bgr is None:
-        raise HTTPException(status_code=400, detail="Failed to decode image")
+    try:
+        img_bgr = decode_upload_to_bgr(content)
+        if img_bgr is None:
+            raise HTTPException(status_code=400, detail="Failed to decode image")
 
-    shape_result = run_shape_pipeline_on_bgr(
-        img_bgr=img_bgr,
-        client_instructions=payload_dict.get("client_instructions", ""),
-        use_ai_rules=bool(payload_dict.get("use_ai_rules", False)),
-        feedbacks=payload_dict.get("feedbacks", []),
-        min_area=safe_int(payload_dict.get("min_area", 300), 300),
-        close_kernel=safe_int(payload_dict.get("close_kernel", 5), 5),
-        close_iterations=safe_int(payload_dict.get("close_iterations", 2), 2),
-    )
+        shape_result = run_shape_pipeline_on_bgr(
+            img_bgr=img_bgr,
+            client_instructions=payload_dict.get("client_instructions", ""),
+            use_ai_rules=bool(payload_dict.get("use_ai_rules", False)),
+            feedbacks=payload_dict.get("feedbacks", []),
+            min_area=safe_int(payload_dict.get("min_area", 300), 300),
+            close_kernel=safe_int(payload_dict.get("close_kernel", 5), 5),
+            close_iterations=safe_int(payload_dict.get("close_iterations", 2), 2),
+            nm_per_pixel=DEFAULT_NM_PER_PIXEL,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     result_image_url, clean_mask_url = save_shape_outputs(
         shape_result["overlay"],
@@ -782,6 +794,8 @@ def shape_classify_existing(
         if img_bgr is None:
             raise HTTPException(status_code=400, detail="Failed to read image")
 
+        npp = get_nm_per_pixel_for_record(rec)
+
         shape_result = run_shape_pipeline_on_bgr(
             img_bgr=img_bgr,
             client_instructions=client_instructions,
@@ -790,6 +804,7 @@ def shape_classify_existing(
             min_area=min_area,
             close_kernel=close_kernel,
             close_iterations=close_iterations,
+            nm_per_pixel=npp,
         )
 
         result_image_url, clean_mask_url = save_shape_outputs(
@@ -798,7 +813,6 @@ def shape_classify_existing(
             suffix_prefix="shape_classified_existing",
         )
 
-        npp = get_nm_per_pixel_for_record(rec)
         boxes = shape_particles_to_boxes(
             shape_result["particles"],
             nm_per_pixel=npp,
@@ -851,17 +865,24 @@ def shape_classify_existing_with_feedback(
         if img_bgr is None:
             raise HTTPException(status_code=400, detail="Failed to read image")
 
+        npp = get_nm_per_pixel_for_record(rec)
         feedbacks = [f.model_dump() for f in payload.feedbacks]
 
-        shape_result = run_shape_pipeline_on_bgr(
-            img_bgr=img_bgr,
-            client_instructions=payload.client_instructions or "",
-            use_ai_rules=payload.use_ai_rules,
-            feedbacks=feedbacks,
-            min_area=payload.min_area,
-            close_kernel=payload.close_kernel,
-            close_iterations=payload.close_iterations,
-        )
+        try:
+            shape_result = run_shape_pipeline_on_bgr(
+                img_bgr=img_bgr,
+                client_instructions=payload.client_instructions or "",
+                use_ai_rules=payload.use_ai_rules,
+                feedbacks=feedbacks,
+                min_area=payload.min_area,
+                close_kernel=payload.close_kernel,
+                close_iterations=payload.close_iterations,
+                nm_per_pixel=npp,
+            )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
         result_image_url, clean_mask_url = save_shape_outputs(
             shape_result["overlay"],
@@ -869,7 +890,6 @@ def shape_classify_existing_with_feedback(
             suffix_prefix="shape_feedback_existing",
         )
 
-        npp = get_nm_per_pixel_for_record(rec)
         boxes = shape_particles_to_boxes(
             shape_result["particles"],
             nm_per_pixel=npp,
