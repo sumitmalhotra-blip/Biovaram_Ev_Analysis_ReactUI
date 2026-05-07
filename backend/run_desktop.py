@@ -217,14 +217,21 @@ def create_desktop_app():
     _load_env_file(env_path)
 
     gateway_candidates = [
+        BUNDLE_DIR / 'config' / '.env.gateway',   # PyInstaller bundle: _internal/config/
+        BUNDLE_DIR / '.env.gateway',               # PyInstaller bundle: _internal/
+        Path(__file__).parent / 'config' / '.env.gateway',
+        APP_DIR / 'config' / '.env.gateway',
         Path(__file__).parent / '.env.gateway',
         APP_DIR / '.env.gateway',
         Path(os.environ.get('APPDATA', os.path.expanduser('~'))) / 'BioVaram' / '.env.gateway',
     ]
     gateway_loaded = False
+    gateway_loaded_from = None
     for gateway_path in gateway_candidates:
         if _load_env_file(gateway_path, override=getattr(sys, 'frozen', False)):
             gateway_loaded = True
+            gateway_loaded_from = gateway_path
+            print(f"[BioVaram] Gateway config loaded from: {gateway_path}")
             break
 
     gateway_url = (os.getenv('CRMIT_AI_GATEWAY_URL') or '').strip()
@@ -232,10 +239,11 @@ def create_desktop_app():
     if gateway_loaded or (gateway_url and gateway_key):
         os.environ['AI_PROVIDER'] = 'gateway'
         if gateway_url:
-            os.environ.setdefault('CRMIT_AI_GATEWAY_URL', gateway_url)
+            os.environ['CRMIT_AI_GATEWAY_URL'] = gateway_url
         if gateway_key:
-            os.environ.setdefault('CRMIT_AI_GATEWAY_LICENSE_KEY', gateway_key)
+            os.environ['CRMIT_AI_GATEWAY_LICENSE_KEY'] = gateway_key
         os.environ.setdefault('CRMIT_AI_MODEL', 'amazon.nova-lite-v1:0')
+        print(f"[BioVaram] Gateway enabled: AI_PROVIDER={os.environ.get('AI_PROVIDER')} Model={os.environ.get('CRMIT_AI_MODEL')} URL={gateway_url[:50]}...")
 
     # Set environment variables before importing the app
     data_root = setup_data_directories()

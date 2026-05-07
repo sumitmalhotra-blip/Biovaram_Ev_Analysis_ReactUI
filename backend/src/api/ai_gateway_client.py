@@ -121,15 +121,11 @@ def gateway_chat(messages: list[dict[str, str]], model: str, temperature: float,
 
 
 def gateway_complete(prompt: str, model: str, temperature: float, max_tokens: int) -> str:
-    payload = {
-        "prompt": prompt,
-        "model": model,
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-    }
-
-    data = gateway_post_json("/api/v1/ai/gateway/complete", payload)
-    text = _extract_text_from_gateway_response(data)
-    if not text.strip():
-        logger.warning(f"Gateway completion returned empty response: {data}")
-    return text
+    # Use /chat with a single user message — avoids depending on a separate /complete
+    # endpoint that may not exist on all gateway deployments.
+    return gateway_chat(
+        messages=[{"role": "user", "content": prompt}],
+        model=model,
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
