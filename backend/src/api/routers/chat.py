@@ -30,7 +30,12 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from loguru import logger
 
-from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ProfileNotFound  # type: ignore
+try:
+    from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ProfileNotFound  # type: ignore
+except ImportError:  # pragma: no cover
+    NoCredentialsError = Exception  # type: ignore
+    PartialCredentialsError = Exception  # type: ignore
+    ProfileNotFound = Exception  # type: ignore
 
 from src.api.aws_utils import get_bedrock_runtime_client
 from src.api.ai_gateway_client import AIGatewayError, gateway_chat
@@ -860,9 +865,10 @@ async def chat(request: Request):
                 yield f"0:{json.dumps(text)}\n"
                 yield 'd:{"finishReason":"stop","usage":{"promptTokens":0,"completionTokens":0}}\n'
             except Exception as e:
-                msg = f"Gateway request failed: {str(e)}"
-                yield f"0:{json.dumps(msg)}\n"
-                yield 'd:{"finishReason":"error","usage":{"promptTokens":0,"completionTokens":0}}\n'
+                logger.warning(f"Gateway request failed for chat stream: {e}")
+                fallback = _get_offline_response(chat_req.messages)
+                yield f"0:{json.dumps(fallback)}\n"
+                yield 'd:{"finishReason":"stop","usage":{"promptTokens":0,"completionTokens":0}}\n'
 
         return StreamingResponse(
             _vercel_data_stream_to_ui_message_stream(gen_gateway()),
@@ -877,7 +883,6 @@ async def chat(request: Request):
         generator = _stream_bedrock(chat_req.messages, max_tokens, temperature)
     else:
         generator = _stream_openai(chat_req.messages, api_key, model, temperature, max_tokens)
->>>>>>> charmi-ai-features
 
     return StreamingResponse(
         _vercel_data_stream_to_ui_message_stream(generator),
@@ -912,9 +917,8 @@ async def _chat_simple(request: ChatRequest):
             )
             return ChatResponse(content=text, model=model or "amazon.nova-lite-v1:0")
         except AIGatewayError as exc:
-            if _offline_chat_enabled():
-                return ChatResponse(content=_get_offline_response(request.messages), model="offline-local")
-            raise HTTPException(status_code=503, detail=str(exc))
+            logger.warning(f"Gateway request failed for chat simple: {exc}")
+            return ChatResponse(content=_get_offline_response(request.messages), model="offline-local")
 
     model = _effective_model(provider, request.model, default_model)
     temperature = request.temperature or 0.7

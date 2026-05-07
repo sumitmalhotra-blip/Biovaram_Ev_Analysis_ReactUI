@@ -201,6 +201,12 @@ hidden_imports += [
     # imports from src.legacy, so this is safe.
     'src.api.routers.chat',
     'src.api.routers.backup',
+    # AI gateway + new AI analysis routers (added v0.1.9)
+    'src.api.ai_gateway_client',
+    'src.api.aws_utils',
+    'src.api.routers.ai_gateway',
+    'src.api.routers.nanofacs_ai',
+    'src.api.routers.nta_ai',
     'httpx',
     'httpx._transports',
     'httpx._transports.default',
@@ -230,6 +236,14 @@ if os.path.isdir(CONFIG_DIR):
     print(f"[BioVaram Build] OK - Config directory found: {CONFIG_DIR}")
 else:
     print(f"[BioVaram Build] WARN - Config not found at {CONFIG_DIR}")
+
+# --- Gateway defaults for packaged desktop builds ---
+GATEWAY_ENV = os.path.join(BACKEND_DIR, '.env.gateway')
+if os.path.isfile(GATEWAY_ENV):
+    datas.append((GATEWAY_ENV, 'config'))
+    print(f"[BioVaram Build] OK - Gateway env found: {GATEWAY_ENV}")
+else:
+    print(f"[BioVaram Build] WARN - Gateway env not found at {GATEWAY_ENV}")
 
 # --- Backend source (as package data, needed for sys.path resolution) ---
 BACKEND_SRC = os.path.join(BACKEND_DIR, 'src')

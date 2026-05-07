@@ -27,7 +27,12 @@ except ImportError:  # pragma: no cover
     boto3 = None  # type: ignore
 from typing import Optional
 from datetime import datetime
-from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ProfileNotFound  # type: ignore
+try:
+    from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ProfileNotFound  # type: ignore
+except ImportError:  # pragma: no cover
+    NoCredentialsError = Exception  # type: ignore
+    PartialCredentialsError = Exception  # type: ignore
+    ProfileNotFound = Exception  # type: ignore
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from loguru import logger
@@ -83,17 +88,31 @@ def _call_bedrock(prompt: str, max_tokens: int = 1500) -> str:
     """Call the configured AI provider with a prompt (Bedrock or hosted gateway)."""
     provider = _ai_provider()
 
+    def _gateway_fallback() -> str:
+        if "exact JSON format" in prompt:
+            return json.dumps(
+                {
+                    "anomalies": [],
+                    "missed_parameters": [],
+                    "suggestions": [
+                        "Gateway unavailable; using local rule-based NTA analysis fallback.",
+                        "Verify CRMIT_AI_GATEWAY_URL and CRMIT_AI_GATEWAY_LICENSE_KEY on the packaged desktop build.",
+                    ],
+                    "summary": "Gateway request failed, so the app fell back to local NTA analysis without cloud interpretation.",
+                }
+            )
+        return (
+            "Gateway request failed, so the app fell back to local NTA analysis without cloud interpretation. "
+            "Verify CRMIT_AI_GATEWAY_URL and CRMIT_AI_GATEWAY_LICENSE_KEY on the packaged desktop build."
+        )
+
     if provider == "gateway":
         model = (os.getenv("CRMIT_AI_MODEL") or "amazon.nova-lite-v1:0").strip() or "amazon.nova-lite-v1:0"
         try:
             return gateway_complete(prompt=prompt, model=model, temperature=0.3, max_tokens=max_tokens)
         except AIGatewayError as exc:
-            if _offline_ai_enabled():
-                return (
-                    "Offline AI mode is active for local testing (gateway unavailable). "
-                    "Configure CRMIT_AI_GATEWAY_URL / CRMIT_AI_GATEWAY_LICENSE_KEY to enable gateway mode."
-                )
-            raise HTTPException(status_code=503, detail=str(exc))
+            logger.warning(f"Gateway request failed for NTA analysis: {exc}")
+            return _gateway_fallback()
 
     client = _get_bedrock_client()
     if client is None:

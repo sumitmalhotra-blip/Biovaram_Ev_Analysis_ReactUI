@@ -37,7 +37,12 @@ import pandas as pd
 from typing import Optional
 from datetime import datetime
 from pathlib import Path
-from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ProfileNotFound  # type: ignore
+try:
+    from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ProfileNotFound  # type: ignore
+except ImportError:  # pragma: no cover
+    NoCredentialsError = Exception  # type: ignore
+    PartialCredentialsError = Exception  # type: ignore
+    ProfileNotFound = Exception  # type: ignore
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel, Field
 from loguru import logger
@@ -92,18 +97,46 @@ def _get_bedrock_client():
 
 
 def _call_bedrock(prompt: str, max_tokens: int = 1500) -> str:
+    def _gateway_fallback() -> str:
+        if "exact JSON format" in prompt:
+            return json.dumps(
+                {
+                    "anomalies": [],
+                    "cluster_findings": [],
+                    "missed_parameters": [],
+                    "suggestions": [
+                        "Gateway unavailable; using local NanoFACS analysis fallback.",
+                        "Verify CRMIT_AI_GATEWAY_URL and CRMIT_AI_GATEWAY_LICENSE_KEY on the packaged desktop build.",
+                    ],
+                    "summary": "Gateway request failed, so the app fell back to local NanoFACS analysis without cloud interpretation.",
+                }
+            )
+        return (
+            "Gateway request failed, so the app fell back to local NanoFACS analysis without cloud interpretation. "
+            "Verify CRMIT_AI_GATEWAY_URL and CRMIT_AI_GATEWAY_LICENSE_KEY on the packaged desktop build."
+        )
+
     provider = (os.getenv("AI_PROVIDER") or "bedrock").strip().lower()
+    logger.debug(f"NanoFACS AI: Using provider={provider}, model={os.getenv('CRMIT_AI_MODEL', 'default')}")
+    
     if provider == "gateway":
+        gateway_url = (os.getenv("CRMIT_AI_GATEWAY_URL") or "").strip()
+        gateway_key = (os.getenv("CRMIT_AI_GATEWAY_LICENSE_KEY") or "").strip()
+        
+        if not gateway_url or not gateway_key:
+            logger.error(f"NanoFACS: Gateway provider selected but missing config: URL_present={bool(gateway_url)}, KEY_present={bool(gateway_key)}")
+            return _gateway_fallback()
+        
         model = (os.getenv("CRMIT_AI_MODEL") or "amazon.nova-lite-v1:0").strip() or "amazon.nova-lite-v1:0"
+        logger.info(f"NanoFACS: Calling gateway at {gateway_url[:50]}... with model {model}")
+        
         try:
-            return gateway_complete(prompt=prompt, model=model, temperature=0.3, max_tokens=max_tokens)
+            result = gateway_complete(prompt=prompt, model=model, temperature=0.3, max_tokens=max_tokens)
+            logger.info(f"NanoFACS: Gateway call successful")
+            return result
         except AIGatewayError as exc:
-            if _offline_ai_enabled():
-                return (
-                    "Offline AI mode is active for local testing (gateway unavailable). "
-                    "Configure CRMIT_AI_GATEWAY_URL / CRMIT_AI_GATEWAY_LICENSE_KEY to enable gateway mode."
-                )
-            raise HTTPException(status_code=503, detail=str(exc))
+            logger.error(f"NanoFACS: Gateway request failed: {exc}")
+            return _gateway_fallback()
 
     client = _get_bedrock_client()
     if client is None:
@@ -615,16 +648,20 @@ def _suggest_graphs(stats_list: list[dict], user_params: list[str]) -> list[str]
 
     # Always suggest these core graphs
     suggestions.append(
-        "Size Distribution Histogram — plot Size on X axis, event count on Y axis "
-        "to see the full particle size distribution"
+        "Size Distribution Histogram — X: Size (nm) · Y: Event Count · "
+        "Healthy EV pattern: unimodal peak at 50–300 nm · "
+        "Watch for: bimodal peak or shoulder >500 nm = aggregates or debris dominating"
     )
     suggestions.append(
-        "Size vs MeanIntensity Scatter Plot — identifies if larger particles "
-        "have higher fluorescence (possible debris) or uniform intensity (EVs)"
+        "Size vs MeanIntensity Scatter — X: Size (nm) · Y: MeanIntensity · "
+        "Healthy pattern: low-intensity cloud at 50–200 nm (pure EVs) · "
+        "Watch for: bright cluster at large sizes = non-EV debris or protein aggregates"
     )
     suggestions.append(
-        "Cluster Map (LocationX vs LocationY colored by Cluster) — visualize "
-        "spatial distribution of particle clusters in the measurement cell"
+        "Cluster Map (LocationX vs LocationY colored by Cluster) — "
+        "Healthy pattern: distinct spatially-separated clusters · "
+        "Watch for: all particles in single cluster = poor separation; "
+        "scattered noise = high debris content"
     )
 
     # Check for multiple clusters
@@ -632,9 +669,10 @@ def _suggest_graphs(stats_list: list[dict], user_params: list[str]) -> list[str]
         num_clusters = stats.get("num_clusters", 0)
         if num_clusters > 3:
             suggestions.append(
-                f"Cluster Size Distribution — compare Size distributions across "
-                f"{num_clusters} clusters to identify if clusters represent "
-                f"different EV subpopulations"
+                f"Cluster Size Distribution Box Plot — X: Cluster ID · Y: Size (nm) · "
+                f"{num_clusters} clusters detected · "
+                f"Healthy pattern: clusters at distinct size ranges = true EV subpopulations · "
+                f"Watch for: all clusters overlapping = clustering may be noise-driven"
             )
             break
 
@@ -643,8 +681,10 @@ def _suggest_graphs(stats_list: list[dict], user_params: list[str]) -> list[str]
         intensity = stats.get("MeanIntensity", {})
         if intensity and intensity.get("std", 0) > intensity.get("mean", 1) * 0.5:
             suggestions.append(
-                "Intensity/Area vs Size Scatter — high intensity variation detected, "
-                "plot to identify bright outliers that may be debris or aggregates"
+                "Intensity/Area vs Size Scatter — X: Size (nm) · Y: Intensity/Area · "
+                "High intensity variation detected in this dataset · "
+                "Healthy pattern: flat intensity/area band = consistent labeling · "
+                "Watch for: outlier bright spots at large size = debris or protein aggregates"
             )
             break
 
@@ -653,8 +693,9 @@ def _suggest_graphs(stats_list: list[dict], user_params: list[str]) -> list[str]
         pos_dist = stats.get("position_distribution", {})
         if pos_dist and len(pos_dist) > 1:
             suggestions.append(
-                "Position vs Event Count Bar Chart — check uniformity across "
-                "measurement positions to validate sample homogeneity"
+                "Position vs Event Count Bar Chart — X: Position ID · Y: Event Count · "
+                "Healthy pattern: uniform count across positions = homogeneous sample · "
+                "Watch for: single position dominating = instrument flow-cell clogging risk"
             )
             break
 
@@ -663,13 +704,15 @@ def _suggest_graphs(stats_list: list[dict], user_params: list[str]) -> list[str]
         param_lower = param.lower()
         if "velocity" in param_lower or "v_nm" in param_lower:
             suggestions.append(
-                "Velocity (V_nmsec-1) vs Size Scatter — compare measured velocity "
-                "with Stokes-Einstein predicted velocity to validate size measurements"
+                "Velocity (V_nmsec-1) vs Size Scatter — X: Size (nm) · Y: V_nmsec-1 · "
+                "Healthy pattern: inverse curve matching Stokes-Einstein law = good tracking · "
+                "Watch for: horizontal band = velocity independent of size = tracking error"
             )
         if "intensity" in param_lower:
             suggestions.append(
-                "MaxIntensity vs MinIntensity Scatter — identify particles with "
-                "high dynamic range which may indicate non-uniform labeling"
+                "MaxIntensity vs MinIntensity Scatter — X: MinIntensity · Y: MaxIntensity · "
+                "Healthy pattern: tight diagonal cluster = uniform labeling · "
+                "Watch for: high MaxIntensity with low MinIntensity = non-uniform or patchy labeling"
             )
 
     return suggestions
@@ -805,12 +848,14 @@ A researcher is analyzing NanoFACS FCS data with the following context:
 - Parameters they are focusing on: {request.parameters_of_interest or 'Not specified'}
 - Additional notes: {request.additional_notes or 'None'}
 
-Here are the computed statistics from their FCS parquet files:
-{stats_summary}
+Normal EV ranges for validation:
+- Size: 30–1000 nm (typical exosomes: 50–200 nm; microvesicles: 100–1000 nm)
+- Solidity: 0.7–1.0 (values below 0.7 indicate irregular/aggregated particles)
+- AspectRatio: 1.0–3.0 (values above 3.0 indicate elongated debris)
+- TraceLength: 15–200 frames (below 15 = unreliable tracking)
 
-Available parameters per particle: TrackID, Frame, LocationX, LocationY, Area, Perimeter,
-Solidity, AspectRatio, MeanIntensity, MaxIntensity, MinIntensity, ConvexArea,
-Intensity/Area, TraceLength, Size, V_nmsec-1, Cluster
+Computed statistics from their FCS parquet files:
+{stats_summary}
 
 Pre-detected rule-based anomalies:
 {json.dumps(rule_anomalies, indent=2) if rule_anomalies else 'None detected'}
@@ -819,11 +864,11 @@ Parameters the researcher may have missed (high variability detected):
 {json.dumps(missed_params, indent=2) if missed_params else 'None'}
 
 Please provide:
-1. ANOMALIES: Additional data quality issues or unexpected findings beyond rule-based ones
-2. CLUSTER_FINDINGS: What do the cluster distributions suggest about EV subpopulations
-3. MISSED_PARAMETERS: Important parameters worth investigating with scientific explanation
-4. SUGGESTIONS: Specific actionable recommendations for this experiment
-5. SUMMARY: 2-3 sentence overall assessment
+1. ANOMALIES: Additional data quality issues or unexpected findings beyond rule-based ones. Also validate whether the computed statistics fall within expected EV ranges and flag any out-of-range values.
+2. CLUSTER_FINDINGS: What do the cluster distributions suggest about EV subpopulations. Are the cluster sizes and distributions consistent with a typical EV preparation?
+3. MISSED_PARAMETERS: Important parameters worth investigating with scientific explanation.
+4. SUGGESTIONS: Specific actionable recommendations. Include at least one recommendation about whether the NanoFACS analysis results look scientifically valid for this experiment type.
+5. SUMMARY: 2-3 sentence overall assessment that validates whether the computed data looks correct for the stated experiment, and highlights the most important finding.
 
 Respond in this exact JSON format:
 {{

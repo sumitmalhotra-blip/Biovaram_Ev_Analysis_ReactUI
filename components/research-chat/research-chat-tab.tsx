@@ -12,7 +12,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
 import { downloadChatHistory, type ChatMessageForExport } from "@/lib/export-utils"
 import { getApiBaseUrl } from "@/lib/module-config"
-import { DefaultChatTransport, useChat } from "ai/react"
+import { DefaultChatTransport } from "ai"
+import { useChat } from "@ai-sdk/react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import {
@@ -70,7 +71,6 @@ function MarkdownMessage({ markdown }: { markdown: string }) {
       {markdown}
     </ReactMarkdown>
   )
->>>>>>> charmi-ai-features
 }
 
 const suggestedQuestions = [
@@ -125,7 +125,6 @@ export function ResearchChatTab() {
     if (!hasText && !hasFiles) return
     void sendMessage({ text, files } as any)
   }
-  const sendMessage = sendUserMessage
 
   useEffect(() => {
     if (scrollRef.current) {
