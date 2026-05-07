@@ -131,7 +131,9 @@ def _call_bedrock(prompt: str, max_tokens: int = 1500) -> str:
         logger.info(f"NanoFACS: Calling gateway at {gateway_url[:50]}... with model {model}")
         
         try:
-            result = gateway_complete(prompt=prompt, model=model, temperature=0.3, max_tokens=max_tokens)
+            # Cap tokens for gateway to stay within Lambda execution timeout
+            gateway_max_tokens = min(max_tokens, 800)
+            result = gateway_complete(prompt=prompt, model=model, temperature=0.3, max_tokens=gateway_max_tokens)
             logger.info(f"NanoFACS: Gateway call successful")
             return result
         except AIGatewayError as exc:
@@ -837,8 +839,15 @@ async def analyze_fcs_with_ai(request: FCSAnalyzeRequest):
     # Missed parameters
     missed_params = _find_missed_fcs_params(all_stats, request.parameters_of_interest)
 
-    # Build prompt for Bedrock
-    stats_summary = json.dumps(all_stats, indent=2, default=str)
+    # Build prompt — filter to EV-relevant columns only so the payload stays
+    # within Lambda execution limits when routed through the AI gateway.
+    _KEY_COLS = {
+        "filename", "total_events", "num_clusters", "cluster_distribution",
+        "Size", "Solidity", "AspectRatio", "TraceLength",
+        "MeanIntensity", "MaxIntensity", "Intensity/Area",
+    }
+    filtered_stats = [{k: v for k, v in s.items() if k in _KEY_COLS} for s in all_stats]
+    stats_summary = json.dumps(filtered_stats, indent=2, default=str)
 
     prompt = f"""You are an expert in NanoFACS (Nano Flow Cytometry) and extracellular vesicle (EV) characterization.
 
@@ -1054,7 +1063,15 @@ async def ask_about_fcs_data(request: FCSAskRequest):
     if not all_stats:
         raise HTTPException(status_code=404, detail="Could not read FCS files")
 
-    data_context = json.dumps(all_stats, indent=2, default=str)
+    _ASK_COLS = {
+        "filename", "total_events", "num_clusters", "cluster_distribution",
+        "Size", "Solidity", "AspectRatio", "TraceLength",
+        "MeanIntensity", "MaxIntensity", "Intensity/Area",
+    }
+    data_context = json.dumps(
+        [{k: v for k, v in s.items() if k in _ASK_COLS} for s in all_stats],
+        indent=2, default=str
+    )
 
     prompt = f"""You are an expert in NanoFACS flow cytometry and extracellular vesicle analysis.
 
