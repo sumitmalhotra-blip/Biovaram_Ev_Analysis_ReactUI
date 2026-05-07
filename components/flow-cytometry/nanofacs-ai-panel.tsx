@@ -29,7 +29,7 @@
  *   - Only visible charts render — prevents freeze with 5-10 files
  */
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, useMemo, useRef } from "react"
 
 import { getApiBaseUrl } from "@/lib/module-config"
 
@@ -64,6 +64,8 @@ interface AIResult {
   anomalies: string[]
   cluster_findings: string[]
   suggested_graphs: string[]
+  missed_parameters: string[]
+  suggestions: string[]
   summary: string
   data_stats: Record<string, FileStats>
   analyzed_files: string[]
@@ -113,10 +115,12 @@ export function NanoFACSAIPanel({
 
   const [compareResult, setCompareResult] = useState<CompareResult | null>(null)
   const [compareLoading, setCompareLoading] = useState(false)
+  const [compareError, setCompareError] = useState("")
 
   const [messages, setMessages] = useState<ChatMsg[]>([])
   const [question, setQuestion] = useState("")
   const [qaLoading, setQaLoading] = useState(false)
+  const lastAutoRunKeyRef = useRef<string | null>(null)
 
   // All available files from server
   const [allFiles, setAllFiles] = useState<Array<{path: string, name: string, folder: string}>>([])
@@ -273,35 +277,58 @@ export function NanoFACSAIPanel({
           same_sample: sameSample,
         }),
       })
-      if (!r.ok) throw new Error("failed")
+      if (!r.ok) {
+        const detail = await r.json().catch(() => ({})) as { detail?: string }
+        const message = detail?.detail ? `Analysis failed: ${detail.detail}` : "Analysis failed. Please retry."
+        throw new Error(message)
+      }
       setResult(await r.json())
     } catch {
-      setError("Analysis failed. Is the backend running?")
+      setError("Analysis failed. Please retry or check the AI service status.")
     } finally {
       setLoading(false)
     }
   }, [filePaths, experimentDescription, parametersOfInterest, sameSample])
 
+  const autoRunKey = useMemo(() => {
+    if (filePaths.length === 0) return null
+    return filePaths.join("|")
+  }, [filePaths])
+
   // Auto-run analysis when file paths arrive from the FCS tab
   useEffect(() => {
-    if (filePaths.length > 0 && !result && !loading) {
+    if (autoRunKey && !loading && lastAutoRunKeyRef.current !== autoRunKey) {
+      lastAutoRunKeyRef.current = autoRunKey
       const timer = setTimeout(() => {
         runAnalysis()
       }, 500)
       return () => clearTimeout(timer)
     }
-  }, [filePaths, result, loading, runAnalysis])
+  }, [autoRunKey, loading, runAnalysis])
 
   const runCompare = useCallback(async () => {
+    const uniquePaths = [...new Set(filePaths)]
+    if (uniquePaths.length < 2) {
+      setCompareError("Select at least 2 different files to compare metadata. The current selection contains duplicate paths.")
+      return
+    }
     setCompareLoading(true)
+    setCompareError("")
+    setCompareResult(null)
     try {
       const r = await fetch(`${API_BASE}/api/v1/ai/nanofacs/compare`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ file_paths: filePaths }),
+        body: JSON.stringify({ file_paths: uniquePaths }),
       })
+      if (!r.ok) {
+        const detail = await r.json().catch(() => ({})) as { detail?: string }
+        setCompareError(detail?.detail || "Comparison failed. Please retry.")
+        return
+      }
       setCompareResult(await r.json())
     } catch {
+      setCompareError("Comparison failed. Check the AI service and retry.")
     } finally {
       setCompareLoading(false)
     }
@@ -329,13 +356,14 @@ export function NanoFACSAIPanel({
   }, [question, filePaths])
 
   useEffect(() => {
-    if (externalPaths.length > 0 && filePaths.length > 0 && !result && !loading) {
+    if (externalPaths.length > 0 && autoRunKey && !loading && lastAutoRunKeyRef.current !== autoRunKey) {
+      lastAutoRunKeyRef.current = autoRunKey
       const timer = setTimeout(() => {
         runAnalysis()
       }, 500)
       return () => clearTimeout(timer)
     }
-  }, [externalPaths.length, filePaths, result, loading, runAnalysis])
+  }, [externalPaths.length, autoRunKey, loading, runAnalysis])
 
   if (!filesChecked) {
     return (
@@ -472,43 +500,76 @@ export function NanoFACSAIPanel({
 
       {/* ══════════════════════════════════════════════════════
           TAB 1 — Data Overview
-          REQ 1: Size & Events vs Parameters
+          AI summary + validation + anomalies + stats
           API: POST /api/v1/ai/nanofacs/analyze
           ══════════════════════════════════════════════════════ */}
       {tab === "data" && (
         <div>
           {!result && !loading && (
             <div style={s.emptyState}>
-              <p style={s.hint}>Shows total events, particle size stats, and key parameters for each file.</p>
+              <p style={s.hint}>AI reads your parquet files, validates the data against expected EV ranges, and generates its own interpretation — not just a copy of the raw numbers.</p>
               <p style={s.apiNote}>
                 API: <code>POST /api/v1/ai/nanofacs/analyze</code><br />
                 Payload: <code>{"{ file_paths, experiment_description, parameters_of_interest, same_sample }"}</code>
               </p>
-              <button onClick={runAnalysis} style={s.btnBlue}>Run Data Analysis</button>
+              <button onClick={runAnalysis} style={s.btnBlue}>Run AI Analysis</button>
             </div>
           )}
-          {loading && <Spinner text="Loading data stats..." />}
+          {loading && <Spinner text="AI is analyzing your data..." />}
           {error && <ErrBox msg={error} />}
           {result && (
             <div>
+              {/* ── AI Summary Banner ── */}
+              <div style={s.aiBanner}>
+                <div style={s.aiBannerLabel}>🤖 AI Analysis</div>
+                <p style={s.aiBannerText}>{result.summary}</p>
+              </div>
+
+              {/* ── Data Quality Flags (AI + rule-based anomalies) ── */}
+              {result.anomalies.length > 0 && (
+                <Section title={`Data Quality Flags (${result.anomalies.length})`} color="#dc2626" bg="#fef2f2">
+                  {result.anomalies.map((a, i) => (
+                    <div key={i} style={s.bulletRow}><span style={{color:"#dc2626"}}>⚠</span> {a}</div>
+                  ))}
+                </Section>
+              )}
+
+              {/* ── AI Recommendations ── */}
+              {result.suggestions && result.suggestions.length > 0 && (
+                <Section title="AI Recommendations" color="#7c3aed" bg="#f5f3ff">
+                  {result.suggestions.map((rec, i) => (
+                    <div key={i} style={s.bulletRow}><span style={{color:"#7c3aed"}}>→</span> {rec}</div>
+                  ))}
+                </Section>
+              )}
+
+              {/* ── Parameters Worth Investigating ── */}
+              {result.missed_parameters && result.missed_parameters.length > 0 && (
+                <Section title="Parameters Worth Investigating" color="#d97706" bg="#fffbeb">
+                  {result.missed_parameters.map((p, i) => (
+                    <div key={i} style={s.bulletRow}><span style={{color:"#d97706"}}>•</span> {p}</div>
+                  ))}
+                </Section>
+              )}
+
+              {/* ── Computed Statistics (supporting data) ── */}
+              <div style={s.sectionLabel}>Computed Statistics</div>
               {Object.entries(result.data_stats).map(([fname, stats]) => (
                 <div key={fname} style={s.fileCard}>
                   <div style={s.fileName}>{fname.split("/").pop()}</div>
-
-                  {/* Events row */}
                   <div style={s.statGrid}>
                     <StatBox label="Total Events" value={stats.total_events.toLocaleString()} unit="particles" color="#2563eb" />
                     <StatBox label="Median Size" value={stats.Size?.median?.toFixed(1) ?? "—"} unit="nm" color="#059669" />
                     <StatBox label="Mean Size" value={stats.Size?.mean?.toFixed(1) ?? "—"} unit="nm" color="#059669" />
-                    <StatBox label="Size Range" value={`${stats.Size?.p10?.toFixed(0)}–${stats.Size?.p90?.toFixed(0)}`} unit="nm (p10–p90)" color="#7c3aed" />
+                    <StatBox label="Size Range" value={`${stats.Size?.p10?.toFixed(0) ?? "—"}–${stats.Size?.p90?.toFixed(0) ?? "—"}`} unit="nm (p10–p90)" color="#7c3aed" />
                     {stats.MeanIntensity && (
-                      <StatBox label="Mean Intensity" value={stats.MeanIntensity.median?.toFixed(1)} unit="median" color="#d97706" />
+                      <StatBox label="Mean Intensity" value={stats.MeanIntensity.median?.toFixed(1) ?? "—"} unit="median" color="#d97706" />
                     )}
-                    <StatBox label="Clusters" value={String(stats.num_clusters)} unit="detected" color="#dc2626" />
+                    <StatBox label="Clusters" value={String(stats.num_clusters ?? 0)} unit="detected" color="#dc2626" />
                   </div>
                 </div>
               ))}
-              <button onClick={runAnalysis} style={s.btnGray}>↺ Refresh</button>
+              <button onClick={runAnalysis} style={s.btnGray}>↺ Re-run Analysis</button>
             </div>
           )}
         </div>
@@ -565,6 +626,15 @@ export function NanoFACSAIPanel({
                 </Section>
               )}
 
+              {/* AI Analysis Recommendations */}
+              {result.suggestions && result.suggestions.length > 0 && (
+                <Section title="AI Analysis Recommendations" color="#7c3aed" bg="#f5f3ff">
+                  {result.suggestions.map((rec, i) => (
+                    <div key={i} style={s.bulletRow}><span style={{color:"#7c3aed"}}>→</span> {rec}</div>
+                  ))}
+                </Section>
+              )}
+
               {/* Anomalies — fluorescence/sample shifts */}
               {result.anomalies.length > 0 && (() => {
                 // Group file-specific anomalies, deduplicate generic ones
@@ -614,11 +684,12 @@ export function NanoFACSAIPanel({
         <div>
           {!compareResult && !compareLoading && (
             <div style={s.emptyState}>
-              <p style={s.hint}>Compares Size, MeanIntensity, Solidity and other parameters across all files — flags shifts that could indicate sample prep differences.</p>
+              <p style={s.hint}>Compares Size, MeanIntensity, Solidity and other parameters across all files — flags shifts that could indicate sample prep differences. Requires at least 2 different files.</p>
               <p style={s.apiNote}>
                 API: <code>POST /api/v1/ai/nanofacs/compare</code><br />
                 Payload: <code>{"{ file_paths: [...] }"}</code>
               </p>
+              {compareError && <ErrBox msg={compareError} />}
               <button onClick={runCompare} style={s.btnBlue}>Check Metadata</button>
             </div>
           )}
@@ -626,10 +697,10 @@ export function NanoFACSAIPanel({
           {compareResult && (
             <div>
               {/* Recommendation */}
-              <div style={s.summaryBox}>{compareResult.recommendation}</div>
+              <div style={s.summaryBox}>{compareResult.recommendation ?? "Comparison complete."}</div>
 
               {/* Mismatches — the key output */}
-              {compareResult.mismatches.length > 0 && (
+              {(compareResult.mismatches?.length ?? 0) > 0 && (
                 <div style={{ marginBottom: 16 }}>
                   <div style={{ fontWeight: 600, color: "#dc2626", fontSize: 13, marginBottom: 8 }}>
                     Parameter Mismatches ({compareResult.mismatches.length})
@@ -650,7 +721,7 @@ export function NanoFACSAIPanel({
                       <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 6 }}>
                         {Object.entries(m.values).map(([file, val]) => (
                           <span key={file} style={s.valueChip}>
-                            {file.split("_").slice(1, 4).join("_")}: <strong>{val.toFixed(1)}</strong>
+                            {file.split("_").slice(1, 4).join("_")}: <strong>{(val as number).toFixed(1)}</strong>
                           </span>
                         ))}
                       </div>
@@ -660,7 +731,7 @@ export function NanoFACSAIPanel({
               )}
 
               {/* Matching fields */}
-              {compareResult.matching_fields.length > 0 && (
+              {(compareResult.matching_fields?.length ?? 0) > 0 && (
                 <div style={{ marginBottom: 16 }}>
                   <div style={{ fontWeight: 600, color: "#059669", fontSize: 13, marginBottom: 8 }}>
                     Matching Parameters ✓
@@ -674,7 +745,7 @@ export function NanoFACSAIPanel({
               )}
 
               {/* Cluster comparison */}
-              {compareResult.cluster_comparison.length > 0 && (
+              {(compareResult.cluster_comparison?.length ?? 0) > 0 && (
                 <Section title="Cluster Comparison" color="#2563eb" bg="#eff6ff">
                   {compareResult.cluster_comparison.map((c, i) => (
                     <div key={i} style={{ ...s.bulletRow, fontSize: 12 }}>
@@ -824,6 +895,10 @@ const s = {
   fileName: { fontSize: 11, color: "#6b7280", marginBottom: 12, fontWeight: 500, wordBreak: "break-all" as const },
   statGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10 },
   summaryBox: { background: "#f9fafb", borderRadius: 8, padding: 14, fontSize: 13, color: "#374151", fontStyle: "italic" as const, marginBottom: 16, lineHeight: 1.6 },
+  aiBanner: { background: "linear-gradient(135deg, #eff6ff 0%, #f5f3ff 100%)", border: "1px solid #c7d2fe", borderRadius: 10, padding: "14px 18px", marginBottom: 16 },
+  aiBannerLabel: { fontSize: 11, fontWeight: 700, color: "#4f46e5", textTransform: "uppercase" as const, letterSpacing: "0.08em", marginBottom: 6 },
+  aiBannerText: { fontSize: 13, color: "#1e1b4b", lineHeight: 1.65, margin: 0 },
+  sectionLabel: { fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase" as const, letterSpacing: "0.06em", margin: "18px 0 10px" },
   graphRow: { display: "flex", gap: 10, marginBottom: 10, alignItems: "flex-start" },
   graphNum: { background: "#059669", color: "#fff", borderRadius: "50%", width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 },
   bulletRow: { fontSize: 13, color: "#374151", marginBottom: 6, lineHeight: 1.5 },

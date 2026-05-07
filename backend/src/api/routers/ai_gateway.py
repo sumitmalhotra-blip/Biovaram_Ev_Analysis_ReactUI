@@ -208,3 +208,25 @@ async def gateway_chat(
     except Exception as e:
         logger.error(f"Gateway chat error: {e}")
         raise HTTPException(status_code=500, detail=f"Gateway error: {str(e)}")
+
+
+class GatewayCompleteRequest(BaseModel):
+    prompt: str = Field(..., description="Plain-text prompt to complete")
+    model: Optional[str] = None
+    temperature: Optional[float] = 0.3
+    max_tokens: Optional[int] = 2000
+
+
+@router.post("/ai/gateway/complete", response_model=GatewayChatResponse)
+async def gateway_complete(
+    request: GatewayCompleteRequest,
+    x_license_key: Optional[str] = Header(default=None, alias="x-license-key"),
+):
+    """Prompt-completion wrapper — converts a plain prompt to a single-turn chat call."""
+    chat_request = GatewayChatRequest(
+        messages=[GatewayMessage(role="user", content=request.prompt)],
+        model=request.model,
+        temperature=request.temperature,
+        max_tokens=request.max_tokens,
+    )
+    return await gateway_chat(chat_request, x_license_key)
