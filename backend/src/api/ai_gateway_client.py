@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import time
 from typing import Any, Optional
 
 import requests
@@ -78,21 +79,37 @@ def _build_headers() -> dict[str, str]:
     return headers
 
 
-def gateway_post_json(path: str, payload: dict[str, Any], timeout_seconds: float = 60.0) -> Any:
+def gateway_post_json(path: str, payload: dict[str, Any], timeout_seconds: float = 60.0, _max_retries: int = 2) -> Any:
     base = get_gateway_base_url()
     url = f"{base}{path}"
-    try:
-        resp = requests.post(url, json=payload, headers=_build_headers(), timeout=timeout_seconds)
-    except Exception as exc:
-        raise AIGatewayError(f"Gateway request failed: {exc}") from exc
+    last_exc: AIGatewayError = AIGatewayError("No attempts made")
 
-    if resp.status_code >= 400:
-        raise AIGatewayError(f"Gateway error {resp.status_code}: {resp.text[:500]}")
+    for attempt in range(_max_retries + 1):
+        if attempt > 0:
+            wait = 2.0 * attempt
+            logger.info(f"Gateway retry {attempt}/{_max_retries} (Lambda cold start — waiting {wait}s)...")
+            time.sleep(wait)
 
-    try:
-        return resp.json()
-    except Exception:
-        return resp.text
+        try:
+            resp = requests.post(url, json=payload, headers=_build_headers(), timeout=timeout_seconds)
+        except Exception as exc:
+            last_exc = AIGatewayError(f"Gateway request failed: {exc}")
+            continue
+
+        if resp.status_code == 500:
+            last_exc = AIGatewayError(f"Gateway error 500: {resp.text[:500]}")
+            logger.warning(f"Gateway returned 500 on attempt {attempt + 1}, will retry...")
+            continue
+
+        if resp.status_code >= 400:
+            raise AIGatewayError(f"Gateway error {resp.status_code}: {resp.text[:500]}")
+
+        try:
+            return resp.json()
+        except Exception:
+            return resp.text
+
+    raise last_exc
 
 
 def gateway_health(timeout_seconds: float = 10.0) -> dict[str, Any]:
