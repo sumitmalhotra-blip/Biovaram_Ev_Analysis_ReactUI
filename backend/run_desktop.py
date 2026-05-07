@@ -61,6 +61,35 @@ def _load_env_file(path: Path, *, override: bool = False) -> bool:
     load_dotenv(path, override=override)
     return True
 
+
+def _load_env_file_direct(path: Path, *, override: bool = True) -> bool:
+    """Parse a .env file directly without python-dotenv (no external deps).
+
+    Used for critical config (e.g. gateway) that must load even if dotenv
+    is unavailable or fails inside a PyInstaller bundle.
+    """
+    if not path.exists():
+        return False
+    try:
+        loaded_any = False
+        for raw_line in path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip()
+            # Strip surrounding quotes
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+                value = value[1:-1]
+            if key:
+                if override or key not in os.environ:
+                    os.environ[key] = value
+                loaded_any = True
+        return loaded_any
+    except Exception:
+        return False
+
 # =============================================================================
 # Path Setup
 # =============================================================================
@@ -228,14 +257,20 @@ def create_desktop_app():
     gateway_loaded = False
     gateway_loaded_from = None
     for gateway_path in gateway_candidates:
-        if _load_env_file(gateway_path, override=getattr(sys, 'frozen', False)):
+        print(f"[BioVaram] Checking gateway config: {gateway_path} (exists={gateway_path.exists()})")
+        # Use direct parser (no dotenv dependency) so config loads in PyInstaller bundles
+        if _load_env_file_direct(gateway_path, override=True):
             gateway_loaded = True
             gateway_loaded_from = gateway_path
             print(f"[BioVaram] Gateway config loaded from: {gateway_path}")
             break
 
+    if not gateway_loaded:
+        print(f"[BioVaram] WARNING: No gateway config found in any candidate location.")
+
     gateway_url = (os.getenv('CRMIT_AI_GATEWAY_URL') or '').strip()
     gateway_key = (os.getenv('CRMIT_AI_GATEWAY_LICENSE_KEY') or '').strip()
+    print(f"[BioVaram] Gateway env: URL_present={bool(gateway_url)}, KEY_present={bool(gateway_key)}")
     if gateway_loaded or (gateway_url and gateway_key):
         os.environ['AI_PROVIDER'] = 'gateway'
         if gateway_url:
@@ -243,7 +278,9 @@ def create_desktop_app():
         if gateway_key:
             os.environ['CRMIT_AI_GATEWAY_LICENSE_KEY'] = gateway_key
         os.environ.setdefault('CRMIT_AI_MODEL', 'amazon.nova-lite-v1:0')
-        print(f"[BioVaram] Gateway enabled: AI_PROVIDER={os.environ.get('AI_PROVIDER')} Model={os.environ.get('CRMIT_AI_MODEL')} URL={gateway_url[:50]}...")
+        print(f"[BioVaram] Gateway enabled: URL={gateway_url[:60]}... Model={os.environ.get('CRMIT_AI_MODEL')}")
+    else:
+        print(f"[BioVaram] Gateway NOT enabled — AI will use offline fallback.")
 
     # Set environment variables before importing the app
     data_root = setup_data_directories()
