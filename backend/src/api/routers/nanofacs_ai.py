@@ -131,13 +131,12 @@ def _call_bedrock(prompt: str, max_tokens: int = 1500) -> str:
         logger.info(f"NanoFACS: Calling gateway at {gateway_url[:50]}... with model {model}")
         
         try:
-            # Cap tokens for gateway to stay within Lambda execution timeout
-            gateway_max_tokens = min(max_tokens, 800)
-            result = gateway_complete(prompt=prompt, model=model, temperature=0.3, max_tokens=gateway_max_tokens)
+            # gateway_chat caps tokens centrally; pass-through here.
+            result = gateway_complete(prompt=prompt, model=model, temperature=0.3, max_tokens=max_tokens)
             logger.info(f"NanoFACS: Gateway call successful")
             return result
         except AIGatewayError as exc:
-            logger.error(f"NanoFACS: Gateway request failed: {exc}")
+            logger.error(f"NanoFACS: Gateway request failed after retries: {exc}")
             return _gateway_fallback()
 
     client = _get_bedrock_client()
@@ -888,7 +887,7 @@ Respond in this exact JSON format:
   "summary": "Overall summary here"
 }}"""
 
-    ai_response_text = _call_bedrock(prompt, max_tokens=2000)
+    ai_response_text = _call_bedrock(prompt, max_tokens=600)
 
     # Parse AI response
     try:

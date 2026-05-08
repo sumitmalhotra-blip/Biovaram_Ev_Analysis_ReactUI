@@ -190,22 +190,23 @@ def _resolve_provider_config() -> Tuple[str, str, str]:
             )
 
         if provider_env == "gateway":
-            return "gateway", os.environ.get("CRMIT_AI_GATEWAY_LICENSE_KEY", ""), os.environ.get("CRMIT_AI_GATEWAY_URL", "")
-        if provider_env == "bedrock":
-            return "bedrock", "bedrock", "amazon.nova-lite-v1:0"
-
-        if provider_env == "gateway":
-            # Hosted gateway mode: proxy Bedrock calls to a server that has IAM/Bedrock access.
             gateway_url = (os.environ.get("CRMIT_AI_GATEWAY_URL") or "").strip()
-            if not gateway_url:
+            gateway_key = (os.environ.get("CRMIT_AI_GATEWAY_LICENSE_KEY") or "").strip()
+            if not gateway_url or not gateway_key:
+                logger.warning(f"Gateway provider selected but config incomplete: URL={bool(gateway_url)}, KEY={bool(gateway_key)}")
                 if _offline_chat_enabled():
                     return "offline", "", "offline-local"
                 raise HTTPException(
                     status_code=503,
-                    detail="Gateway provider selected, but CRMIT_AI_GATEWAY_URL is missing.",
+                    detail="Gateway provider selected, but CRMIT_AI_GATEWAY_URL or CRMIT_AI_GATEWAY_LICENSE_KEY is missing.",
                 )
             model = (os.environ.get("CRMIT_AI_MODEL") or "amazon.nova-lite-v1:0").strip()
-            return "gateway", "gateway", model
+            logger.info(f"Using gateway provider: {gateway_url[:50]}... with model {model}")
+            return "gateway", gateway_key, model
+        
+        if provider_env == "bedrock":
+            return "bedrock", "bedrock", "amazon.nova-lite-v1:0"
+        
         if provider_env == "anthropic":
             key = (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("CRMIT_AI_API_KEY") or "").strip()
             if not key:
@@ -803,20 +804,56 @@ async def chat(request: Request):
     """Streaming chat endpoint compatible with the Vercel AI SDK useChat()."""
     raw = await request.json()
 
-    # Normalize payload to ChatRequest shape (frontend sometimes sends content as parts).
-    messages: list[ChatMessage] = []
+    # Normalize payload to ChatRequest shape. AI SDK v5 (@ai-sdk/react) sends
+    # messages as { role, parts: [{type: "text"|"file", ...}] } — older v4 sent
+    # { role, content: "..." } or { role, content: [{type, text}] }. Handle all
+    # three shapes plus file attachments (extract text + summarize file metadata).
+    def _flatten_parts(parts: Any) -> str:
+        if not isinstance(parts, list):
+            return ""
+        chunks: list[str] = []
+        file_summaries: list[str] = []
+        for p in parts:
+            if not isinstance(p, dict):
+                if isinstance(p, str) and p.strip():
+                    chunks.append(p.strip())
+                continue
+            ptype = p.get("type") or ""
+            if ptype == "text":
+                t = p.get("text") or ""
+                if isinstance(t, str) and t.strip():
+                    chunks.append(t.strip())
+            elif ptype == "file":
+                # File parts include filename, mediaType, and either url (data:)
+                # or a remote URL. Don't embed the data URL into the prompt
+                # (Bedrock/Lambda would choke on a 50MB base64 string); just
+                # describe the file so the model knows what was attached.
+                fname = p.get("filename") or p.get("name") or "uploaded file"
+                mtype = p.get("mediaType") or p.get("contentType") or "unknown"
+                file_summaries.append(f"{fname} ({mtype})")
+            elif ptype == "image":
+                fname = p.get("filename") or p.get("name") or "image"
+                file_summaries.append(f"{fname} (image)")
+        if file_summaries:
+            chunks.append(f"[Attached files: {', '.join(file_summaries)}]")
+        return " ".join(chunks).strip()
+
+    normalized: list[ChatMessage] = []
     for m in raw.get("messages", []) or []:
         role = (m.get("role") or "user")
-        content = m.get("content", "")
-        if isinstance(content, list):
-            content = " ".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in content)
-            content = combined
-
-        if isinstance(content, str) and content.strip():
-            normalized.append(ChatMessage(role=role, content=content))
+        # AI SDK v5: top-level parts array on the message
+        text = _flatten_parts(m.get("parts"))
+        if not text:
+            content = m.get("content", "")
+            if isinstance(content, list):
+                text = _flatten_parts(content)
+            elif isinstance(content, str):
+                text = content.strip()
+        if text:
+            normalized.append(ChatMessage(role=role, content=text))
 
     if not normalized and isinstance(raw, dict) and isinstance(raw.get("query"), str) and raw.get("query", "").strip():
-        normalized = [ChatMessage(role="user", content=raw["query"]) ]
+        normalized = [ChatMessage(role="user", content=raw["query"])]
 
     chat_req = ChatRequest(
         messages=normalized,
@@ -837,31 +874,19 @@ async def chat(request: Request):
         return await _chat_simple(chat_req)
 
     # Gateway is non-streaming upstream; we wrap it in a one-chunk Vercel stream.
+    # Use gateway_chat (retry-aware) instead of raw httpx so transient Lambda
+    # cold-start / Bedrock 5xx are recovered automatically.
     if provider == "gateway":
         async def gen_gateway():
             try:
-                import httpx  # type: ignore[import-untyped]
-
-                gw_url = (os.environ.get("CRMIT_AI_GATEWAY_URL") or "").rstrip("/")
-                gw_key = (os.environ.get("CRMIT_AI_GATEWAY_LICENSE_KEY") or "").strip()
-                if not gw_url or not gw_key:
-                    raise RuntimeError("Gateway is not configured (missing CRMIT_AI_GATEWAY_URL or CRMIT_AI_GATEWAY_LICENSE_KEY).")
-
-                async with httpx.AsyncClient(timeout=60.0) as client:
-                    resp = await client.post(
-                        f"{gw_url}/api/v1/ai/gateway/chat",
-                        headers={"Content-Type": "application/json", "x-license-key": gw_key},
-                        json={
-                            "messages": [{"role": m.role, "content": m.content} for m in chat_req.messages],
-                            "max_tokens": max_tokens,
-                            "temperature": temperature,
-                            "model": model,
-                        },
-                    )
-                    resp.raise_for_status()
-                    data = resp.json() if resp.content else {}
-                    text = (data.get("content") or "").strip() or "No response"
-
+                text = await run_in_threadpool(
+                    gateway_chat,
+                    [{"role": m.role, "content": m.content} for m in chat_req.messages],
+                    model or "amazon.nova-lite-v1:0",
+                    float(temperature),
+                    int(max_tokens),
+                )
+                text = (text or "").strip() or "No response"
                 yield f"0:{json.dumps(text)}\n"
                 yield 'd:{"finishReason":"stop","usage":{"promptTokens":0,"completionTokens":0}}\n'
             except Exception as e:

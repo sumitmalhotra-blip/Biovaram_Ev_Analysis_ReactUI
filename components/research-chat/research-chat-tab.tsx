@@ -24,15 +24,23 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 function getMessageMarkdown(message: any): string {
+  // AI SDK v5 stores message text in a `parts` array; legacy/v4 used `content`.
   const parts = Array.isArray(message?.parts) ? (message.parts as any[]) : []
   const textParts = parts.filter((part) => part?.type === "text" && typeof part.text === "string" && part.text.trim())
-
   if (textParts.length > 0) {
+    return textParts.map((p) => p.text).join("\n\n")
   }
 
   const content = message?.content
   if (typeof content === "string" && content.trim()) {
     return content
+  }
+  if (Array.isArray(content)) {
+    const joined = content
+      .map((p: any) => (typeof p === "string" ? p : p?.text || ""))
+      .filter(Boolean)
+      .join("\n\n")
+    if (joined.trim()) return joined
   }
 
   return ""

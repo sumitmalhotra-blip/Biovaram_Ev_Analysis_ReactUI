@@ -79,26 +79,54 @@ def _build_headers() -> dict[str, str]:
     return headers
 
 
-def gateway_post_json(path: str, payload: dict[str, Any], timeout_seconds: float = 60.0, _max_retries: int = 2) -> Any:
+def gateway_post_json(path: str, payload: dict[str, Any], timeout_seconds: float = 60.0, _max_retries: int = 4) -> Any:
+    """POST JSON to the gateway with aggressive retry on transient errors.
+
+    The hosted gateway sits behind AWS API Gateway + Lambda + Bedrock. Each of
+    these can return transient 5xx / connection errors during cold starts,
+    Bedrock throttling, or brief Lambda issues. We retry on:
+      - Connection errors (DNS, network, TLS)
+      - Read timeouts
+      - 500, 502, 503, 504 responses
+    Total attempts = _max_retries + 1 (default 5). Backoff is exponential
+    starting from 1.5s. Worst-case wait sequence: 1.5s, 3s, 4.5s, 6s = 15s.
+    """
     base = get_gateway_base_url()
     url = f"{base}{path}"
     last_exc: AIGatewayError = AIGatewayError("No attempts made")
 
+    retryable_status = {500, 502, 503, 504}
+
     for attempt in range(_max_retries + 1):
         if attempt > 0:
-            wait = 2.0 * attempt
-            logger.info(f"Gateway retry {attempt}/{_max_retries} (Lambda cold start — waiting {wait}s)...")
+            wait = 1.5 * attempt
+            logger.info(
+                f"Gateway retry {attempt}/{_max_retries} after transient error — waiting {wait}s..."
+            )
             time.sleep(wait)
 
         try:
             resp = requests.post(url, json=payload, headers=_build_headers(), timeout=timeout_seconds)
+        except requests.exceptions.Timeout as exc:
+            last_exc = AIGatewayError(f"Gateway timeout: {exc}")
+            logger.warning(f"Gateway timeout on attempt {attempt + 1}, will retry...")
+            continue
+        except requests.exceptions.ConnectionError as exc:
+            last_exc = AIGatewayError(f"Gateway connection error: {exc}")
+            logger.warning(f"Gateway connection error on attempt {attempt + 1}, will retry...")
+            continue
         except Exception as exc:
             last_exc = AIGatewayError(f"Gateway request failed: {exc}")
+            logger.warning(f"Gateway request error on attempt {attempt + 1}: {exc}")
             continue
 
-        if resp.status_code == 500:
-            last_exc = AIGatewayError(f"Gateway error 500: {resp.text[:500]}")
-            logger.warning(f"Gateway returned 500 on attempt {attempt + 1}, will retry...")
+        if resp.status_code in retryable_status:
+            last_exc = AIGatewayError(
+                f"Gateway error {resp.status_code}: {resp.text[:300]}"
+            )
+            logger.warning(
+                f"Gateway returned {resp.status_code} on attempt {attempt + 1}/{_max_retries + 1}, will retry..."
+            )
             continue
 
         if resp.status_code >= 400:
@@ -109,6 +137,7 @@ def gateway_post_json(path: str, payload: dict[str, Any], timeout_seconds: float
         except Exception:
             return resp.text
 
+    logger.error(f"Gateway exhausted all {_max_retries + 1} attempts: {last_exc}")
     raise last_exc
 
 
@@ -123,11 +152,16 @@ def gateway_health(timeout_seconds: float = 10.0) -> dict[str, Any]:
 
 
 def gateway_chat(messages: list[dict[str, str]], model: str, temperature: float, max_tokens: int) -> str:
+    # Cap max_tokens at 600 to keep total Lambda execution well under timeout
+    # window (the hosted gateway runs on AWS Lambda which has a hard execution
+    # limit; large generations can intermittently fail with 500).
+    safe_max_tokens = min(max_tokens, 600) if max_tokens > 0 else 600
+
     payload = {
         "messages": messages,
         "model": model,
         "temperature": temperature,
-        "max_tokens": max_tokens,
+        "max_tokens": safe_max_tokens,
     }
 
     data = gateway_post_json("/api/v1/ai/gateway/chat", payload)

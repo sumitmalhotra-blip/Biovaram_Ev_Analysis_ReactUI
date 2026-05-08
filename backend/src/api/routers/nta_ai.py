@@ -84,9 +84,10 @@ def _ai_provider() -> str:
     return (os.getenv("AI_PROVIDER") or "bedrock").strip().lower()
 
 
-def _call_bedrock(prompt: str, max_tokens: int = 1500) -> str:
+def _call_bedrock(prompt: str, max_tokens: int = 600) -> str:
     """Call the configured AI provider with a prompt (Bedrock or hosted gateway)."""
     provider = _ai_provider()
+    logger.debug(f"NTA AI: Using provider={provider}, model={os.getenv('CRMIT_AI_MODEL', 'default')}")
 
     def _gateway_fallback() -> str:
         if "exact JSON format" in prompt:
@@ -107,11 +108,22 @@ def _call_bedrock(prompt: str, max_tokens: int = 1500) -> str:
         )
 
     if provider == "gateway":
+        gateway_url = (os.getenv("CRMIT_AI_GATEWAY_URL") or "").strip()
+        gateway_key = (os.getenv("CRMIT_AI_GATEWAY_LICENSE_KEY") or "").strip()
+        
+        if not gateway_url or not gateway_key:
+            logger.error(f"Gateway provider selected but missing config: URL_present={bool(gateway_url)}, KEY_present={bool(gateway_key)}")
+            return _gateway_fallback()
+        
         model = (os.getenv("CRMIT_AI_MODEL") or "amazon.nova-lite-v1:0").strip() or "amazon.nova-lite-v1:0"
+        logger.info(f"NTA: Calling gateway at {gateway_url[:50]}... with model {model}")
+        
         try:
-            return gateway_complete(prompt=prompt, model=model, temperature=0.3, max_tokens=max_tokens)
+            result = gateway_complete(prompt=prompt, model=model, temperature=0.3, max_tokens=max_tokens)
+            logger.info(f"NTA: Gateway call successful")
+            return result
         except AIGatewayError as exc:
-            logger.warning(f"Gateway request failed for NTA analysis: {exc}")
+            logger.error(f"NTA: Gateway request failed after retries: {exc}")
             return _gateway_fallback()
 
     client = _get_bedrock_client()
