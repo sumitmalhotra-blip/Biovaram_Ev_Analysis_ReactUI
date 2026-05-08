@@ -268,19 +268,34 @@ def create_desktop_app():
     if not gateway_loaded:
         print(f"[BioVaram] WARNING: No gateway config found in any candidate location.")
 
+    # Embedded gateway defaults — last-resort fallback so the packaged desktop
+    # build always has working AI even if every .env.gateway path resolution
+    # fails on a specific client machine. Same credentials already shipped in
+    # the bundled .env.gateway, so this adds no new exposure.
+    EMBEDDED_GATEWAY_URL = "https://8a6nsmt08f.execute-api.us-east-1.amazonaws.com"
+    EMBEDDED_GATEWAY_KEY = "biovaram-test-key-2026"
+
     gateway_url = (os.getenv('CRMIT_AI_GATEWAY_URL') or '').strip()
     gateway_key = (os.getenv('CRMIT_AI_GATEWAY_LICENSE_KEY') or '').strip()
+    if not gateway_url:
+        gateway_url = EMBEDDED_GATEWAY_URL
+        print(f"[BioVaram] Gateway URL fell back to embedded default")
+    if not gateway_key:
+        gateway_key = EMBEDDED_GATEWAY_KEY
+        print(f"[BioVaram] Gateway KEY fell back to embedded default")
+
     print(f"[BioVaram] Gateway env: URL_present={bool(gateway_url)}, KEY_present={bool(gateway_key)}")
-    if gateway_loaded or (gateway_url and gateway_key):
-        os.environ['AI_PROVIDER'] = 'gateway'
-        if gateway_url:
-            os.environ['CRMIT_AI_GATEWAY_URL'] = gateway_url
-        if gateway_key:
-            os.environ['CRMIT_AI_GATEWAY_LICENSE_KEY'] = gateway_key
-        os.environ.setdefault('CRMIT_AI_MODEL', 'amazon.nova-lite-v1:0')
-        print(f"[BioVaram] Gateway enabled: URL={gateway_url[:60]}... Model={os.environ.get('CRMIT_AI_MODEL')}")
-    else:
-        print(f"[BioVaram] Gateway NOT enabled — AI will use offline fallback.")
+    # Force-set (not setdefault) so we always pin gateway provider + creds for
+    # the packaged desktop build. The chat router falls back to offline mode
+    # when these are missing, which is exactly what the client was hitting.
+    os.environ['AI_PROVIDER'] = 'gateway'
+    os.environ['CRMIT_AI_GATEWAY_URL'] = gateway_url
+    os.environ['CRMIT_AI_GATEWAY_LICENSE_KEY'] = gateway_key
+    os.environ.setdefault('CRMIT_AI_MODEL', 'amazon.nova-lite-v1:0')
+    # Belt + suspenders: explicitly disable the "offline AI" dev fallback so
+    # _offline_chat_enabled() returns False even if CRMIT_ENV got overridden.
+    os.environ['CRMIT_ENABLE_OFFLINE_AI'] = 'false'
+    print(f"[BioVaram] Gateway enabled: URL={gateway_url[:60]}... Model={os.environ.get('CRMIT_AI_MODEL')}")
 
     # Set environment variables before importing the app
     data_root = setup_data_directories()
@@ -288,8 +303,11 @@ def create_desktop_app():
     
     db_path = data_root / "crmit.db"
     
-    # Configure environment for the backend
-    os.environ.setdefault("CRMIT_ENV", "production")
+    # Configure environment for the backend.
+    # Force production — packaged desktop build is never "development" even if
+    # a stale .env file sets CRMIT_ENV=development (which would re-enable the
+    # offline AI fallback in _offline_chat_enabled()).
+    os.environ["CRMIT_ENV"] = "production"
     os.environ.setdefault("CRMIT_DATABASE_URL", f"sqlite+aiosqlite:///{db_path}")
     os.environ.setdefault("CRMIT_UPLOAD_DIR", str(data_root / "uploads"))
     os.environ.setdefault("CRMIT_PARQUET_DIR", str(data_root / "parquet"))
