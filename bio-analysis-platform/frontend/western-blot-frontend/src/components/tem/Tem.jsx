@@ -420,11 +420,28 @@ function Tem() {
     syncCirclesToBackend(selectedImage.image_id, nextBoxes);
   };
 
+  const computeNpp = (scale) => {
+    if (!scale?.scale_pixels || !scale?.scale_real_value) return null;
+    const unit = String(scale.scale_real_unit || "").toLowerCase();
+    if (unit === "um" || unit === "µm") return (scale.scale_real_value * 1000) / scale.scale_pixels;
+    if (unit === "nm") return scale.scale_real_value / scale.scale_pixels;
+    return null;
+  };
+
   const handleLiveChangeCircle = (live) => {
     if (!live || !selectedImage) return;
 
+    // When a calibrated scale exists, recompute r from diameter_nm using the
+    // real nm/px ratio so the circle is physically accurate. Otherwise keep
+    // whatever r BoxPopup already derived (proportional from original values).
+    const npp = computeNpp(selectedImage.scale);
+    const patched =
+      live.diameter_nm != null && live.diameter_nm > 0 && npp
+        ? { ...live, r: live.diameter_nm / npp / 2 }
+        : live;
+
     const nextBoxes = (selectedImage.boxes || []).map((b) =>
-      b.id === live.id ? live : b
+      b.id === patched.id ? patched : b
     );
 
     setSelectedImage((prev) => ({ ...prev, boxes: nextBoxes }));
@@ -434,7 +451,7 @@ function Tem() {
       )
     );
 
-    setSelectedBox(live);
+    setSelectedBox(patched);
   };
 
   const handleDeleteImage = async (imageId) => {
