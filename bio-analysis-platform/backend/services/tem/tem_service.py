@@ -11,6 +11,7 @@ from .shape_classifier import (
     get_shape_classification_rules,
     run_shape_classification_pipeline,
     find_nearest_particle,
+    parse_feedback_text,
 )
 
 import os
@@ -25,6 +26,7 @@ from urllib.parse import quote_plus
 from sqlalchemy import create_engine, Column, String, Text, Float, JSON, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 from pathlib import Path
+import logging
 from PIL import Image
 from io import BytesIO
 
@@ -46,9 +48,60 @@ load_dotenv(_data_root / ".env")
 UPLOAD_DIR = str(_data_root / "uploads" / "tem")
 DEFAULT_MIN_NM = 30.0
 DEFAULT_NM_PER_PIXEL = 0.5
-CNN_MODEL_PATH = os.getenv("CNN_MODEL_PATH", str(BASE_DIR / "ev_viability_best_model.h5"))
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+logger = logging.getLogger(__name__)
+
+
+def resolve_model_path() -> str:
+    """
+    Resolve TensorFlow CNN model path with fallback strategy and logging.
+
+    Priority:
+      1. MODEL_PATH env var (absolute or relative)
+      2. CNN_MODEL_PATH env var (legacy, absolute or relative)
+      3. ./models/ev_viability_best_model.h5 (default relative to cwd)
+
+    Returns:
+        Absolute path string to model file.
+
+    Raises:
+        FileNotFoundError: If model file does not exist at resolved path.
+    """
+    model_path_env = os.getenv("MODEL_PATH", "")
+    cnn_model_path_env = os.getenv("CNN_MODEL_PATH", "")
+
+    if model_path_env:
+        model_path = Path(model_path_env).resolve()
+        logger.info(f"Using MODEL_PATH env var: {model_path}")
+    elif cnn_model_path_env:
+        model_path = Path(cnn_model_path_env).resolve()
+        logger.info(f"Using CNN_MODEL_PATH env var: {model_path}")
+    else:
+        default_path = _data_root / "models" / "ev_viability_best_model.h5"
+        model_path = default_path.resolve()
+        logger.info(f"Using default model path: {model_path}")
+
+    if not model_path.exists():
+        error_msg = (
+            f"CNN model not found at: {model_path}\n"
+            f"Please ensure the TensorFlow model file exists and is readable.\n"
+            f"To configure a custom path, set MODEL_PATH or CNN_MODEL_PATH env var."
+        )
+        logger.error(error_msg)
+        raise FileNotFoundError(error_msg)
+
+    logger.debug(f"✓ Model path resolved and validated: {model_path}")
+    return str(model_path)
+
+
+# Resolve model path at startup; defer failure to first CNN request if missing.
+try:
+    CNN_MODEL_PATH = resolve_model_path()
+except FileNotFoundError:
+    logger.warning("CNN model initialization deferred — will fail on first CNN analysis request")
+    CNN_MODEL_PATH = None
 
 _pg_host = os.getenv("PGHOST", "localhost")
 _pg_port = os.getenv("PGPORT", "5432")
@@ -448,9 +501,18 @@ def analyze_rulebased_path(image_path: str, nm_per_pixel: Optional[float]) -> Li
 
 
 def analyze_cnn_path(image_path: str, nm_per_pixel: Optional[float]) -> List[dict]:
-    if not os.path.exists(CNN_MODEL_PATH):
-        print(f"[WARN] CNN model not found at {CNN_MODEL_PATH}, falling back to rule-based analysis")
+    if not CNN_MODEL_PATH:
+        logger.warning(
+            "CNN model path not configured. "
+            "Set MODEL_PATH or CNN_MODEL_PATH environment variable. "
+            "Falling back to rule-based analysis."
+        )
         return analyze_rulebased_path(image_path, nm_per_pixel)
+
+    if not os.path.exists(CNN_MODEL_PATH):
+        logger.warning("CNN model file does not exist at: %s. Falling back to rule-based analysis.", CNN_MODEL_PATH)
+        return analyze_rulebased_path(image_path, nm_per_pixel)
+
     result = analyze_image_cnn(
         image_path,
         nm_per_pixel=nm_per_pixel or DEFAULT_NM_PER_PIXEL,
@@ -640,6 +702,8 @@ def run_shape_pipeline_on_bgr(
     min_area: int = 300,
     close_kernel: int = 5,
     close_iterations: int = 2,
+    nm_per_pixel: float = DEFAULT_NM_PER_PIXEL,
+    min_diameter_nm: float = DEFAULT_MIN_NM,
 ):
     rules = get_shape_classification_rules(client_instructions, use_ai_rules)
 
@@ -650,6 +714,8 @@ def run_shape_pipeline_on_bgr(
         min_area=safe_int(min_area, 300),
         close_kernel=ensure_odd_kernel(close_kernel),
         close_iterations=max(1, safe_int(close_iterations, 2)),
+        nm_per_pixel=nm_per_pixel,
+        min_diameter_nm=min_diameter_nm,
     )
 
     green_count = sum(1 for p in particles if p.get("color_name") == "green")
