@@ -51,6 +51,76 @@ function createWindow(backendBaseUrl) {
   mainWindow.loadURL(url);
 }
 
+function getAppDataRoot() {
+  // Mirror backend/run_desktop.py: %APPDATA%/BioVaram on Windows.
+  if (process.platform === "win32") {
+    return path.join(process.env.APPDATA || app.getPath("appData"), "BioVaram");
+  }
+  if (process.platform === "darwin") {
+    return path.join(app.getPath("home"), "Library", "Application Support", "BioVaram");
+  }
+  return path.join(app.getPath("home"), ".biovaram");
+}
+
+async function resetAppData() {
+  const win = mainWindow ?? BrowserWindow.getFocusedWindow();
+  const choice = await dialog.showMessageBox(win ?? undefined, {
+    type: "warning",
+    buttons: ["Cancel", "Reset and Restart"],
+    defaultId: 0,
+    cancelId: 0,
+    title: "Reset App Data",
+    message: "Reset BioVaram to a fresh state?",
+    detail:
+      "This will permanently delete the local database, all uploaded FCS / NTA files, parquet caches, " +
+      "and any pinned charts or settings. The platform will then restart so you can begin again.\n\n" +
+      "Cloud / gateway credentials shipped with the app are not affected.",
+  });
+  if (choice.response !== 1) return;
+
+  const dataRoot = getAppDataRoot();
+  const userDataRoot = app.getPath("userData");
+  logger.info(`Reset App Data: clearing ${dataRoot} and ${userDataRoot}`);
+
+  // Stop the backend so its sqlite handle is released before we delete files.
+  try {
+    if (backendManager?.stop) {
+      await backendManager.stop();
+    }
+  } catch (err) {
+    logger.error(`Backend stop during reset failed: ${err?.message || err}`);
+  }
+
+  const removalErrors = [];
+  for (const target of [dataRoot, userDataRoot]) {
+    try {
+      if (fs.existsSync(target)) {
+        fs.rmSync(target, { recursive: true, force: true });
+      }
+    } catch (err) {
+      removalErrors.push(`${target}: ${err?.message || err}`);
+    }
+  }
+
+  if (removalErrors.length > 0) {
+    logger.error(`Reset App Data partial failure: ${removalErrors.join(" | ")}`);
+    await dialog.showMessageBox(win ?? undefined, {
+      type: "error",
+      buttons: ["OK"],
+      title: "Reset App Data — Partial Failure",
+      message: "Some files could not be removed.",
+      detail:
+        removalErrors.join("\n\n") +
+        "\n\nClose any other apps that may have these files open and try again.",
+    });
+    return;
+  }
+
+  // Restart so the backend re-initialises a clean database on next boot.
+  app.relaunch();
+  app.exit(0);
+}
+
 function configureApplicationMenu() {
   const baseTemplate = [];
 
@@ -59,7 +129,25 @@ function configureApplicationMenu() {
   }
 
   baseTemplate.push(
-    { role: "fileMenu" },
+    {
+      label: "File",
+      submenu: [
+        {
+          label: "Reset App Data…",
+          click: () => {
+            resetAppData().catch((err) => {
+              logger.error(`Reset App Data failed: ${err?.message || err}`);
+              dialog.showErrorBox(
+                "Reset App Data Failed",
+                `Could not reset app data.\n\n${err?.message || err}`
+              );
+            });
+          },
+        },
+        { type: "separator" },
+        process.platform === "darwin" ? { role: "close" } : { role: "quit" },
+      ],
+    },
     { role: "editMenu" },
     { role: "viewMenu" },
     { role: "windowMenu" },

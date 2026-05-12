@@ -1,5 +1,6 @@
 appId: com.biovaram.evanalysis
 productName: BioVaram EV Analysis
+copyright: Copyright (c) 2026 BioVaram CRM IT
 artifactName: BioVaram-Setup-${version}.${ext}
 directories:
   output: dist-electron
@@ -12,15 +13,38 @@ extraResources:
     to: backend
     filter:
       - '**/*'
+# Reduce antivirus / SmartScreen false positives:
+# - Embed full publisher metadata (legalTrademarks, companyName, fileDescription)
+#   so AV engines can identify the publisher instead of flagging unsigned-looking
+#   binaries as suspicious.
+# - signAndEditExecutable: true so the unpacked exe inside the installer is also
+#   signed (some heuristic AVs treat unsigned children of a signed installer as
+#   ransomware-pattern).
+# - Disable LZMA differential algorithm which historically triggers heuristic
+#   ransomware detectors due to its packing pattern.
 win:
-  signAndEditExecutable: false
+  signAndEditExecutable: true
+  legalTrademarks: BioVaram EV Analysis Platform
   target:
-    - nsis
+    - target: nsis
+      arch:
+        - x64
   icon: packaging/biovaram.ico
 nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
+  # Don't run the unpacked installer-builder out of %TEMP% — most generic-trojan
+  # heuristics fire on EXEs spawning from %TEMP%. Differential package = false
+  # also avoids the LZMA-packed pattern that some AVs misclassify.
+  differentialPackage: false
+  deleteAppDataOnUninstall: false
+  # Embed installer metadata so SmartScreen sees a coherent publisher.
+  installerIcon: packaging/biovaram.ico
+  uninstallerIcon: packaging/biovaram.ico
+  installerHeaderIcon: packaging/biovaram.ico
+  shortcutName: BioVaram EV Analysis
+  uninstallDisplayName: BioVaram EV Analysis ${version}
 publish:
   provider: github
   owner: sumitmalhotra-blip

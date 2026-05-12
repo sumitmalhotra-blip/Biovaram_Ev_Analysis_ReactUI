@@ -165,28 +165,103 @@ async def close_connections():
 # Database Initialization
 # ============================================================================
 
+def _sqlalchemy_type_to_sqlite(col) -> str:
+    """Best-effort mapping of SQLAlchemy column types to SQLite type names."""
+    from sqlalchemy import Integer, String, Float, Boolean, DateTime, JSON, Text
+    py_type = col.type
+    if isinstance(py_type, Integer):
+        return "INTEGER"
+    if isinstance(py_type, Float):
+        return "REAL"
+    if isinstance(py_type, Boolean):
+        return "INTEGER"
+    if isinstance(py_type, DateTime):
+        return "TIMESTAMP"
+    if isinstance(py_type, (JSON, Text)):
+        return "TEXT"
+    if isinstance(py_type, String):
+        return "TEXT"
+    return "TEXT"
+
+
+def _migrate_missing_columns_sync(conn) -> None:
+    """Add any model-defined columns that are missing from the existing
+    sqlite database. Desktop installs ship with a sqlite file that may have
+    been created by an older release whose schema is missing columns the
+    current code expects (e.g. ``nta_results.viscosity``). Without this
+    step, queries crash with ``OperationalError: no such column: ...``.
+
+    Adds ALL missing columns as nullable. Never drops or alters existing
+    columns — additive only, safe to run on every startup.
+    """
+    from sqlalchemy import inspect, text
+    from src.database.models import Base
+
+    inspector = inspect(conn)
+    existing_tables = set(inspector.get_table_names())
+
+    for table_name, table in Base.metadata.tables.items():
+        if table_name not in existing_tables:
+            # create_all just made this table — nothing to migrate.
+            continue
+        existing_cols = {c["name"] for c in inspector.get_columns(table_name)}
+        for col in table.columns:
+            if col.name in existing_cols:
+                continue
+            sqlite_type = _sqlalchemy_type_to_sqlite(col)
+            null_clause = "" if col.nullable else " NOT NULL"
+            default_clause = ""
+            if col.server_default is not None:
+                default_clause = f" DEFAULT {col.server_default.arg}"
+            elif col.default is not None and getattr(col.default, "arg", None) is not None:
+                default = col.default.arg
+                if isinstance(default, str):
+                    default_clause = f" DEFAULT '{default}'"
+                elif isinstance(default, (int, float)):
+                    default_clause = f" DEFAULT {default}"
+            ddl = (
+                f'ALTER TABLE "{table_name}" '
+                f'ADD COLUMN "{col.name}" {sqlite_type}{null_clause}{default_clause}'
+            )
+            try:
+                conn.execute(text(ddl))
+                logger.info(f"📐 Added missing column: {table_name}.{col.name}")
+            except Exception as exc:
+                # NOT NULL on an existing-row table fails — drop NOT NULL and retry.
+                if not col.nullable:
+                    fallback_ddl = (
+                        f'ALTER TABLE "{table_name}" '
+                        f'ADD COLUMN "{col.name}" {sqlite_type}{default_clause}'
+                    )
+                    try:
+                        conn.execute(text(fallback_ddl))
+                        logger.warning(
+                            f"📐 Added {table_name}.{col.name} as NULLABLE "
+                            f"(model requires NOT NULL; existing rows would conflict)"
+                        )
+                        continue
+                    except Exception:
+                        pass
+                logger.error(f"Schema migration: could not add {table_name}.{col.name}: {exc}")
+
+
 async def init_database():
     """
     Initialize database with all tables.
-    
-    Creates all tables defined in models.py if they don't exist.
-    
-    WARNING: This does not handle migrations! Use Alembic for production.
-    
-    Usage:
-        from src.database.connection import init_database
-        await init_database()
+
+    Creates any missing tables and ALTER TABLEs in any model columns that
+    are missing on existing tables (additive only; never destructive).
     """
     from src.database.models import Base
-    
+
     engine = get_engine()
-    
+
     logger.info("📊 Initializing database schema...")
-    
-    # Use sync connection for metadata operations
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    
+        await conn.run_sync(_migrate_missing_columns_sync)
+
     logger.success("✅ Database schema initialized")
 
 

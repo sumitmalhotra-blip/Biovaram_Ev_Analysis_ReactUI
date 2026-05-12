@@ -27,7 +27,7 @@ export function Header() {
   const { apiConnected, apiChecking, lastHealthCheck } = useApiConnectionState()
   const { isDarkMode, toggleDarkMode } = useUIState()
   const { checkHealth, startHealthCheck } = useApi()
-  const [appVersion, setAppVersion] = useState("0.1.2")
+  const [appVersion, setAppVersion] = useState("0.1.11")
 
   // DESKTOP MODE: Auto-login with real JWT token exchange
   const [currentUser, setCurrentUser] = useState<DesktopUser>({

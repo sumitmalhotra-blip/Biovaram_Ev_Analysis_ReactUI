@@ -80,21 +80,31 @@ export function QuickStats() {
         const Icon = stat.icon
         return (
           <Card key={stat.label} className="card-3d stat-card group">
-            <CardContent className="p-4">
+            <CardContent className="p-3 md:p-4">
               <div className={cn("absolute inset-0 bg-linear-to-br opacity-50 rounded-xl", stat.gradient)} />
-              <div className="relative flex items-center gap-3">
+              <div className="relative flex items-center gap-2 md:gap-3">
                 <div
                   className={cn(
-                    "p-2.5 rounded-xl bg-linear-to-br shadow-lg transition-transform group-hover:scale-110",
+                    "shrink-0 p-2 md:p-2.5 rounded-xl bg-linear-to-br shadow-lg transition-transform group-hover:scale-110",
                     stat.gradient,
                     stat.color,
                   )}
                 >
-                  <Icon className="h-5 w-5" />
+                  <Icon className="h-4 w-4 md:h-5 md:w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs text-muted-foreground truncate">{stat.label}</p>
-                  <p className="text-base md:text-lg font-semibold font-mono truncate">{stat.value}</p>
+                  <p
+                    className="text-[10px] md:text-xs text-muted-foreground leading-tight wrap-break-word"
+                    title={stat.label}
+                  >
+                    {stat.label}
+                  </p>
+                  <p
+                    className="text-sm md:text-lg font-semibold font-mono wrap-break-word leading-tight"
+                    title={stat.value}
+                  >
+                    {stat.value}
+                  </p>
                 </div>
               </div>
             </CardContent>

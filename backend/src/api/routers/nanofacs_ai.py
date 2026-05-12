@@ -538,24 +538,26 @@ def _compute_fcs_stats(df: pd.DataFrame, file_name: str) -> dict:
                     "p90":    round(float(np.percentile(vals, 90)), 3),
                 }
 
-    # Cluster distribution
+    # Cluster distribution — cap to top 10 clusters by count. The full dict
+    # can run into hundreds of entries on dense FCS files, which blows the
+    # AI prompt past Lambda's safe payload window and causes 500s upstream.
     if "Cluster" in df.columns:
-        cluster_counts = df["Cluster"].value_counts().to_dict()
+        cluster_counts = df["Cluster"].value_counts()
+        top_clusters = cluster_counts.head(10).to_dict()
         stats["cluster_distribution"] = {
-            str(int(k)): int(v) for k, v in cluster_counts.items()
+            str(int(k)): int(v) for k, v in top_clusters.items()
         }
-        stats["num_clusters"] = len(cluster_counts)
+        stats["num_clusters"] = int(len(cluster_counts))
+        if len(cluster_counts) > 10:
+            stats["cluster_distribution_truncated"] = (
+                f"showing top 10 of {len(cluster_counts)} clusters"
+            )
     else:
-        # Avoid frontend rendering `undefined`
         stats["cluster_distribution"] = {}
         stats["num_clusters"] = 0
 
-    # Position distribution
-    if "Position" in df.columns:
-        pos_counts = df["Position"].value_counts().to_dict()
-        stats["position_distribution"] = {
-            str(int(k)): int(v) for k, v in pos_counts.items()
-        }
+    # Position distribution intentionally omitted from AI stats — only used
+    # by frontend visualizations and adds significant prompt weight.
 
     return stats
 
