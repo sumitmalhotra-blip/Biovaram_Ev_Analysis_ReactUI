@@ -227,7 +227,7 @@ export default function UpdateBanner() {
         {status === "available" && (
           <>
             <span style={dot("#12c4b0")} />
-            <span>BioLab Suite {newVersion} is available — downloading in background</span>
+            <span>EVAR {newVersion} is available — downloading in background</span>
           </>
         )}
         {status === "downloading" && (
