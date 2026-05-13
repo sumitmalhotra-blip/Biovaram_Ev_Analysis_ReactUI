@@ -158,6 +158,171 @@
   white-space: nowrap;
 }
 
+/* ── Export Modal ── */
+.exportOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.exportModal {
+  background: #1e1e2e;
+  border: 1px solid #3a3a5c;
+  border-radius: 12px;
+  width: 380px;
+  max-width: 95vw;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.exportHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px 12px;
+  border-bottom: 1px solid #2e2e4a;
+}
+
+.exportTitle {
+  font-size: 15px;
+  font-weight: 700;
+  color: #e0e0f0;
+}
+
+.exportClose {
+  background: none;
+  border: none;
+  color: #9090b0;
+  font-size: 20px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 2px;
+}
+.exportClose:hover { color: #fff; }
+
+.exportBody {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.exportImageName {
+  font-size: 12px;
+  color: #9090b0;
+}
+.exportImageLabel { color: #7070a0; }
+.exportImageValue {
+  color: #c0c0e0;
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.exportFormatsLabel {
+  font-size: 12px;
+  color: #7070a0;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.exportFormatList {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.exportFormatRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #2e2e4a;
+  background: #14142a;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.exportFormatRow--active {
+  border-color: #4a6fa5;
+  background: #1a2a40;
+}
+.exportFormatRow:hover { border-color: #4a6fa5; }
+
+.exportCheckbox {
+  width: 15px;
+  height: 15px;
+  accent-color: #4a90d9;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.exportFormatIcon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.exportFormatInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.exportFormatName {
+  font-size: 13px;
+  font-weight: 600;
+  color: #d0d0f0;
+}
+
+.exportFormatDesc {
+  font-size: 11px;
+  color: #7070a0;
+  line-height: 1.3;
+}
+
+.exportFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px 16px;
+  border-top: 1px solid #2e2e4a;
+}
+
+.exportCancelBtn {
+  background: #2a2a44;
+  border: 1px solid #3a3a5c;
+  color: #a0a0c0;
+  border-radius: 7px;
+  padding: 7px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.exportCancelBtn:hover:not(:disabled) { background: #32324e; }
+
+.exportBtn {
+  background: #2563eb;
+  border: none;
+  color: #fff;
+  border-radius: 7px;
+  padding: 7px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  min-width: 80px;
+}
+.exportBtn:hover:not(:disabled) { background: #1d4ed8; }
+.exportBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.exportSpinner { opacity: 0.8; }
+
 /* stage / canvas */
 .stage {
   position: relative;

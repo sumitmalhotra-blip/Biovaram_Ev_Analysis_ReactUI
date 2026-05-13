@@ -6,6 +6,7 @@ import {
   FaWaveSquare,
   FaInfoCircle,
   FaQuestionCircle,
+  FaDownload,
 } from "react-icons/fa";
 import { clamp } from "./canvasUtils";
 
@@ -43,6 +44,9 @@ export default function RightSidebar({
   showGrid,
   setShowGrid,
 
+  onExport,
+  canExport = false,
+
   // ✅ shape actions
   onShapeGreen,
   onShapeRed,
@@ -69,9 +73,9 @@ export default function RightSidebar({
       <div className="temRightBarInner mt-10">
         {/* Shape actions */}
       <div className="sideGroup">
-  <div className="sideGroupTitle">
+  {/* <div className="sideGroupTitle">
     Shape Actions {selectedCount > 0 ? `(${selectedCount})` : ""}
-  </div>
+  </div> */}
 
   <select
     className="sideSelect"
@@ -241,6 +245,20 @@ export default function RightSidebar({
           >
             <FaTable className={`topBtnIcon ${showTable ? "topBtnIcon--active" : ""}`} />
             <span className="topBtnText">Table</span>
+          </button>
+        </div>
+
+        <div className="d-flex">
+          <button
+            onClick={onExport}
+            title={canExport ? "Export report (PDF / Excel / PNG)" : "Select an image first"}
+            className="topBtn rightBtn exportSideBtn"
+            type="button"
+            disabled={!canExport}
+            style={{ width: "100%" }}
+          >
+            <FaDownload className="topBtnIcon" />
+            <span className="topBtnText">Export</span>
           </button>
         </div>
       </div>
