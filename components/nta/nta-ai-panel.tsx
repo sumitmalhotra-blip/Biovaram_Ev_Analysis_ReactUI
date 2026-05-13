@@ -253,7 +253,7 @@ export function NTAAIPanel({ sampleId }: { sampleId?: string }) {
               />
             </div>
           </div>
-        </div>
+        </div> 
 
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2">
