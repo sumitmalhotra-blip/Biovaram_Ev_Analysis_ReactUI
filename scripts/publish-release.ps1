@@ -137,7 +137,7 @@ if (-not (Test-Path "$ProjectRoot\out\index.html")) {
     throw "Missing static frontend output: out/index.html"
 }
 
-Write-Host "[4/9] Building Electron installers and publishing update artifacts" -ForegroundColor Yellow
+Write-Host "[4/9] Building Electron installers (publishing deferred until validation passes)" -ForegroundColor Yellow
 Stop-LockingDesktopProcesses
 Clear-ElectronOutput
 
@@ -145,13 +145,13 @@ $publishAttempts = 0
 $maxPublishAttempts = 2
 do {
     $publishAttempts++
-    npx.cmd electron-builder --win --publish always --config.directories.output=$ElectronOutputDir
+    npx.cmd electron-builder --win --publish never --config.directories.output=$ElectronOutputDir
     if ($LASTEXITCODE -eq 0) {
         break
     }
 
     if ($publishAttempts -ge $maxPublishAttempts) {
-        Assert-LastExitCode -Step "Electron packaging/publish"
+        Assert-LastExitCode -Step "Electron packaging"
     }
 
     Write-Host "Electron packaging failed (attempt $publishAttempts/$maxPublishAttempts). Retrying after cleanup..." -ForegroundColor DarkYellow
@@ -160,7 +160,7 @@ do {
 } while ($true)
 
 if (-not $SkipValidate) {
-    Write-Host "[5/9] Validating published release artifacts" -ForegroundColor Yellow
+    Write-Host "[5/9] Validating release artifacts" -ForegroundColor Yellow
     & "$ProjectRoot\scripts\validate-release-artifacts.ps1" -Version $Version -ArtifactsDir $ElectronOutputDir
 
     Write-Host "[6/9] Validating code signatures" -ForegroundColor Yellow
@@ -197,6 +197,7 @@ git push
 Assert-LastExitCode -Step "Git push (branch)"
 git push origin "v$Version"
 Assert-LastExitCode -Step "Git push (tag)"
+& "$ProjectRoot\scripts\finalize-release.ps1" -Version $Version -ArtifactsDir $ElectronOutputDir -ReplaceExisting
 
 Write-Host "Release build complete. Upload release notes from: $ReleaseNotesPath" -ForegroundColor Green
 Write-Host "Artifacts directory: $ElectronOutputDir" -ForegroundColor Green
