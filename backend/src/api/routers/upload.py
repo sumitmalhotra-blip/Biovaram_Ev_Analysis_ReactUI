@@ -20,6 +20,7 @@ import uuid
 from datetime import datetime
 import sys
 import numpy as np
+import pandas as pd
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, status, Header
 from fastapi.responses import JSONResponse  # noqa: F401
@@ -1529,83 +1530,149 @@ async def upload_nta_file(
                 size_col = None
                 count_col = None
                 conc_col = None
-                
-                # Find size, particle_count, and concentration columns
+
+                # Normalize columns for robust matching across ZetaView export variants
+                normalized_to_original: dict[str, str] = {}
                 for col in parquet_data.columns:
-                    col_lower = col.lower()
-                    if 'size' in col_lower and 'nm' not in col_lower and size_col is None:
-                        size_col = col
-                    if 'particle_count' in col_lower and count_col is None:
-                        count_col = col
-                    if 'concentration' in col_lower and 'particles' in col_lower and conc_col is None:
-                        conc_col = col
-                
-                # Fallback to simpler matching
-                if not size_col and 'size_nm' in parquet_data.columns:
-                    size_col = 'size_nm'
-                if not count_col and 'particle_count' in parquet_data.columns:
-                    count_col = 'particle_count'
-                if not conc_col and 'concentration_particles_ml' in parquet_data.columns:
-                    conc_col = 'concentration_particles_ml'
-                
+                    normalized = (
+                        str(col).lower()
+                        .replace("%", "pct")
+                        .replace("/", "_")
+                        .replace(" ", "_")
+                        .replace("-", "_")
+                        .replace(".", "")
+                    )
+                    normalized = "_".join(part for part in normalized.split("_") if part)
+                    normalized_to_original[normalized] = str(col)
+
+                preferred_size_keys = [
+                    "size_nm",
+                    "size",
+                    "diameter_nm",
+                    "particle_size_nm",
+                    "x50",
+                    "median_size_nm",
+                ]
+                preferred_count_keys = [
+                    "particle_count",
+                    "count",
+                    "counts",
+                    "number",
+                    "avg_particles",
+                ]
+                preferred_conc_keys = [
+                    "concentration_particles_ml",
+                    "concentration_particles_cm3",
+                    "concentration",
+                    "conc_particles_ml",
+                ]
+
+                for key in preferred_size_keys:
+                    if key in normalized_to_original:
+                        size_col = normalized_to_original[key]
+                        break
+                if size_col is None:
+                    for normalized, original in normalized_to_original.items():
+                        if "size" in normalized or "diameter" in normalized:
+                            size_col = original
+                            break
+
+                for key in preferred_count_keys:
+                    if key in normalized_to_original:
+                        count_col = normalized_to_original[key]
+                        break
+                if count_col is None:
+                    for normalized, original in normalized_to_original.items():
+                        if "count" in normalized or normalized in {"number", "particles"}:
+                            count_col = original
+                            break
+
+                for key in preferred_conc_keys:
+                    if key in normalized_to_original:
+                        conc_col = normalized_to_original[key]
+                        break
+                if conc_col is None:
+                    for normalized, original in normalized_to_original.items():
+                        if "concentration" in normalized or normalized.startswith("conc"):
+                            conc_col = original
+                            break
+
+                # Last fallback: first numeric column for size
+                if size_col is None:
+                    numeric_cols = [
+                        str(col) for col in parquet_data.columns
+                        if pd.api.types.is_numeric_dtype(parquet_data[col])
+                    ]
+                    if numeric_cols:
+                        size_col = numeric_cols[0]
+
                 # Calculate size statistics using weighted percentiles
                 if size_col:
-                    # Convert to numpy arrays to avoid pandas ArrayLike type issues with numpy functions
                     sizes = np.asarray(parquet_data[size_col].values, dtype=np.float64)
-                    # Get particle counts for weighting (use counts if available, else 1 per bin)
+
+                    # Weight by particle count when available; otherwise concentration; otherwise uniform.
                     if count_col and count_col in parquet_data.columns:
                         counts = np.asarray(parquet_data[count_col].values, dtype=np.float64)
+                    elif conc_col and conc_col in parquet_data.columns:
+                        counts = np.asarray(parquet_data[conc_col].values, dtype=np.float64)
                     else:
-                        counts = np.ones_like(sizes)
-                    
-                    # Filter out empty bins
-                    mask = counts > 0
-                    sizes_valid = np.asarray(sizes[mask], dtype=np.float64)
-                    counts_valid = np.asarray(counts[mask], dtype=np.float64)
-                    
-                    if len(sizes_valid) > 0 and np.sum(counts_valid) > 0:
-                        # Calculate weighted percentiles using cumulative distribution
-                        # Sort by size
+                        counts = np.ones_like(sizes, dtype=np.float64)
+
+                    # Keep physically meaningful, finite values
+                    valid_mask = np.isfinite(sizes) & (sizes > 0) & (sizes < 5000)
+                    if counts.shape == sizes.shape:
+                        valid_mask = valid_mask & np.isfinite(counts)
+
+                    sizes_valid = np.asarray(sizes[valid_mask], dtype=np.float64)
+                    counts_valid = np.asarray(counts[valid_mask], dtype=np.float64)
+
+                    if len(sizes_valid) > 0:
+                        # Ensure non-negative usable weights
+                        counts_valid = np.clip(counts_valid, a_min=0.0, a_max=None)
+                        if np.sum(counts_valid) <= 0:
+                            counts_valid = np.ones_like(sizes_valid, dtype=np.float64)
+
+                        # Weighted percentiles via cumulative distribution
                         sort_idx = np.argsort(sizes_valid)
                         sizes_sorted = sizes_valid[sort_idx]
                         counts_sorted = counts_valid[sort_idx]
-                        
-                        # Cumulative sum of particle counts
+
                         cumsum = np.cumsum(counts_sorted)
-                        total_particles = cumsum[-1]
-                        
-                        # Find D10, D50, D90 using weighted percentiles
+                        total_particles = float(cumsum[-1]) if len(cumsum) > 0 else 0.0
+                        if total_particles <= 0:
+                            counts_sorted = np.ones_like(sizes_sorted, dtype=np.float64)
+                            cumsum = np.cumsum(counts_sorted)
+                            total_particles = float(cumsum[-1])
+
                         d10_idx = np.searchsorted(cumsum, total_particles * 0.1)
                         d50_idx = np.searchsorted(cumsum, total_particles * 0.5)
                         d90_idx = np.searchsorted(cumsum, total_particles * 0.9)
-                        
-                        d10 = float(sizes_sorted[min(d10_idx, len(sizes_sorted)-1)])
-                        d50 = float(sizes_sorted[min(d50_idx, len(sizes_sorted)-1)])
-                        d90 = float(sizes_sorted[min(d90_idx, len(sizes_sorted)-1)])
-                        
-                        # Weighted mean
-                        mean_size = float(np.average(sizes_valid, weights=counts_valid))
-                        
-                        # Calculate concentration if available
+
+                        d10 = float(sizes_sorted[min(d10_idx, len(sizes_sorted) - 1)])
+                        d50 = float(sizes_sorted[min(d50_idx, len(sizes_sorted) - 1)])
+                        d90 = float(sizes_sorted[min(d90_idx, len(sizes_sorted) - 1)])
+
+                        mean_size = float(np.average(sizes_sorted, weights=counts_sorted))
+                        weighted_var = float(np.average((sizes_sorted - mean_size) ** 2, weights=counts_sorted))
+                        weighted_std = float(np.sqrt(max(weighted_var, 0.0)))
+
+                        # Concentration summary
                         total_concentration = None
-                        if conc_col:
-                            conc_values = parquet_data[conc_col].dropna()
+                        if conc_col and conc_col in parquet_data.columns:
+                            conc_values = np.asarray(parquet_data[conc_col].dropna().values, dtype=np.float64)
+                            conc_values = conc_values[np.isfinite(conc_values)]
                             if len(conc_values) > 0:
-                                total_concentration = float(conc_values.sum())
-                        
-                        # Calculate size bin percentages using weighted particle counts
-                        total_particle_count = float(np.sum(counts_valid))
-                        bin_50_80 = float(np.sum(counts_valid[(sizes_valid >= 50) & (sizes_valid < 80)])) / total_particle_count * 100 if total_particle_count > 0 else 0
-                        bin_80_100 = float(np.sum(counts_valid[(sizes_valid >= 80) & (sizes_valid < 100)])) / total_particle_count * 100 if total_particle_count > 0 else 0
-                        bin_100_120 = float(np.sum(counts_valid[(sizes_valid >= 100) & (sizes_valid < 120)])) / total_particle_count * 100 if total_particle_count > 0 else 0
-                        bin_120_150 = float(np.sum(counts_valid[(sizes_valid >= 120) & (sizes_valid < 150)])) / total_particle_count * 100 if total_particle_count > 0 else 0
-                        bin_150_200 = float(np.sum(counts_valid[(sizes_valid >= 150) & (sizes_valid < 200)])) / total_particle_count * 100 if total_particle_count > 0 else 0
-                        bin_200_plus = float(np.sum(counts_valid[sizes_valid >= 200])) / total_particle_count * 100 if total_particle_count > 0 else 0
-                        
-                        # Weighted standard deviation
-                        weighted_var = float(np.average((sizes_valid - mean_size) ** 2, weights=counts_valid))
-                        weighted_std = float(np.sqrt(weighted_var))
-                        
+                                total_concentration = float(np.sum(conc_values))
+
+                        # Size bin percentages
+                        total_particle_count = float(np.sum(counts_sorted))
+                        bin_50_80 = float(np.sum(counts_sorted[(sizes_sorted >= 50) & (sizes_sorted < 80)])) / total_particle_count * 100 if total_particle_count > 0 else 0.0
+                        bin_80_100 = float(np.sum(counts_sorted[(sizes_sorted >= 80) & (sizes_sorted < 100)])) / total_particle_count * 100 if total_particle_count > 0 else 0.0
+                        bin_100_120 = float(np.sum(counts_sorted[(sizes_sorted >= 100) & (sizes_sorted < 120)])) / total_particle_count * 100 if total_particle_count > 0 else 0.0
+                        bin_120_150 = float(np.sum(counts_sorted[(sizes_sorted >= 120) & (sizes_sorted < 150)])) / total_particle_count * 100 if total_particle_count > 0 else 0.0
+                        bin_150_200 = float(np.sum(counts_sorted[(sizes_sorted >= 150) & (sizes_sorted < 200)])) / total_particle_count * 100 if total_particle_count > 0 else 0.0
+                        bin_200_plus = float(np.sum(counts_sorted[sizes_sorted >= 200])) / total_particle_count * 100 if total_particle_count > 0 else 0.0
+
                         nta_results = {
                             "mean_size_nm": mean_size,
                             "median_size_nm": d50,

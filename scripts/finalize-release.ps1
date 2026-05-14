@@ -69,6 +69,7 @@ if (-not (Test-Path $ArtifactsDir)) {
 
 $requiredFiles = @(
     "BioVaram-Setup-$normalizedVersion.exe",
+    "BioVaram-Setup-$normalizedVersion.msi",
     "BioVaram-Setup-$normalizedVersion.exe.blockmap",
     "latest.yml"
 )

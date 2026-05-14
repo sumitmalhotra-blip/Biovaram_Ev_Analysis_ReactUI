@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { 
   Pin, Maximize2, MapPin, Ruler, Microscope, BarChart3, TableIcon, 
-  Upload, FileText, Loader2, AlertCircle, RotateCcw, Download, Clock, Beaker, FileType
+  Upload, FileText, Loader2, AlertCircle, RotateCcw, Download, Beaker, FileType
 } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -25,8 +25,15 @@ import { ExperimentalConditionsDialog, type ExperimentalConditions, type FileMet
 import { cn } from "@/lib/utils"
 
 export function NTATab() {
-  const { ntaAnalysis, apiConnected, apiSamples, resetNTAAnalysis, setNTAExperimentalConditions } = useAnalysisStore()
-  const { uploadNTA, uploadNtaPdf, checkHealth } = useApi()
+  const {
+    ntaAnalysis,
+    apiConnected,
+    apiSamples,
+    resetNTAAnalysis,
+    setNTAExperimentalConditions,
+    setNTAResults,
+  } = useAnalysisStore()
+  const { uploadNTA, uploadNtaPdf, getNTAResults, checkHealth } = useApi()
   const { pinChart } = useAnalysisStore()
   const { toast } = useToast()
 
@@ -46,6 +53,7 @@ export function NTATab() {
   const [operator, setOperator] = useState("")
   const [notes, setNotes] = useState("")
   const [pdfUploading, setPdfUploading] = useState(false)  // TASK-007: PDF upload state
+  const [refreshingResults, setRefreshingResults] = useState(false)
   
   // Experimental conditions dialog state
   const [showConditionsDialog, setShowConditionsDialog] = useState(false)
@@ -69,6 +77,50 @@ export function NTATab() {
     setNTAExperimentalConditions(conditions)
     setShowConditionsDialog(false)
   }
+
+  const refreshUploadedNtaResults = useCallback(
+    async (
+      sampleId: string,
+      options?: { silent?: boolean; delayMs?: number }
+    ): Promise<boolean> => {
+      if (!sampleId || refreshingResults) return false
+
+      const silent = options?.silent ?? false
+      const delayMs = options?.delayMs ?? 0
+
+      setRefreshingResults(true)
+      try {
+        if (delayMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, delayMs))
+        }
+
+        const results = await getNTAResults(sampleId, { bypassCache: true })
+        if (results && results.length > 0) {
+          setNTAResults(results[0])
+          if (!silent) {
+            toast({
+              title: "Analysis loaded",
+              description: `NTA analysis for ${sampleId} is now available.`,
+            })
+          }
+          return true
+        }
+
+        if (!silent) {
+          toast({
+            title: "No analysis data found",
+            description: `The file uploaded for ${sampleId} did not return analyzable NTA results.`,
+            variant: "destructive",
+          })
+        }
+
+        return false
+      } finally {
+        setRefreshingResults(false)
+      }
+    },
+    [getNTAResults, refreshingResults, setNTAResults, toast]
+  )
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -133,7 +185,7 @@ export function NTATab() {
       return
     }
 
-    await uploadNTA(selectedFile, {
+    const uploadResponse = await uploadNTA(selectedFile, {
       treatment: resolvedMarker || undefined,
       marker: resolvedMarker || undefined,
       dye: resolvedDye || undefined,
@@ -144,6 +196,21 @@ export function NTATab() {
       operator: operator || undefined,
       notes: notes || undefined,
     })
+
+    if (uploadResponse?.sample_id && !uploadResponse.nta_results) {
+      const loaded = await refreshUploadedNtaResults(uploadResponse.sample_id, {
+        silent: true,
+        delayMs: 300,
+      })
+
+      if (!loaded) {
+        toast({
+          title: "Upload complete",
+          description: "The file was saved, but no NTA analysis data could be extracted.",
+          variant: "destructive",
+        })
+      }
+    }
 
     // Reset form
     setSelectedFile(null)

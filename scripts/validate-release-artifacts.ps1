@@ -28,12 +28,14 @@ Write-Host "Validating release artifacts for v$Version" -ForegroundColor Yellow
 $backendExe = Join-Path $ProjectRoot "dist/BioVaram/BioVaram.exe"
 $frontendIndex = Join-Path $ProjectRoot "out/index.html"
 $installerExe = Join-Path $ProjectRoot "$ArtifactsDir/BioVaram-Setup-$Version.exe"
+$installerMsi = Join-Path $ProjectRoot "$ArtifactsDir/BioVaram-Setup-$Version.msi"
 $latestYml = Join-Path $ProjectRoot "$ArtifactsDir/latest.yml"
 $installerBlockmap = Join-Path $ProjectRoot "$ArtifactsDir/BioVaram-Setup-$Version.exe.blockmap"
 
 Assert-Exists -Path $backendExe -Label "Backend desktop binary"
 Assert-Exists -Path $frontendIndex -Label "Frontend static export"
 Assert-Exists -Path $installerExe -Label "Electron installer"
+Assert-Exists -Path $installerMsi -Label "MSI installer"
 Assert-Exists -Path $latestYml -Label "Updater metadata (latest.yml)"
 Assert-Exists -Path $installerBlockmap -Label "Installer blockmap"
 

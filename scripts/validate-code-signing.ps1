@@ -10,25 +10,30 @@ $ProjectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $ProjectRoot
 
 $installerPath = Join-Path $ProjectRoot "$ArtifactsDir/BioVaram-Setup-$Version.exe"
-if (-not (Test-Path $installerPath)) {
-    throw "Installer not found for signature validation: $installerPath"
-}
+$msiPath = Join-Path $ProjectRoot "$ArtifactsDir/BioVaram-Setup-$Version.msi"
+$pathsToValidate = @($installerPath, $msiPath)
 
-$signature = Get-AuthenticodeSignature $installerPath
+foreach ($path in $pathsToValidate) {
+    if (-not (Test-Path $path)) {
+        throw "Release artifact not found for signature validation: $path"
+    }
 
-Write-Host "Signature validation for: $installerPath" -ForegroundColor Yellow
-Write-Host "Status: $($signature.Status)" -ForegroundColor Yellow
-if ($signature.SignerCertificate) {
-    Write-Host "Subject: $($signature.SignerCertificate.Subject)" -ForegroundColor DarkGray
-}
+    $signature = Get-AuthenticodeSignature $path
 
-if ($RequireValid -and $signature.Status -ne "Valid") {
-    throw "Code-signing validation failed. Expected Status=Valid but got Status=$($signature.Status)."
-}
+    Write-Host "Signature validation for: $path" -ForegroundColor Yellow
+    Write-Host "Status: $($signature.Status)" -ForegroundColor Yellow
+    if ($signature.SignerCertificate) {
+        Write-Host "Subject: $($signature.SignerCertificate.Subject)" -ForegroundColor DarkGray
+    }
 
-if ($signature.Status -eq "Valid") {
-    Write-Host "OK: Installer signature is valid." -ForegroundColor Green
-}
-else {
-    Write-Host "WARNING: Installer signature is not valid for production rollout." -ForegroundColor DarkYellow
+    if ($RequireValid -and $signature.Status -ne "Valid") {
+        throw "Code-signing validation failed for $path. Expected Status=Valid but got Status=$($signature.Status)."
+    }
+
+    if ($signature.Status -eq "Valid") {
+        Write-Host "OK: Signature is valid." -ForegroundColor Green
+    }
+    else {
+        Write-Host "WARNING: Signature is not valid for production rollout." -ForegroundColor DarkYellow
+    }
 }

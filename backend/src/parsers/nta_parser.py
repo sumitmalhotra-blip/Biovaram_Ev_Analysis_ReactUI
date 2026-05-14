@@ -257,7 +257,7 @@ class NTAParser(BaseParser):
         
         if data_start_idx is None:
             logger.warning("Could not find 'Size Distribution' section")
-            return pd.DataFrame()
+            return self._parse_size_distribution_fallback(lines)
         
         # Get header line
         header_line = lines[data_start_idx]
@@ -293,7 +293,7 @@ class NTAParser(BaseParser):
         
         if not data_rows:
             logger.warning("No size distribution data found")
-            return pd.DataFrame()
+            return self._parse_size_distribution_fallback(lines[data_start_idx + 1 :])
         
         # Create DataFrame
         df = pd.DataFrame(data_rows, columns=headers)  # type: ignore[call-overload]
@@ -306,6 +306,52 @@ class NTAParser(BaseParser):
         df = self._standardize_column_names(df, data_type='size')
         
         return df
+
+    def _parse_size_distribution_fallback(self, lines: List[str]) -> pd.DataFrame:
+        """
+        Fallback parser for size-distribution-like tables when canonical headers are missing.
+
+        Accepts lines containing at least two numeric values where:
+        - first value is interpreted as size (nm)
+        - second value is interpreted as count/intensity proxy
+        """
+        rows: list[tuple[float, float]] = []
+
+        for raw_line in lines:
+            line = raw_line.strip()
+            if not line:
+                continue
+            if line.startswith("#") or line.startswith("---"):
+                continue
+
+            values = re.findall(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", line)
+            if len(values) < 2:
+                continue
+
+            try:
+                size_val = float(values[0])
+                count_val = float(values[1])
+            except ValueError:
+                continue
+
+            # Guard rails to avoid accidentally parsing metadata rows (dates/times/etc.).
+            if not np.isfinite(size_val) or not np.isfinite(count_val):
+                continue
+            if size_val <= 0 or size_val >= 5000:
+                continue
+            if count_val < 0:
+                continue
+
+            rows.append((size_val, count_val))
+
+        if not rows:
+            return pd.DataFrame()
+
+        fallback_df = pd.DataFrame(rows, columns=["size_nm", "particle_count"])
+        fallback_df = (
+            fallback_df.groupby("size_nm", as_index=False)["particle_count"].sum().sort_values("size_nm")
+        )
+        return fallback_df
     
     def _parse_profile_data(self, lines: List[str]) -> pd.DataFrame:
         """

@@ -323,7 +323,7 @@ export function useApi() {
           }
 
           // Try to load saved NTA results
-          const response = await apiClient.getNTAResults(sampleId)
+          const response = await apiClient.getNTAResults(sampleId, { bypassCache: true })
           
           if (response && response.results.length > 0) {
             // Set the most recent result
@@ -1440,11 +1440,14 @@ export function useApi() {
   )
 
   const getNTAResults = useCallback(
-    async (sampleId: string): Promise<NTAResult[] | null> => {
+    async (
+      sampleId: string,
+      options?: { bypassCache?: boolean }
+    ): Promise<NTAResult[] | null> => {
       if (apiClient.offline) return null
       
       try {
-        const response = await apiClient.getNTAResults(sampleId)
+        const response = await apiClient.getNTAResults(sampleId, options)
         return response.results
       } catch (error) {
         if (!isNetworkError(error)) {

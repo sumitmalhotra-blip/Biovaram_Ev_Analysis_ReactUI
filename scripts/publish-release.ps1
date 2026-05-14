@@ -2,9 +2,10 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$Version,
     [switch]$BuildBackend,
-    [switch]$RequireSigning,
+    [bool]$RequireSigning = $true,
     [switch]$SkipBuild,
     [switch]$SkipValidate,
+    [switch]$SkipSecurityScan,
     [string]$ElectronOutputDir = "",
     [string]$ReleaseNotesPath = "scripts/release-notes-template.md"
 )
@@ -94,7 +95,7 @@ if ($RequireSigning -and -not (Test-SigningProvisioned)) {
 
 $frontendBuiltByBackend = $false
 
-Write-Host "[1/7] Updating app version to $Version" -ForegroundColor Yellow
+Write-Host "[1/9] Updating app version to $Version" -ForegroundColor Yellow
 npm.cmd version $Version --no-git-tag-version | Out-Null
 if ($LASTEXITCODE -ne 0) {
     $currentVersion = (Get-Content "$ProjectRoot\package.json" -Raw | ConvertFrom-Json).version
@@ -107,26 +108,26 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 if ($BuildBackend) {
-    Write-Host "[2/6] Building backend desktop executable" -ForegroundColor Yellow
+    Write-Host "[2/9] Building backend desktop executable" -ForegroundColor Yellow
     # Build backend with bundled frontend to keep in-app UI assets in sync.
     & "$ProjectRoot\packaging\build.ps1" -Version $Version
     Assert-LastExitCode -Step "Backend desktop build"
     $frontendBuiltByBackend = $true
 }
 else {
-    Write-Host "[2/6] Skipping backend build (use -BuildBackend to include it)" -ForegroundColor DarkGray
+    Write-Host "[2/9] Skipping backend build (use -BuildBackend to include it)" -ForegroundColor DarkGray
 }
 
 if (-not $SkipBuild -and -not $frontendBuiltByBackend) {
-    Write-Host "[3/6] Building static frontend" -ForegroundColor Yellow
+    Write-Host "[3/9] Building static frontend" -ForegroundColor Yellow
     npm.cmd run build
     Assert-LastExitCode -Step "Frontend build"
 }
 elseif ($frontendBuiltByBackend) {
-    Write-Host "[3/6] Skipping standalone frontend build (already built during backend packaging)" -ForegroundColor DarkGray
+    Write-Host "[3/9] Skipping standalone frontend build (already built during backend packaging)" -ForegroundColor DarkGray
 }
 else {
-    Write-Host "[3/6] Skipping frontend build" -ForegroundColor DarkGray
+    Write-Host "[3/9] Skipping frontend build" -ForegroundColor DarkGray
 }
 
 if (-not (Test-Path "$ProjectRoot\dist\BioVaram\BioVaram.exe")) {
@@ -136,7 +137,7 @@ if (-not (Test-Path "$ProjectRoot\out\index.html")) {
     throw "Missing static frontend output: out/index.html"
 }
 
-Write-Host "[4/7] Building Electron installer and publishing update artifacts" -ForegroundColor Yellow
+Write-Host "[4/9] Building Electron installers and publishing update artifacts" -ForegroundColor Yellow
 Stop-LockingDesktopProcesses
 Clear-ElectronOutput
 
@@ -144,7 +145,7 @@ $publishAttempts = 0
 $maxPublishAttempts = 2
 do {
     $publishAttempts++
-    npx.cmd electron-builder --win nsis --publish always --config.directories.output=$ElectronOutputDir
+    npx.cmd electron-builder --win --publish always --config.directories.output=$ElectronOutputDir
     if ($LASTEXITCODE -eq 0) {
         break
     }
@@ -159,19 +160,30 @@ do {
 } while ($true)
 
 if (-not $SkipValidate) {
-    Write-Host "[5/7] Validating published release artifacts" -ForegroundColor Yellow
+    Write-Host "[5/9] Validating published release artifacts" -ForegroundColor Yellow
     & "$ProjectRoot\scripts\validate-release-artifacts.ps1" -Version $Version -ArtifactsDir $ElectronOutputDir
 
+    Write-Host "[6/9] Validating code signatures" -ForegroundColor Yellow
     if ($RequireSigning) {
-        Write-Host "[5/7] Validating code signature" -ForegroundColor Yellow
         & "$ProjectRoot\scripts\validate-code-signing.ps1" -Version $Version -ArtifactsDir $ElectronOutputDir -RequireValid
+    }
+    else {
+        & "$ProjectRoot\scripts\validate-code-signing.ps1" -Version $Version -ArtifactsDir $ElectronOutputDir
+    }
+
+    if (-not $SkipSecurityScan) {
+        Write-Host "[7/9] Running local malware pre-scan on release artifacts" -ForegroundColor Yellow
+        & "$ProjectRoot\scripts\validate-windows-security-scan.ps1" -Version $Version -ArtifactsDir $ElectronOutputDir -RequireDefender -RequireClean
+    }
+    else {
+        Write-Host "[7/9] Skipping malware pre-scan (--SkipSecurityScan)" -ForegroundColor DarkGray
     }
 }
 else {
-    Write-Host "[5/7] Skipping post-build artifact validation" -ForegroundColor DarkGray
+    Write-Host "[5/9] Skipping post-build artifact validation" -ForegroundColor DarkGray
 }
 
-Write-Host "[6/7] Creating git commit and tag" -ForegroundColor Yellow
+Write-Host "[8/9] Creating git commit and tag" -ForegroundColor Yellow
 git add package.json package-lock.json
 git commit -m "release: v$Version" | Out-Null
 if ($LASTEXITCODE -ne 0) {
@@ -180,7 +192,7 @@ if ($LASTEXITCODE -ne 0) {
 git tag "v$Version"
 Assert-LastExitCode -Step "Tag creation"
 
-Write-Host "[7/7] Pushing commit/tag and publishing release" -ForegroundColor Yellow
+Write-Host "[9/9] Pushing commit/tag and publishing release" -ForegroundColor Yellow
 git push
 Assert-LastExitCode -Step "Git push (branch)"
 git push origin "v$Version"
@@ -188,3 +200,4 @@ Assert-LastExitCode -Step "Git push (tag)"
 
 Write-Host "Release build complete. Upload release notes from: $ReleaseNotesPath" -ForegroundColor Green
 Write-Host "Artifacts directory: $ElectronOutputDir" -ForegroundColor Green
+Write-Host "Distribute the MSI artifact for enterprise installs to reduce NSIS temp-uninstaller AV heuristics." -ForegroundColor Green

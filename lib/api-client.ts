@@ -1356,9 +1356,10 @@ class ApiClient {
       });
 
       this.isOffline = false;
-      // Invalidate sample list cache after upload
-      this.cache.invalidate("samples:list");
-      return this.handleResponse<UploadResponse>(response);
+      const result = await this.handleResponse<UploadResponse>(response);
+      // Invalidate list + sample-scoped caches so recently uploaded analysis can be fetched immediately.
+      this.invalidateSample(result.sample_id);
+      return result;
     } catch (error) {
       this.handleNetworkError(error);
     }
@@ -1524,9 +1525,12 @@ class ApiClient {
     }, CACHE_TTL.FCS_RESULTS);
   }
 
-  async getNTAResults(sampleId: string): Promise<{ sample_id: string; results: NTAResult[] }> {
+  async getNTAResults(
+    sampleId: string,
+    options?: { bypassCache?: boolean }
+  ): Promise<{ sample_id: string; results: NTAResult[] }> {
     const cacheKey = `sample:${sampleId}:nta`;
-    return this.cache.dedup(cacheKey, async () => {
+    const fetchResults = async () => {
       try {
         const response = await fetch(`${this.baseUrl}/samples/${sampleId}/nta`, {
           method: "GET",
@@ -1538,6 +1542,14 @@ class ApiClient {
       } catch (error) {
         this.handleNetworkError(error);
       }
+    };
+
+    if (options?.bypassCache) {
+      return fetchResults();
+    }
+
+    return this.cache.dedup(cacheKey, async () => {
+      return fetchResults();
     }, CACHE_TTL.NTA_RESULTS);
   }
 

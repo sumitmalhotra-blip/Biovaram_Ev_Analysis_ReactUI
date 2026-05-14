@@ -31,11 +31,12 @@ if (-not (Test-SigningProvisioned)) {
 }
 
 Write-Host "Building signed desktop candidate v$Version" -ForegroundColor Yellow
-npx.cmd electron-builder --win nsis --publish never --config.directories.output=$ElectronOutputDir
+npx.cmd electron-builder --win --publish never --config.directories.output=$ElectronOutputDir
 if ($LASTEXITCODE -ne 0) {
     throw "Signed candidate build failed with exit code $LASTEXITCODE"
 }
 
 & "$ProjectRoot\scripts\validate-code-signing.ps1" -Version $Version -ArtifactsDir $ElectronOutputDir -RequireValid
+& "$ProjectRoot\scripts\validate-windows-security-scan.ps1" -Version $Version -ArtifactsDir $ElectronOutputDir -RequireDefender -RequireClean
 
-Write-Host "Signed candidate build and signature validation passed for v$Version." -ForegroundColor Green
+Write-Host "Signed candidate build, signature validation, and malware pre-scan passed for v$Version." -ForegroundColor Green

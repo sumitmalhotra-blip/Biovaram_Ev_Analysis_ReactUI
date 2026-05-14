@@ -2,6 +2,7 @@ appId: com.biovaram.evanalysis
 productName: BioVaram EV Analysis
 copyright: Copyright (c) 2026 BioVaram CRM IT
 artifactName: BioVaram-Setup-${version}.${ext}
+compression: normal
 directories:
   output: dist-electron
 files:
@@ -24,9 +25,16 @@ extraResources:
 #   ransomware detectors due to its packing pattern.
 win:
   signAndEditExecutable: true
+  # Must match the code-signing certificate subject for SmartScreen reputation.
+  publisherName:
+    - BioVaram CRM IT
+  verifyUpdateCodeSignature: true
   legalTrademarks: BioVaram EV Analysis Platform
   target:
     - target: nsis
+      arch:
+        - x64
+    - target: msi
       arch:
         - x64
   icon: packaging/biovaram.ico

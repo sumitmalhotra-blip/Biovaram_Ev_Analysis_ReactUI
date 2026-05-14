@@ -263,7 +263,7 @@ export function NTAAIPanel({ sampleId }: { sampleId?: string }) {
             )}
           </div>
 
-          <ScrollArea className="max-h-44 rounded-md border border-border/60 p-2">
+          <ScrollArea className="h-52 rounded-md border border-border/60 bg-background/40 p-2 pr-3">
             <div className="space-y-1">
               {availableNtaSampleIds.length === 0 ? (
                 <p className="text-sm text-muted-foreground px-2 py-1">

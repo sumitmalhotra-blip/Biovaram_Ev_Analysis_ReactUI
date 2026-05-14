@@ -1043,7 +1043,7 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
               />
             </div>
 
-            <ScrollArea className="max-h-45 pr-1">
+            <ScrollArea className="h-52 rounded-md border border-border/60 bg-background/40 p-1 pr-3">
               <div className="space-y-1">
                 {selectableSampleIds.map((sampleIdentifier) => {
                   const isSelected = selectedSampleIds.includes(sampleIdentifier)
@@ -1071,67 +1071,69 @@ export function NTAAnalysisResults({ results, sampleId, fileName }: NTAAnalysisR
             {selectedSampleIds.length > 0 && (
               <div className="space-y-2">
                 <Label className="text-xs text-muted-foreground">Selected Samples</Label>
-                <div className="space-y-1 max-h-52 overflow-y-auto pr-1">
-                  {selectedSampleIds.map((id) => {
-                    const isVisible = visibleSampleIds.includes(id)
-                    const isPrimary = id === primarySampleId
-                    const loading = ntaCompareSession.loadingBySampleId[id]
-                    const error = ntaCompareSession.errorBySampleId[id]
-                    const resultForSample = id === sampleId ? results : ntaCompareSession.resultsBySampleId[id]
+                <ScrollArea className="h-56 rounded-md border border-border/60 bg-background/40 p-2 pr-3">
+                  <div className="space-y-1">
+                    {selectedSampleIds.map((id) => {
+                      const isVisible = visibleSampleIds.includes(id)
+                      const isPrimary = id === primarySampleId
+                      const loading = ntaCompareSession.loadingBySampleId[id]
+                      const error = ntaCompareSession.errorBySampleId[id]
+                      const resultForSample = id === sampleId ? results : ntaCompareSession.resultsBySampleId[id]
 
-                    return (
-                      <div key={id} className="rounded-md border border-border/60 p-2 space-y-1.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="text-xs font-medium truncate">{sampleLabelById[id] || id}</p>
-                            <p className="text-[11px] text-muted-foreground">
-                              {loading ? "Loading..." : error ? "Failed" : resultForSample ? "Ready" : "Pending"}
-                            </p>
+                      return (
+                        <div key={id} className="rounded-md border border-border/60 p-2 space-y-1.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium truncate">{sampleLabelById[id] || id}</p>
+                              <p className="text-[11px] text-muted-foreground">
+                                {loading ? "Loading..." : error ? "Failed" : resultForSample ? "Ready" : "Pending"}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant={isPrimary ? "secondary" : "outline"}
+                                size="sm"
+                                className="h-6 px-2 text-[10px]"
+                                onClick={() => setNTAComparePrimarySampleId(id)}
+                              >
+                                <Star className="h-3 w-3 mr-1" />
+                                Primary
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={() => handleRemoveSelectedSample(id)}
+                              >
+                                <MinusCircle className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-1">
-                            <Button
-                              variant={isPrimary ? "secondary" : "outline"}
-                              size="sm"
-                              className="h-6 px-2 text-[10px]"
-                              onClick={() => setNTAComparePrimarySampleId(id)}
-                            >
-                              <Star className="h-3 w-3 mr-1" />
-                              Primary
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6"
-                              onClick={() => handleRemoveSelectedSample(id)}
-                            >
-                              <MinusCircle className="h-3.5 w-3.5" />
-                            </Button>
+
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <Switch
+                                checked={isVisible}
+                                onCheckedChange={() => toggleNTACompareSampleVisibility(id)}
+                              />
+                              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                                {isVisible ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+                                {isVisible ? "Visible in overlays" : "Hidden from overlays"}
+                              </span>
+                            </div>
+                            {resultForSample?.median_size_nm && (
+                              <Badge variant="outline" className="text-[10px]">
+                                D50: {resultForSample.median_size_nm.toFixed(1)}nm
+                              </Badge>
+                            )}
                           </div>
+
+                          {error && <p className="text-[11px] text-destructive">{error}</p>}
                         </div>
-
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <Switch
-                              checked={isVisible}
-                              onCheckedChange={() => toggleNTACompareSampleVisibility(id)}
-                            />
-                            <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                              {isVisible ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
-                              {isVisible ? "Visible in overlays" : "Hidden from overlays"}
-                            </span>
-                          </div>
-                          {resultForSample?.median_size_nm && (
-                            <Badge variant="outline" className="text-[10px]">
-                              D50: {resultForSample.median_size_nm.toFixed(1)}nm
-                            </Badge>
-                          )}
-                        </div>
-
-                        {error && <p className="text-[11px] text-destructive">{error}</p>}
-                      </div>
-                    )
-                  })}
-                </div>
+                      )
+                    })}
+                  </div>
+                </ScrollArea>
               </div>
             )}
 
