@@ -63,6 +63,22 @@ function Get-ReleaseByTag {
     }
 }
 
+function Get-YamlScalarValue {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Content,
+        [Parameter(Mandatory = $true)]
+        [string]$Key
+    )
+
+    $match = [regex]::Match($Content, "(?m)^${Key}:\s*([^\r\n]+)\s*$")
+    if (-not $match.Success) {
+        return $null
+    }
+
+    return $match.Groups[1].Value.Trim().Trim("'").Trim('"')
+}
+
 if (-not (Test-Path $ArtifactsDir)) {
     throw "Artifacts directory not found: $ArtifactsDir"
 }
@@ -70,7 +86,6 @@ if (-not (Test-Path $ArtifactsDir)) {
 $requiredFiles = @(
     "BioVaram-Setup-$normalizedVersion.exe",
     "BioVaram-Setup-$normalizedVersion.msi",
-    "BioVaram-Setup-$normalizedVersion.exe.blockmap",
     "latest.yml"
 )
 
@@ -80,6 +95,39 @@ foreach ($file in $requiredFiles) {
         throw "Required artifact missing: $filePath"
     }
 }
+
+$optionalFiles = @(
+    "BioVaram-Setup-$normalizedVersion.exe.blockmap"
+)
+
+$existingOptionalFiles = @()
+foreach ($file in $optionalFiles) {
+    $filePath = Join-Path $ArtifactsDir $file
+    if (Test-Path $filePath) {
+        $existingOptionalFiles += $file
+    }
+}
+
+$latestYmlPath = Join-Path $ArtifactsDir "latest.yml"
+$latestYmlContent = Get-Content $latestYmlPath -Raw
+$latestVersion = Get-YamlScalarValue -Content $latestYmlContent -Key "version"
+if (-not $latestVersion) {
+    throw "Could not read version from $latestYmlPath"
+}
+if ($latestVersion -ne $normalizedVersion) {
+    throw "latest.yml version mismatch. Expected $normalizedVersion but found $latestVersion"
+}
+
+$latestPath = Get-YamlScalarValue -Content $latestYmlContent -Key "path"
+$expectedInstaller = "BioVaram-Setup-$normalizedVersion.exe"
+if ($latestPath -and $latestPath -ne $expectedInstaller) {
+    throw "latest.yml path mismatch. Expected $expectedInstaller but found $latestPath"
+}
+
+$uploadFiles = @(
+    "BioVaram-Setup-$normalizedVersion.exe",
+    "BioVaram-Setup-$normalizedVersion.msi"
+) + $existingOptionalFiles + @("latest.yml")
 
 Write-Host "Resolving release for $tag..." -ForegroundColor Yellow
 $release = Get-ReleaseByTag -Tag $tag
@@ -113,17 +161,21 @@ if (-not $uploadBase) {
 }
 
 $assets = @($release.assets)
+$primaryInstallerName = "BioVaram-Setup-$normalizedVersion.exe"
+$existingPrimaryInstaller = $assets | Where-Object { $_.name -eq $primaryInstallerName } | Select-Object -First 1
+$shouldRefreshLatestMetadata = $ReplaceExisting -or -not $existingPrimaryInstaller
 
-foreach ($name in $requiredFiles) {
+foreach ($name in $uploadFiles) {
     $path = Join-Path $ArtifactsDir $name
     $existing = $assets | Where-Object { $_.name -eq $name } | Select-Object -First 1
+    $forceReplace = $name -eq "latest.yml" -and $shouldRefreshLatestMetadata
 
-    if ($existing -and -not $ReplaceExisting) {
+    if ($existing -and -not $ReplaceExisting -and -not $forceReplace) {
         Write-Host "Asset already exists, skipping: $name" -ForegroundColor DarkGray
         continue
     }
 
-    if ($existing -and $ReplaceExisting) {
+    if ($existing -and ($ReplaceExisting -or $forceReplace)) {
         Write-Host "Deleting existing asset before upload: $name" -ForegroundColor DarkYellow
         Invoke-GitHubJson -Method DELETE -Uri "https://api.github.com/repos/$Owner/$Repo/releases/assets/$($existing.id)"
     }
@@ -138,9 +190,10 @@ foreach ($name in $requiredFiles) {
 
 $finalRelease = Invoke-GitHubJson -Method GET -Uri "https://api.github.com/repos/$Owner/$Repo/releases/$($release.id)"
 $finalAssetNames = @($finalRelease.assets | ForEach-Object { $_.name })
+$expectedRemoteFiles = $requiredFiles + $existingOptionalFiles
 
 $missing = @()
-foreach ($expected in $requiredFiles) {
+foreach ($expected in $expectedRemoteFiles) {
     if ($finalAssetNames -notcontains $expected) {
         $missing += $expected
     }
