@@ -42,6 +42,7 @@ from skimage.measure import regionprops, label as sk_label
 
 # AWS Bedrock
 import boto3
+import certifi
 from botocore.exceptions import ClientError
 
 # TensorFlow / Keras CNN
@@ -304,6 +305,7 @@ class ClaudeVisionClassifier:
                 region_name           = self.cfg.AWS_REGION,
                 aws_access_key_id     = self.cfg.AWS_ACCESS_KEY_ID,
                 aws_secret_access_key = self.cfg.AWS_SECRET_ACCESS_KEY,
+                verify                = certifi.where(),
             )
             logger.info("Claude Vision: AWS Bedrock client initialised.")
         except Exception as e:

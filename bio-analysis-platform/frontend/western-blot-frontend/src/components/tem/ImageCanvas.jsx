@@ -5,6 +5,13 @@ import IntensityPanel from "./ImageCanvasParts/IntensityPanel";
 import ParticleTableView from "./ImageCanvasParts/ParticleTableView";
 import RightSidebar from "./ImageCanvasParts/RightSidebar";
 import { LoadingOverlay, FilterModal, ScaleModal, HelpModal } from "./ImageCanvasParts/Modals";
+import ExportModal from "./ImageCanvasParts/ExportModal";
+import {
+  captureAnnotatedImage,
+  exportToPDF,
+  exportToExcel,
+  exportToPNG,
+} from "./ImageCanvasParts/exportUtils";
 
 import {
   normalizeBoxes,
@@ -101,6 +108,9 @@ function ImageCanvas({
   const [isDrawingScale, setIsDrawingScale] = useState(false);
 
   const [toast, setToast] = useState(null);
+
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   /** Decoded display URL: data URL for TIFF images, direct URL otherwise */
   const [displayImageUrl, setDisplayImageUrl] = useState(null);
@@ -1869,6 +1879,40 @@ function ImageCanvas({
     showToastFn("Intensity tool: Draw a vertical line (click → drag → release)");
   };
 
+  const handleExportRequest = async (formats) => {
+    setIsExporting(true);
+    try {
+      // Ensure table data is loaded before exporting
+      let intact = intactData;
+      let notIntact = notIntactData;
+      let review = needsReviewData;
+      if (!intact.length && !notIntact.length && !review.length) {
+        await fetchTable();
+        // fetchTable sets state asynchronously; read from safeBoxes as fallback
+        intact = safeBoxes.filter((b) => b.viability === "intact");
+        notIntact = safeBoxes.filter((b) => b.viability === "not_intact");
+        review = safeBoxes.filter(
+          (b) => b.viability !== "intact" && b.viability !== "not_intact"
+        );
+      }
+
+      const imgName = getImageName(imageUrl) || imageId || "tem_image";
+      const imageDataUrl = await captureAnnotatedImage(displayImageUrl, safeBoxes, minNm);
+
+      if (formats.png) exportToPNG(imageDataUrl, imgName);
+      if (formats.pdf) await exportToPDF(imageDataUrl, intact, notIntact, review, imgName);
+      if (formats.excel) await exportToExcel(intact, notIntact, review, imgName);
+
+      showToastFn("Export complete!");
+    } catch (e) {
+      console.error("[TEM Export]", e);
+      showToastFn("Export failed: " + (e?.message || "unknown error"));
+    } finally {
+      setIsExporting(false);
+      setShowExportModal(false);
+    }
+  };
+
   return (
     <>
       <LoadingOverlay loading={loading} />
@@ -2043,6 +2087,8 @@ function ImageCanvas({
           }
           selectedCount={selectedIds.size}
           shapeEnabled={(!!sourceFile || !!imageId) && selectedIds.size > 0 && !loading}
+          onExport={() => setShowExportModal(true)}
+          canExport={!!imageId && !!displayImageUrl}
         />
       </div>
 
@@ -2076,6 +2122,14 @@ function ImageCanvas({
       />
 
       <HelpModal show={showHelp} onClose={() => setShowHelp(false)} />
+
+      <ExportModal
+        show={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        onExport={handleExportRequest}
+        imageName={getImageName(imageUrl) || imageId || ""}
+        isExporting={isExporting}
+      />
     </>
   );
 }

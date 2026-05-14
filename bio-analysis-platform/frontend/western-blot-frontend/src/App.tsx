@@ -505,7 +505,7 @@ function HomePage() {
         <div className="content-shell">
           <div className="greeting-label">{greeting}</div>
           <div className="greeting-title">
-            Welcome to <strong>BioLab Suite</strong>
+            Welcome to <strong>EVAR</strong>
           </div>
           
 

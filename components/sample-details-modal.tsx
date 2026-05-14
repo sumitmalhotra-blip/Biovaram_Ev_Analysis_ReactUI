@@ -166,7 +166,7 @@ export function SampleDetailsModal({
         {!loading && !error && sample && (
           <ScrollArea className="max-h-[70vh] pr-4">
             <div className="space-y-6">
-              {/* Header with Status */}
+              {/* Header with Status */} 
               <div className="flex items-start justify-between">
                 <div className="space-y-1">
                   <h3 className="text-xl font-semibold">{sample.sample_id}</h3>

@@ -47,7 +47,7 @@ export function RecentActivity({ onViewSample, onDeleteSample }: RecentActivityP
             : `${(index + 1) * 5} minutes ago`,
           icon: FlaskConical,
           sampleId: sample.sample_id,
-          sample,
+          sample, 
         })
       }
       if (sample.files?.nta) {

@@ -7,6 +7,23 @@ function BoxPopup({ box, onClose, onSave, onChange }) {
 
   const update = (patch) => {
     const next = { ...data, ...patch };
+
+    // When diameter_nm changes, keep the pixel radius in sync so the canvas
+    // circle resizes in real time even before a scale is calibrated.
+    if ("diameter_nm" in patch && patch.diameter_nm != null && patch.diameter_nm > 0) {
+      const curDiameter = Number(data.diameter_nm);
+      const curR = Number(data.r);
+      if (curDiameter > 0 && curR > 0) {
+        // Derive nm/px from the current diameter↔radius relationship and scale
+        // the new radius proportionally so the circle grows/shrinks correctly.
+        const npp = curDiameter / curR / 2;
+        next.r = patch.diameter_nm / npp / 2;
+      } else if (curR > 0) {
+        // No existing diameter reference: use a sensible visual default (4 nm/px).
+        next.r = patch.diameter_nm / 4 / 2;
+      }
+    }
+
     setData(next);
     onChange?.(next);
   };
@@ -108,7 +125,7 @@ function BoxPopup({ box, onClose, onSave, onChange }) {
                   Diameter (nm)
                 </div>
                 <div style={{ fontSize: 11, color: "#6b7280" }}>
-                  (Updates circle instantly)
+                  (Resizes circle in real time)
                 </div>
               </div>
 
