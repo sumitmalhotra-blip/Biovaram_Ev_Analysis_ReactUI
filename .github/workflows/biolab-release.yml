@@ -73,7 +73,7 @@ jobs:
 
       - name: Build frontend
         working-directory: ${{ env.PLATFORM_DIR }}/frontend/western-blot-frontend
-        run: npm run build
+        run: npx vite build
 
       - name: Verify frontend build
         run: |
