@@ -69,7 +69,7 @@ jobs:
       # ── Frontend ───────────────────────────────────────────────────────────
       - name: Install frontend dependencies
         working-directory: ${{ env.PLATFORM_DIR }}/frontend/western-blot-frontend
-        run: npm install --legacy-peer-deps
+        run: npm install --force
 
       - name: Build frontend
         working-directory: ${{ env.PLATFORM_DIR }}/frontend/western-blot-frontend
@@ -86,7 +86,7 @@ jobs:
         working-directory: ${{ env.PLATFORM_DIR }}
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: 1
-        run: npm install
+        run: npm install --ignore-scripts
 
       - name: Get app version
         id: version
