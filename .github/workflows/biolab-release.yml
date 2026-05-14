@@ -1,20 +1,25 @@
 name: BioLab Suite — Build & Release
 
-# Used when this code lives in its own repo (dineshchandran-chan/BioLab).
-# For the main Biovaram repo, see /.github/workflows/biolab-release.yml.
+# Push tag  biolab-v*  to trigger a release build.
+# Push to main        to run a build-only smoke-check (no publish).
 #
-# To release v1.x.x:
-#   1. Bump version in package.json
-#   2. git commit && git push origin main
-#   3. git tag v1.x.x && git push origin v1.x.x
+# Steps to ship v1.0.17:
+#   1. Ensure version in bio-analysis-platform/package.json is "1.0.17"
+#   2. git commit -m "chore: release BioLab Suite v1.0.17"
+#   3. git push origin main
+#   4. git tag biolab-v1.0.17 && git push origin biolab-v1.0.17
+#   → GitHub Actions builds NSIS installer + publishes to dineshchandran-chan/BioLab
 
 on:
   push:
     branches: [main]
-    tags: ['v*']
+    tags: ['biolab-v*']
 
 permissions:
   contents: write
+
+env:
+  PLATFORM_DIR: bio-analysis-platform
 
 jobs:
   build:
@@ -40,71 +45,78 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~\AppData\Local\pip\Cache
-          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('bio-analysis-platform/backend/requirements.txt') }}
           restore-keys: ${{ runner.os }}-pip-
 
       # ── Backend ────────────────────────────────────────────────────────────
       - name: Install backend dependencies
-        working-directory: backend
+        working-directory: ${{ env.PLATFORM_DIR }}/backend
         run: |
           pip install pyinstaller
           pip install -r requirements.txt
 
       - name: Build backend (PyInstaller)
-        working-directory: backend
+        working-directory: ${{ env.PLATFORM_DIR }}/backend
         run: pyinstaller BioLabBackend.spec
 
       # ── Frontend ───────────────────────────────────────────────────────────
       - name: Install frontend dependencies
-        working-directory: frontend/western-blot-frontend
+        working-directory: ${{ env.PLATFORM_DIR }}/frontend/western-blot-frontend
         run: npm install
 
       - name: Build frontend
-        working-directory: frontend/western-blot-frontend
+        working-directory: ${{ env.PLATFORM_DIR }}/frontend/western-blot-frontend
         run: npm run build
 
       # ── Electron ───────────────────────────────────────────────────────────
       - name: Install Electron dependencies
+        working-directory: ${{ env.PLATFORM_DIR }}
         run: npm install
 
       - name: Get app version
         id: version
+        working-directory: ${{ env.PLATFORM_DIR }}
         run: |
           $v = (Get-Content package.json | ConvertFrom-Json).version
           echo "version=$v" >> $env:GITHUB_OUTPUT
           Write-Host "Building BioLab Suite v$v"
 
-      - name: Build only (branch — no publish)
+      - name: Build only (branch push — no publish)
         if: github.ref_type != 'tag'
+        working-directory: ${{ env.PLATFORM_DIR }}
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: 1
           CSC_IDENTITY_AUTO_DISCOVERY: false
         run: npx electron-builder --win --x64 --publish never
 
-      - name: Build + publish (tag release)
+      - name: Build + publish (tag push)
         if: github.ref_type == 'tag'
+        working-directory: ${{ env.PLATFORM_DIR }}
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.BIOLAB_GH_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
         run: npx electron-builder --win --x64 --publish always
 
       # ── Smoke check ────────────────────────────────────────────────────────
-      - name: Verify installer exists
+      - name: Smoke check — verify installer exists
         if: github.ref_type == 'tag'
+        working-directory: ${{ env.PLATFORM_DIR }}
         run: |
-          $v = "${{ steps.version.outputs.version }}"
-          if (-not (Test-Path "dist-build\BioLab Suite Setup $v.exe")) { throw "Installer missing" }
-          if (-not (Test-Path "dist-build\latest.yml")) { throw "latest.yml missing — auto-update broken" }
-          Write-Host "OK: installer and latest.yml present"
+          $version = "${{ steps.version.outputs.version }}"
+          $setup = "dist-build\BioLab Suite Setup $version.exe"
+          $yml   = "dist-build\latest.yml"
+          if (-not (Test-Path $setup)) { throw "MISSING installer: $setup" }
+          if (-not (Test-Path $yml))   { throw "MISSING latest.yml (auto-update will not work)" }
+          Write-Host "Smoke check passed — installer and latest.yml present"
 
       # ── Upload artifacts ───────────────────────────────────────────────────
-      - name: Upload installer artifact
+      - name: Upload installer as artifact
         if: github.ref_type == 'tag'
         uses: actions/upload-artifact@v4
         continue-on-error: true
         with:
           name: BioLab-Suite-Setup-v${{ steps.version.outputs.version }}
           path: |
-            dist-build/*.exe
-            dist-build/*.blockmap
-            dist-build/latest.yml
+            ${{ env.PLATFORM_DIR }}/dist-build/*.exe
+            ${{ env.PLATFORM_DIR }}/dist-build/*.blockmap
+            ${{ env.PLATFORM_DIR }}/dist-build/latest.yml
