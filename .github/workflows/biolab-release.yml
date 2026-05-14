@@ -5,9 +5,8 @@ name: BioLab Suite — Build & Release
 #
 # Steps to ship v1.0.17:
 #   1. Ensure version in bio-analysis-platform/package.json is "1.0.17"
-#   2. git commit -m "chore: release BioLab Suite v1.0.17"
-#   3. git push origin main
-#   4. git tag biolab-v1.0.17 && git push origin biolab-v1.0.17
+#   2. git commit && git push origin main
+#   3. git tag biolab-v1.0.17 && git push origin biolab-v1.0.17
 #   → GitHub Actions builds NSIS installer + publishes to dineshchandran-chan/BioLab
 
 on:
@@ -24,6 +23,7 @@ env:
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -49,28 +49,43 @@ jobs:
           restore-keys: ${{ runner.os }}-pip-
 
       # ── Backend ────────────────────────────────────────────────────────────
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
       - name: Install backend dependencies
         working-directory: ${{ env.PLATFORM_DIR }}/backend
-        run: |
-          pip install pyinstaller
-          pip install -r requirements.txt
+        run: pip install -r requirements.txt
 
       - name: Build backend (PyInstaller)
         working-directory: ${{ env.PLATFORM_DIR }}/backend
-        run: pyinstaller BioLabBackend.spec
+        run: pyinstaller BioLabBackend.spec --noconfirm
+
+      - name: Verify backend build
+        run: |
+          $exe = "bio-analysis-platform\backend\dist\BioLabBackend\BioLabBackend.exe"
+          if (-not (Test-Path $exe)) { throw "Backend EXE not found: $exe" }
+          Write-Host "Backend built OK"
 
       # ── Frontend ───────────────────────────────────────────────────────────
       - name: Install frontend dependencies
         working-directory: ${{ env.PLATFORM_DIR }}/frontend/western-blot-frontend
-        run: npm install
+        run: npm ci
 
       - name: Build frontend
         working-directory: ${{ env.PLATFORM_DIR }}/frontend/western-blot-frontend
         run: npm run build
 
+      - name: Verify frontend build
+        run: |
+          $idx = "bio-analysis-platform\frontend\western-blot-frontend\dist\index.html"
+          if (-not (Test-Path $idx)) { throw "Frontend dist not found" }
+          Write-Host "Frontend built OK"
+
       # ── Electron ───────────────────────────────────────────────────────────
       - name: Install Electron dependencies
         working-directory: ${{ env.PLATFORM_DIR }}
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
         run: npm install
 
       - name: Get app version
@@ -85,8 +100,8 @@ jobs:
         if: github.ref_type != 'tag'
         working-directory: ${{ env.PLATFORM_DIR }}
         env:
-          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
           CSC_IDENTITY_AUTO_DISCOVERY: false
+          WIN_CSC_LINK: ''
         run: npx electron-builder --win --x64 --publish never
 
       - name: Build + publish (tag push)
@@ -95,6 +110,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.BIOLAB_GH_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
+          WIN_CSC_LINK: ''
         run: npx electron-builder --win --x64 --publish always
 
       # ── Smoke check ────────────────────────────────────────────────────────
@@ -106,8 +122,8 @@ jobs:
           $setup = "dist-build\BioLab Suite Setup $version.exe"
           $yml   = "dist-build\latest.yml"
           if (-not (Test-Path $setup)) { throw "MISSING installer: $setup" }
-          if (-not (Test-Path $yml))   { throw "MISSING latest.yml (auto-update will not work)" }
-          Write-Host "Smoke check passed — installer and latest.yml present"
+          if (-not (Test-Path $yml))   { throw "MISSING latest.yml (auto-update broken)" }
+          Write-Host "Smoke check passed"
 
       # ── Upload artifacts ───────────────────────────────────────────────────
       - name: Upload installer as artifact

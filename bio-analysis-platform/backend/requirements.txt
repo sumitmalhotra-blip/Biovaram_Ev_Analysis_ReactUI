@@ -10,7 +10,6 @@ psycopg2-binary
 python-dotenv
 httpx
 tensorflow==2.15.0
-keras==2.15.0
 numpy==1.26.4
 boto3
 pandas
