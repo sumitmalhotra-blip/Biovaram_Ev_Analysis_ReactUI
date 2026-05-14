@@ -37,6 +37,10 @@ export function DashboardTab() {
     setShowDeleteDialog(true)
   }
 
+  const handleOpenSampleInTab = async (sampleId: string, type: "fcs" | "nta") => {
+    await openSampleInTab(sampleId, type)
+  }
+
   const handleConfirmDelete = async () => {
     if (!sampleToDelete) return
 
@@ -86,6 +90,7 @@ export function DashboardTab() {
             <RecentActivity 
               onViewSample={handleViewSample}
               onDeleteSample={handleDeleteClick}
+              onOpenSampleInTab={handleOpenSampleInTab}
             />
             
             {/* AI Chat Assistant */}

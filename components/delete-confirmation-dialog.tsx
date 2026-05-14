@@ -43,31 +43,33 @@ export function DeleteConfirmationDialog({
             <Trash2 className="h-5 w-5" />
             Delete Sample
           </AlertDialogTitle>
-          <AlertDialogDescription className="space-y-4 pt-2">
-            <p>
+          <AlertDialogDescription asChild>
+            <div className="space-y-4 pt-2 text-sm text-muted-foreground">
+              <div>
               Are you sure you want to delete sample{" "}
               <span className="font-semibold text-foreground">
                 {sampleName || sampleId || "this sample"}
               </span>
               ?
-            </p>
+              </div>
 
-            <Alert variant="destructive" className="border-destructive/50">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription className="text-sm">
-                This action cannot be undone. This will permanently delete:
-                <ul className="list-disc list-inside mt-2 space-y-1">
-                  <li>All uploaded files (FCS, NTA, TEM)</li>
-                  <li>All analysis results and reports</li>
-                  <li>All processing jobs related to this sample</li>
-                  <li>QC reports and historical data</li>
-                </ul>
-              </AlertDescription>
-            </Alert>
+              <Alert variant="destructive" className="border-destructive/50">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription className="text-sm">
+                  This action cannot be undone. This will permanently delete:
+                  <ul className="list-disc list-inside mt-2 space-y-1">
+                    <li>All uploaded files (FCS, NTA, TEM)</li>
+                    <li>All analysis results and reports</li>
+                    <li>All processing jobs related to this sample</li>
+                    <li>QC reports and historical data</li>
+                  </ul>
+                </AlertDescription>
+              </Alert>
 
-            <p className="text-sm text-muted-foreground">
-              If you're unsure, you can export the data before deleting or cancel this action.
-            </p>
+              <div>
+                If you're unsure, you can export the data before deleting or cancel this action.
+              </div>
+            </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

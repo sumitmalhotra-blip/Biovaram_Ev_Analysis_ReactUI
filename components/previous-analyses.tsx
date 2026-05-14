@@ -1,24 +1,20 @@
 "use client"
 
-import { useState, useMemo, useCallback, useEffect } from "react"
+import { useState, useMemo, useCallback } from "react"
 import { useAnalysisStore } from "@/lib/store"
 import { useApi } from "@/hooks/use-api"
 import { cn } from "@/lib/utils"
 import {
   History,
   Search,
-  Filter,
   Loader2,
   RefreshCw,
-  ChevronRight,
   FileText,
   Beaker,
   Check,
   X,
   AlertCircle,
   Clock,
-  User,
-  Folder,
   ChevronDown,
   ChevronUp,
 } from "lucide-react"
@@ -65,7 +61,6 @@ export function PreviousAnalyses({
     fcsAnalysis,
     ntaAnalysis,
     activeTab,
-    setActiveTab,
   } = useAnalysisStore()
   const { fetchSamples, openSampleInTab } = useApi()
 
@@ -144,6 +139,20 @@ export function PreviousAnalyses({
       }
     },
     [openSampleInTab, toast]
+  )
+
+  const resolvePreferredType = useCallback(
+    (sample: (typeof filteredSamples)[number]): "fcs" | "nta" | null => {
+      const hasFcs = Boolean(sample.files?.fcs)
+      const hasNta = Boolean(sample.files?.nta)
+      if (!hasFcs && !hasNta) return null
+      if (hasFcs && hasNta) {
+        if (activeTab === "nta") return "nta"
+        return "fcs"
+      }
+      return hasFcs ? "fcs" : "nta"
+    },
+    [activeTab]
   )
 
   // Format date for display
@@ -339,8 +348,26 @@ export function PreviousAnalyses({
                         isActive
                           ? "bg-primary/10 border-primary/30"
                           : "bg-secondary/30 border-transparent hover:border-border hover:bg-secondary/50",
+                        (hasFcs || hasNta) && "cursor-pointer",
                         isLoading && "opacity-70"
                       )}
+                      role={hasFcs || hasNta ? "button" : undefined}
+                      tabIndex={hasFcs || hasNta ? 0 : undefined}
+                      onClick={() => {
+                        const preferredType = resolvePreferredType(sample)
+                        if (preferredType) {
+                          handleSampleClick(sample.sample_id, preferredType)
+                        }
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          const preferredType = resolvePreferredType(sample)
+                          if (preferredType) {
+                            event.preventDefault()
+                            handleSampleClick(sample.sample_id, preferredType)
+                          }
+                        }
+                      }}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
@@ -386,9 +413,10 @@ export function PreviousAnalyses({
                               }
                               size="sm"
                               className="h-6 px-2 text-xs"
-                              onClick={() =>
+                              onClick={(event) => {
+                                event.stopPropagation()
                                 handleSampleClick(sample.sample_id, "fcs")
-                              }
+                              }}
                               disabled={isLoading}
                             >
                               {isLoading ? (
@@ -410,9 +438,10 @@ export function PreviousAnalyses({
                               }
                               size="sm"
                               className="h-6 px-2 text-xs"
-                              onClick={() =>
+                              onClick={(event) => {
+                                event.stopPropagation()
                                 handleSampleClick(sample.sample_id, "nta")
-                              }
+                              }}
                               disabled={isLoading}
                             >
                               {isLoading ? (

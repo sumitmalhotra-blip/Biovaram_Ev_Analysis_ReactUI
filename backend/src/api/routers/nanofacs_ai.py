@@ -34,7 +34,7 @@ except ImportError:  # pragma: no cover
     boto3 = None  # type: ignore
 import numpy as np
 import pandas as pd
-from typing import Optional
+from typing import Any, Optional
 from datetime import datetime
 from pathlib import Path
 try:
@@ -105,15 +105,17 @@ def _call_bedrock(prompt: str, max_tokens: int = 1500) -> str:
                     "cluster_findings": [],
                     "missed_parameters": [],
                     "suggestions": [
-                        "Gateway unavailable; using local NanoFACS analysis fallback.",
-                        "Verify CRMIT_AI_GATEWAY_URL and CRMIT_AI_GATEWAY_LICENSE_KEY on the packaged desktop build.",
+                        "Cloud AI interpretation is temporarily unavailable. The rule-based findings above were computed locally and are still valid.",
+                        "If this persists, check your internet connection or try again in a few minutes.",
                     ],
-                    "summary": "Gateway request failed, so the app fell back to local NanoFACS analysis without cloud interpretation.",
+                    "summary": "Cloud AI interpretation is temporarily unavailable — showing locally computed analysis only. Rule-based anomalies and parameter statistics are accurate and based on your uploaded data.",
+                    "independent_reading": [],
+                    "consistency_statement": "Cloud AI was unavailable, so independent model-vs-code consistency could not be generated.",
                 }
             )
         return (
-            "Gateway request failed, so the app fell back to local NanoFACS analysis without cloud interpretation. "
-            "Verify CRMIT_AI_GATEWAY_URL and CRMIT_AI_GATEWAY_LICENSE_KEY on the packaged desktop build."
+            "Cloud AI interpretation is temporarily unavailable. "
+            "The locally computed statistics and rule-based findings are still accurate and based on your uploaded data."
         )
 
     provider = (os.getenv("AI_PROVIDER") or "bedrock").strip().lower()
@@ -151,7 +153,9 @@ def _call_bedrock(prompt: str, max_tokens: int = 1500) -> str:
                         "Configure AWS credentials before release for full AI interpretation.",
                         "Continue validating UI and rule-based analytics locally."
                     ],
-                    "summary": "Local offline AI mode returned deterministic guidance without Bedrock access."
+                    "summary": "Local offline AI mode returned deterministic guidance without Bedrock access.",
+                    "independent_reading": [],
+                    "consistency_statement": "Offline mode skipped cloud interpretation, so independent model-vs-code consistency is unavailable.",
                 }
             )
         return (
@@ -234,6 +238,7 @@ class FCSAnalysisResponse(BaseModel):
     suggestions: list[str]
     summary: str
     data_stats: dict
+    consistency_check: dict[str, Any]
     analyzed_files: list[str]
     analyzed_at: str
 
@@ -355,6 +360,204 @@ def _safe_numeric_series(df: pd.DataFrame, col: str) -> pd.Series:
     vals = pd.to_numeric(df[col], errors="coerce")
     vals = vals.replace([np.inf, -np.inf], np.nan).dropna()
     return vals
+
+
+def _safe_float(value: Any) -> Optional[float]:
+    """Convert unknown values to finite float when possible."""
+    try:
+        out = float(value)
+    except (TypeError, ValueError):
+        return None
+    if np.isnan(out) or np.isinf(out):
+        return None
+    return out
+
+
+def _normalize_file_key(value: str) -> str:
+    """Normalize file path/name keys for matching AI output to computed stats."""
+    return Path(str(value)).name.strip().lower()
+
+
+def _build_raw_data_preview(df: pd.DataFrame, file_name: str, max_rows: int = 18) -> dict[str, Any]:
+    """Create a lightweight raw-data snapshot for independent AI reasoning."""
+    preferred_cols = [
+        "Size", "MeanIntensity", "MaxIntensity", "MinIntensity", "Cluster",
+        "Solidity", "AspectRatio", "TraceLength", "LocationX", "LocationY",
+        "Area", "Intensity/Area",
+    ]
+    fsc_channel, ssc_channel = _find_scatter_channels(list(df.columns))
+    for dynamic_col in [fsc_channel, ssc_channel]:
+        if dynamic_col and dynamic_col not in preferred_cols:
+            preferred_cols.append(dynamic_col)
+
+    selected_cols = [c for c in preferred_cols if c in df.columns]
+    if not selected_cols:
+        return {
+            "file": file_name,
+            "total_rows": int(len(df)),
+            "rows_sampled": 0,
+            "columns": [],
+            "sample_rows": [],
+            "raw_quantiles": {},
+        }
+
+    numeric_df = df[selected_cols].apply(pd.to_numeric, errors="coerce")
+    numeric_df = numeric_df.replace([np.inf, -np.inf], np.nan).dropna(how="all")
+    if numeric_df.empty:
+        return {
+            "file": file_name,
+            "total_rows": int(len(df)),
+            "rows_sampled": 0,
+            "columns": selected_cols,
+            "sample_rows": [],
+            "raw_quantiles": {},
+        }
+
+    n_rows = min(max_rows, len(numeric_df))
+    sample_df = (
+        numeric_df.sample(n=n_rows, random_state=42)
+        if len(numeric_df) > n_rows
+        else numeric_df.head(n_rows)
+    )
+
+    sample_rows: list[dict[str, float]] = []
+    for row in sample_df.to_dict(orient="records"):
+        clean_row: dict[str, float] = {}
+        for key, val in row.items():
+            parsed = _safe_float(val)
+            if parsed is not None:
+                clean_row[key] = round(parsed, 3)
+        if clean_row:
+            sample_rows.append(clean_row)
+
+    raw_quantiles: dict[str, dict[str, float]] = {}
+    for col in ["Size", "MeanIntensity", "MaxIntensity", "Solidity", "AspectRatio", "TraceLength"]:
+        if col in numeric_df.columns:
+            vals = numeric_df[col].dropna()
+            if len(vals) > 0:
+                raw_quantiles[col] = {
+                    "median_raw": round(float(vals.median()), 3),
+                    "p10_raw": round(float(np.percentile(vals, 10)), 3),
+                    "p90_raw": round(float(np.percentile(vals, 90)), 3),
+                }
+
+    if "Cluster" in df.columns:
+        cluster_vals = pd.to_numeric(df["Cluster"], errors="coerce").dropna()
+        if len(cluster_vals) > 0:
+            raw_quantiles["Cluster"] = {
+                "distinct_count_raw": float(cluster_vals.nunique())
+            }
+
+    return {
+        "file": file_name,
+        "total_rows": int(len(df)),
+        "rows_sampled": int(len(sample_rows)),
+        "columns": selected_cols,
+        "sample_rows": sample_rows,
+        "raw_quantiles": raw_quantiles,
+    }
+
+
+def _compare_metric(code_value: Optional[float], ai_value: Optional[float]) -> tuple[str, Optional[float], str]:
+    """Compare AI-estimated numeric value against code-computed value."""
+    if code_value is None or ai_value is None:
+        return "insufficient_evidence", None, "AI did not return a numeric estimate for this metric."
+
+    delta = abs(ai_value - code_value)
+    if abs(code_value) <= 1e-9:
+        if delta <= 1e-9:
+            return "match", 0.0, "AI estimate matches the code result."
+        return "mismatch", None, f"Code value is ~0 but AI estimated {ai_value:.3f}."
+
+    pct_delta = (delta / abs(code_value)) * 100.0
+    if pct_delta <= 25:
+        verdict = "match"
+    elif pct_delta <= 60:
+        verdict = "partial_match"
+    else:
+        verdict = "mismatch"
+
+    return verdict, round(float(pct_delta), 2), f"AI={ai_value:.3f}, code={code_value:.3f}"
+
+
+def _build_consistency_check(
+    all_stats: list[dict[str, Any]],
+    ai_independent_reading: list[dict[str, Any]],
+    ai_statement: str,
+) -> dict[str, Any]:
+    """Generate explicit code-vs-AI consistency checks per file/metric."""
+    ai_by_file: dict[str, dict[str, Any]] = {}
+    for entry in ai_independent_reading:
+        file_name = str(entry.get("file", "")).strip()
+        if file_name:
+            ai_by_file[_normalize_file_key(file_name)] = entry
+
+    checks: list[dict[str, Any]] = []
+    counts = {
+        "match": 0,
+        "partial_match": 0,
+        "mismatch": 0,
+        "insufficient_evidence": 0,
+    }
+
+    for stats in all_stats:
+        file_name = str(stats.get("file", "unknown"))
+        ai_entry = ai_by_file.get(_normalize_file_key(file_name), {})
+
+        metric_pairs = [
+            (
+                "Size median (nm)",
+                _safe_float(stats.get("Size", {}).get("median")),
+                _safe_float(ai_entry.get("size_median_nm_estimate")),
+            ),
+            (
+                "Cluster count",
+                _safe_float(stats.get("num_clusters")),
+                _safe_float(ai_entry.get("num_clusters_estimate")),
+            ),
+            (
+                "MeanIntensity median",
+                _safe_float(stats.get("MeanIntensity", {}).get("median")),
+                _safe_float(ai_entry.get("mean_intensity_median_estimate")),
+            ),
+        ]
+
+        for metric_name, code_value, ai_value in metric_pairs:
+            verdict, pct_delta, note = _compare_metric(code_value, ai_value)
+            counts[verdict] += 1
+            checks.append(
+                {
+                    "file": file_name,
+                    "metric": metric_name,
+                    "code_value": code_value,
+                    "ai_value": ai_value,
+                    "percent_delta": pct_delta,
+                    "verdict": verdict,
+                    "note": note,
+                }
+            )
+
+    if counts["mismatch"] > 0:
+        overall_verdict = "mismatch"
+    elif counts["partial_match"] > 0:
+        overall_verdict = "partial_match"
+    elif counts["match"] > 0:
+        overall_verdict = "match"
+    else:
+        overall_verdict = "insufficient_evidence"
+
+    summary = (
+        f"{counts['match']} matched, {counts['partial_match']} partially matched, "
+        f"{counts['mismatch']} mismatched, {counts['insufficient_evidence']} insufficient-evidence checks."
+    )
+
+    return {
+        "verdict": overall_verdict,
+        "summary": summary,
+        "ai_statement": ai_statement.strip(),
+        "checks": checks,
+        "counts": counts,
+    }
 
 
 def _derive_size_stats_from_fcs_channels(df: pd.DataFrame) -> tuple[Optional[dict], Optional[str], Optional[str]]:
@@ -815,13 +1018,20 @@ async def analyze_fcs_with_ai(request: FCSAnalyzeRequest):
 
     # Read all files and compute stats
     all_stats = []
+    raw_previews = []
+    raw_preview_truncated_files = 0
     for fp in request.file_paths:
         df = _read_fcs_parquet(fp)
         if df.empty:
             logger.warning(f"Empty or unreadable file: {fp}")
             continue
-        stats = _compute_fcs_stats(df, Path(fp).name)
+        file_name = Path(fp).name
+        stats = _compute_fcs_stats(df, file_name)
         all_stats.append(stats)
+        if len(raw_previews) < 4:
+            raw_previews.append(_build_raw_data_preview(df, file_name))
+        else:
+            raw_preview_truncated_files += 1
 
     if not all_stats:
         raise HTTPException(
@@ -843,12 +1053,19 @@ async def analyze_fcs_with_ai(request: FCSAnalyzeRequest):
     # Build prompt — filter to EV-relevant columns only so the payload stays
     # within Lambda execution limits when routed through the AI gateway.
     _KEY_COLS = {
-        "filename", "total_events", "num_clusters", "cluster_distribution",
+        "file", "total_events", "num_clusters", "cluster_distribution",
         "Size", "Solidity", "AspectRatio", "TraceLength",
         "MeanIntensity", "MaxIntensity", "Intensity/Area",
     }
     filtered_stats = [{k: v for k, v in s.items() if k in _KEY_COLS} for s in all_stats]
     stats_summary = json.dumps(filtered_stats, indent=2, default=str)
+    raw_preview_payload: dict[str, Any] = {"files": raw_previews}
+    if raw_preview_truncated_files > 0:
+        raw_preview_payload["truncated_files"] = raw_preview_truncated_files
+        raw_preview_payload["note"] = (
+            "Raw previews are included for the first 4 files only to keep prompt size bounded."
+        )
+    raw_preview_summary = json.dumps(raw_preview_payload, indent=2, default=str)
 
     prompt = f"""You are an expert in NanoFACS (Nano Flow Cytometry) and extracellular vesicle (EV) characterization.
 
@@ -864,7 +1081,10 @@ Normal EV ranges for validation:
 - AspectRatio: 1.0–3.0 (values above 3.0 indicate elongated debris)
 - TraceLength: 15–200 frames (below 15 = unreliable tracking)
 
-Computed statistics from their FCS parquet files:
+Independent raw-data evidence sampled directly from uploaded files:
+{raw_preview_summary}
+
+Code-computed statistics from the same files:
 {stats_summary}
 
 Pre-detected rule-based anomalies:
@@ -874,11 +1094,17 @@ Parameters the researcher may have missed (high variability detected):
 {json.dumps(missed_params, indent=2) if missed_params else 'None'}
 
 Please provide:
-1. ANOMALIES: Additional data quality issues or unexpected findings beyond rule-based ones. Also validate whether the computed statistics fall within expected EV ranges and flag any out-of-range values.
-2. CLUSTER_FINDINGS: What do the cluster distributions suggest about EV subpopulations. Are the cluster sizes and distributions consistent with a typical EV preparation?
-3. MISSED_PARAMETERS: Important parameters worth investigating with scientific explanation.
-4. SUGGESTIONS: Specific actionable recommendations. Include at least one recommendation about whether the NanoFACS analysis results look scientifically valid for this experiment type.
-5. SUMMARY: 2-3 sentence overall assessment that validates whether the computed data looks correct for the stated experiment, and highlights the most important finding.
+1. INDEPENDENT_READING: Infer findings from raw-data evidence first. For each file estimate:
+   - size_median_nm_estimate
+   - num_clusters_estimate
+   - mean_intensity_median_estimate
+   and list key observations.
+2. ANOMALIES: Additional data quality issues or unexpected findings beyond rule-based ones. Validate whether the computed statistics fall within expected EV ranges and flag out-of-range values.
+3. CLUSTER_FINDINGS: What do the cluster distributions suggest about EV subpopulations? Are they consistent with a typical EV preparation?
+4. MISSED_PARAMETERS: Important parameters worth investigating with scientific explanation.
+5. SUGGESTIONS: Specific actionable recommendations. Include at least one recommendation about whether these results look scientifically valid.
+6. CONSISTENCY_STATEMENT: Explicitly say whether your independent reading matches the code-computed statistics and why.
+7. SUMMARY: 2-3 sentence overall assessment.
 
 Respond in this exact JSON format:
 {{
@@ -886,7 +1112,17 @@ Respond in this exact JSON format:
   "cluster_findings": ["finding 1", "finding 2"],
   "missed_parameters": ["param 1", "param 2"],
   "suggestions": ["suggestion 1", "suggestion 2"],
-  "summary": "Overall summary here"
+  "summary": "Overall summary here",
+  "independent_reading": [
+    {{
+      "file": "file1.fcs.parquet",
+      "size_median_nm_estimate": 120.0,
+      "num_clusters_estimate": 4,
+      "mean_intensity_median_estimate": 3500.0,
+      "observations": ["observation 1", "observation 2"]
+    }}
+  ],
+  "consistency_statement": "Independent raw-data reading mostly matches code-computed statistics."
 }}"""
 
     ai_response_text = _call_bedrock(prompt, max_tokens=600)
@@ -907,21 +1143,47 @@ Respond in this exact JSON format:
             "missed_parameters": missed_params,
             "suggestions": ["Review data manually — AI parsing failed"],
             "summary": ai_response_text[:500],
+            "independent_reading": [],
+            "consistency_statement": "AI response was not parseable, so consistency could not be validated from model output.",
         }
 
+    ai_independent = ai_result.get("independent_reading", [])
+    if not isinstance(ai_independent, list):
+        ai_independent = []
+    ai_statement = str(ai_result.get("consistency_statement", ""))
+    consistency_check = _build_consistency_check(all_stats, ai_independent, ai_statement)
+
+    ai_anomalies = ai_result.get("anomalies", [])
+    if not isinstance(ai_anomalies, list):
+        ai_anomalies = []
+    ai_missed = ai_result.get("missed_parameters", [])
+    if not isinstance(ai_missed, list):
+        ai_missed = []
+    ai_cluster_findings = ai_result.get("cluster_findings", [])
+    if not isinstance(ai_cluster_findings, list):
+        ai_cluster_findings = []
+    ai_suggestions = ai_result.get("suggestions", [])
+    if not isinstance(ai_suggestions, list):
+        ai_suggestions = []
+
     # Merge results
-    all_anomalies = list(set(rule_anomalies + ai_result.get("anomalies", [])))
-    all_missed = list(set(missed_params + ai_result.get("missed_parameters", [])))
+    all_anomalies = list(dict.fromkeys(rule_anomalies + ai_anomalies))
+    all_missed = list(dict.fromkeys(missed_params + ai_missed))
     all_graphs = graph_suggestions  # keep graph suggestions as-is (ordered)
+
+    ai_summary = ai_result.get("summary", "Analysis complete.")
+    if not isinstance(ai_summary, str):
+        ai_summary = "Analysis complete."
 
     return FCSAnalysisResponse(
         anomalies=all_anomalies,
-        cluster_findings=ai_result.get("cluster_findings", []),
+        cluster_findings=ai_cluster_findings,
         suggested_graphs=all_graphs,
         missed_parameters=all_missed,
-        suggestions=ai_result.get("suggestions", []),
-        summary=ai_result.get("summary", "Analysis complete."),
+        suggestions=ai_suggestions,
+        summary=ai_summary,
         data_stats={s["file"]: s for s in all_stats},
+        consistency_check=consistency_check,
         analyzed_files=request.file_paths,
         analyzed_at=datetime.utcnow().isoformat(),
     )
@@ -944,11 +1206,14 @@ async def compare_fcs_files(request: FCSCompareRequest):
     logger.info(f"NanoFACS comparison: {request.file_paths}")
 
     all_stats = []
+    raw_previews = []
     for fp in request.file_paths:
         df = _read_fcs_parquet(fp)
         if not df.empty:
-            stats = _compute_fcs_stats(df, Path(fp).name)
+            file_name = Path(fp).name
+            stats = _compute_fcs_stats(df, file_name)
             all_stats.append(stats)
+            raw_previews.append(_build_raw_data_preview(df, file_name, max_rows=12))
 
     if len(all_stats) < 2:
         raise HTTPException(
@@ -1055,17 +1320,24 @@ async def ask_about_fcs_data(request: FCSAskRequest):
 
     # Read files and compute stats
     all_stats = []
+    raw_previews = []
+    raw_preview_truncated_files = 0
     for fp in request.file_paths:
         df = _read_fcs_parquet(fp)
         if not df.empty:
-            stats = _compute_fcs_stats(df, Path(fp).name)
+            file_name = Path(fp).name
+            stats = _compute_fcs_stats(df, file_name)
             all_stats.append(stats)
+            if len(raw_previews) < 4:
+                raw_previews.append(_build_raw_data_preview(df, file_name, max_rows=12))
+            else:
+                raw_preview_truncated_files += 1
 
     if not all_stats:
         raise HTTPException(status_code=404, detail="Could not read FCS files")
 
     _ASK_COLS = {
-        "filename", "total_events", "num_clusters", "cluster_distribution",
+        "file", "total_events", "num_clusters", "cluster_distribution",
         "Size", "Solidity", "AspectRatio", "TraceLength",
         "MeanIntensity", "MaxIntensity", "Intensity/Area",
     }
@@ -1073,6 +1345,11 @@ async def ask_about_fcs_data(request: FCSAskRequest):
         [{k: v for k, v in s.items() if k in _ASK_COLS} for s in all_stats],
         indent=2, default=str
     )
+    raw_payload: dict[str, Any] = {"files": raw_previews}
+    if raw_preview_truncated_files > 0:
+        raw_payload["truncated_files"] = raw_preview_truncated_files
+        raw_payload["note"] = "Raw previews are included for the first 4 files only."
+    raw_context = json.dumps(raw_payload, indent=2, default=str)
 
     prompt = f"""You are an expert in NanoFACS flow cytometry and extracellular vesicle analysis.
 
@@ -1081,14 +1358,19 @@ A researcher has uploaded NanoFACS FCS parquet files and is asking a specific qu
 IMPORTANT: Answer ONLY based on the data provided below. Do not answer general questions unrelated to this data.
 If the question cannot be answered from the data, say so clearly.
 
-Their data statistics:
+Raw sampled rows from uploaded files (independent evidence):
+{raw_context}
+
+Code-computed data statistics:
 {data_context}
 
 The researcher's question: {request.question}
 
 Provide a clear, specific answer based only on the data above.
-Reference specific numbers from the data in your answer.
-Keep the answer to 3-5 sentences maximum."""
+First infer from the raw sampled rows, then verify against code-computed statistics.
+Reference specific numbers in your answer.
+End with one explicit sentence starting with "Code-vs-AI consistency:" stating whether your answer matches the code-computed statistics.
+Keep the answer concise (4-6 sentences)."""
 
     ai_response = _call_bedrock(prompt, max_tokens=500)
 

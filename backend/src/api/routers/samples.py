@@ -15,20 +15,20 @@ Author: CRMIT Backend Team
 Date: November 21, 2025
 """
 
-from typing import Optional, List, Dict, Any, Tuple  # noqa: F401
+from typing import Optional, List, Dict, Any, Tuple, cast  # noqa: F401
 from pathlib import Path
 import json
 import re
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession  # type: ignore[import-not-found]
-from sqlalchemy import select, func  # type: ignore[import-not-found]
+from sqlalchemy import select, func, delete as sql_delete, update as sql_update  # type: ignore[import-not-found]
 from loguru import logger
 
 from src.api.config import get_settings
 
 from src.database.connection import get_session
-from src.database.models import Sample, FCSResult, NTAResult, QCReport, ProcessingJob  # type: ignore[import-not-found]
+from src.database.models import Sample, FCSResult, NTAResult, QCReport, ProcessingJob, ExperimentalConditions, Alert  # type: ignore[import-not-found]
 from src.api.auth_middleware import optional_auth
 
 router = APIRouter()
@@ -91,7 +91,7 @@ def _find_nta_file_by_sample_id(sample_id: str) -> Optional[str]:
 # Multi-Solution Mie Helper Functions
 # ============================================================================
 
-def detect_multi_solution_channels(channels: List[str]) -> Dict[str, Optional[str]]:
+def detect_multi_solution_channels(channels: List[str]) -> Dict[str, Any]:
     """
     Detect VSSC (Violet SSC 405nm) and BSSC (Blue SSC 488nm) channels for multi-solution Mie.
     
@@ -117,6 +117,33 @@ def detect_multi_solution_channels(channels: List[str]) -> Dict[str, Optional[st
         'bssc_channel': bssc_channel,
         'can_use_multi_solution': can_use_multi_solution
     }
+
+
+def _to_float_array(values: Any) -> np.ndarray:
+    """Normalize pandas/numpy values into a float64 numpy array."""
+    return np.asarray(values, dtype=np.float64)
+
+
+def _sample_fcs_path(sample: Sample) -> Optional[str]:
+    return cast(Optional[str], getattr(sample, "file_path_fcs", None))
+
+
+def _sample_nta_path(sample: Sample) -> Optional[str]:
+    return cast(Optional[str], getattr(sample, "file_path_nta", None))
+
+
+def _sample_notes(sample: Sample) -> Optional[str]:
+    return cast(Optional[str], getattr(sample, "notes", None))
+
+
+def _sample_db_id(sample: Sample) -> int:
+    value = cast(Any, getattr(sample, "id", None))
+    if isinstance(value, int):
+        return value
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="Sample is missing a valid database id"
+    )
 
 
 METADATA_OVERRIDE_BEGIN = "[[METADATA_OVERRIDE_JSON]]"
@@ -446,8 +473,8 @@ async def list_samples(
         total_result = await db.execute(count_query)
         total = total_result.scalar()
         
-        # Apply pagination
-        query = query.offset(skip).limit(limit)
+        # Apply ordering (most recently uploaded first) then pagination
+        query = query.order_by(Sample.upload_timestamp.desc()).offset(skip).limit(limit)
         
         # Execute query
         result = await db.execute(query)
@@ -457,13 +484,11 @@ async def list_samples(
         samples_data = []
         for sample in samples:
             upload_ts = getattr(sample, 'upload_timestamp', None)
-            overrides = _extract_metadata_overrides_from_notes(sample.notes)
             samples_data.append({
                 "id": sample.id,
                 "sample_id": sample.sample_id,
                 "biological_sample_id": sample.biological_sample_id,
                 "treatment": sample.treatment,
-                "dye": overrides.get("dye"),
                 "qc_status": sample.qc_status,
                 "processing_status": sample.processing_status,
                 "upload_timestamp": upload_ts.isoformat() if upload_ts else None,
@@ -653,14 +678,12 @@ async def get_sample(
         
         upload_ts = getattr(sample, 'upload_timestamp', None)
         exp_date = getattr(sample, 'experiment_date', None)
-        overrides = _extract_metadata_overrides_from_notes(sample.notes)
         
         return {
             "id": sample.id,
             "sample_id": sample.sample_id,
             "biological_sample_id": sample.biological_sample_id,
             "treatment": sample.treatment,
-            "dye": overrides.get("dye"),
             "concentration_ug": sample.concentration_ug,
             "preparation_method": sample.preparation_method,
             "passage_number": sample.passage_number,
@@ -792,7 +815,7 @@ async def get_fcs_results(
                                 break
                         
                         if size_col:
-                            sizes = df[size_col].dropna().values
+                            sizes = _to_float_array(df[size_col].dropna().values)
                             valid = sizes[(sizes > 0) & (sizes < 2000)]
                             
                             if len(valid) > 0:
@@ -1003,8 +1026,23 @@ async def delete_sample(
             select(func.count()).select_from(ProcessingJob).where(ProcessingJob.sample_id == sample.id)
         )).scalar()
         
-        # Delete sample (cascade will delete related records)
-        await db.delete(sample)
+        # Explicitly delete all related records using SQL-level DELETEs.
+        # ORM cascade (db.delete(sample)) triggers lazy-loading of related objects
+        # which fails in async SQLAlchemy with MissingGreenlet when they aren't
+        # already loaded in the session. SQL-level deletes bypass this entirely.
+        sample_pk = sample.id
+        await db.execute(sql_delete(FCSResult).where(FCSResult.sample_id == sample_pk))
+        await db.execute(sql_delete(NTAResult).where(NTAResult.sample_id == sample_pk))
+        await db.execute(sql_delete(QCReport).where(QCReport.sample_id == sample_pk))
+        await db.execute(sql_delete(ProcessingJob).where(ProcessingJob.sample_id == sample_pk))
+        await db.execute(sql_delete(ExperimentalConditions).where(ExperimentalConditions.sample_id == sample_pk))
+        # Nullify alert references instead of deleting — alerts are historical records
+        await db.execute(
+            sql_update(Alert)
+            .where(Alert.sample_id == sample_pk)
+            .values(sample_id=None, sample_name=None)
+        )
+        await db.execute(sql_delete(Sample).where(Sample.id == sample_pk))
         await db.commit()
         
         logger.warning(f"🗑️  Deleted sample: {sample_id} (FCS: {fcs_count}, NTA: {nta_count}, QC: {qc_count}, Jobs: {job_count})")
@@ -1089,7 +1127,8 @@ async def get_scatter_data(
             )
         
         # Check if FCS file exists
-        if not sample.file_path_fcs:
+        sample_fcs_path = _sample_fcs_path(sample)
+        if not sample_fcs_path:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"No FCS file associated with sample {sample_id}"
@@ -1103,7 +1142,7 @@ async def get_scatter_data(
         
         logger.info(f"📊 Loading scatter data for sample: {sample_id}")
         
-        parsed_data, channels = get_cached_fcs_data(sample.file_path_fcs)
+        parsed_data, channels = get_cached_fcs_data(sample_fcs_path)
         
         # Get channel configuration
         channel_config = get_channel_config()
@@ -1158,8 +1197,8 @@ async def get_scatter_data(
         
         # Build scatter data array with diameter calculation
         # Note: Use direct column access instead of itertuples() to handle column names with hyphens
-        fsc_values = sampled_data[fsc_ch].values
-        ssc_values = sampled_data[ssc_ch].values
+        fsc_values = _to_float_array(sampled_data[fsc_ch].values)
+        ssc_values = _to_float_array(sampled_data[ssc_ch].values)
         
         # Check for active bead calibration (CAL-001, Feb 10, 2026)
         from src.physics.bead_calibration import get_active_calibration, get_fcmpass_calibration
@@ -1176,6 +1215,7 @@ async def get_scatter_data(
         
         # Calculate diameters using appropriate method
         # Priority: 1. FCMPASS k-based  2. Legacy bead cal  3. Multi-solution Mie  4. Single-solution Mie
+        multi_solution_num = np.zeros(len(fsc_values), dtype=np.int32)
         try:
             if fcmpass_calibration and fcmpass_calibration.calibrated:
                 # === FCMPASS K-BASED (HIGHEST PRIORITY, VALIDATED) ===
@@ -1232,6 +1272,8 @@ async def get_scatter_data(
                 
                 vssc_ch = multi_solution_info['vssc_channel']
                 bssc_ch = multi_solution_info['bssc_channel']
+                if not isinstance(vssc_ch, str) or not isinstance(bssc_ch, str):
+                    raise HTTPException(status_code=400, detail="Missing multi-solution channels")
                 
                 logger.info(f"🔬 Using MULTI-SOLUTION Mie: VSSC={vssc_ch}, BSSC={bssc_ch}")
                 
@@ -1322,7 +1364,7 @@ async def get_scatter_data(
                 point_data["diameter"] = round(float(diameters[idx]), 1)
             
             # Add num_solutions if multi-solution Mie was used
-            if can_use_multi_solution and 'multi_solution_num' in dir():
+            if can_use_multi_solution:
                 point_data["num_solutions"] = int(multi_solution_num[idx])
             
             scatter_data.append(point_data)
@@ -1346,7 +1388,8 @@ async def get_scatter_data(
         if fcmpass_calibration and fcmpass_calibration.calibrated:
             try:
                 from src.parsers.fcs_parser import FCSParser
-                parser = FCSParser(sample.file_path_fcs)
+                parser = FCSParser(Path(sample_fcs_path))
+                parser.parse()
                 sample_gains = parser.extract_channel_gains()
                 if sample_gains:
                     from src.physics.bead_calibration import check_gain_mismatch
@@ -1444,7 +1487,8 @@ async def get_clustered_scatter_data(
                 detail=f"Sample {sample_id} not found"
             )
         
-        if not sample.file_path_fcs:
+        sample_fcs_path = _sample_fcs_path(sample)
+        if not sample_fcs_path:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"No FCS file associated with sample {sample_id}"
@@ -1456,7 +1500,7 @@ async def get_clustered_scatter_data(
         
         logger.info(f"📊 Loading clustered scatter data for {sample_id} at zoom level {zoom_level}")
         
-        parsed_data, channels = get_cached_fcs_data(sample.file_path_fcs)
+        parsed_data, channels = get_cached_fcs_data(sample_fcs_path)
         
         # Detect channels
         channel_config = get_channel_config()
@@ -1470,8 +1514,8 @@ async def get_clustered_scatter_data(
             )
         
         # Extract data
-        fsc_values = parsed_data[fsc_ch].values.astype(np.float64)
-        ssc_values = parsed_data[ssc_ch].values.astype(np.float64)
+        fsc_values = _to_float_array(parsed_data[fsc_ch].values)
+        ssc_values = _to_float_array(parsed_data[ssc_ch].values)
         total_events = len(fsc_values)
         
         # Calculate data bounds
@@ -1486,10 +1530,12 @@ async def get_clustered_scatter_data(
                 from src.physics.bead_calibration import get_fcmpass_k_factor
                 vssc_ch = multi_solution_info['vssc_channel']
                 bssc_ch = multi_solution_info['bssc_channel']
+                if not isinstance(vssc_ch, str) or not isinstance(bssc_ch, str):
+                    raise HTTPException(status_code=400, detail="Missing multi-solution channels")
                 _k = get_fcmpass_k_factor()
                 calc = MultiSolutionMieCalculator(n_particle=1.37, n_medium=1.33, k_violet=_k)
-                ssc_violet = parsed_data[vssc_ch].values.astype(np.float64)
-                ssc_blue = parsed_data[bssc_ch].values.astype(np.float64)
+                ssc_violet = _to_float_array(parsed_data[vssc_ch].values)
+                ssc_blue = _to_float_array(parsed_data[bssc_ch].values)
                 diameters, _ = calc.calculate_sizes_multi_solution(ssc_blue, ssc_violet)
             else:
                 from src.physics.mie_scatter import MieScatterCalculator
@@ -1524,17 +1570,18 @@ async def get_clustered_scatter_data(
                 sample_indices = np.arange(total_events)
             
             # Perform clustering
+            cluster_count = n_clusters_base if zoom_level == 1 else n_clusters_base * 5
             kmeans = MiniBatchKMeans(
-                n_clusters=n_clusters,
+                n_clusters=cluster_count,
                 random_state=42,
                 batch_size=1024,
-                n_init=3
+                n_init="auto"
             )
             labels = kmeans.fit_predict(X_sample)
             
             # Build cluster data
             clusters = []
-            for i in range(n_clusters):
+            for i in range(cluster_count):
                 mask = labels == i
                 cluster_points = X_sample[mask]
                 cluster_diameters = diameters_sample[mask]
@@ -1787,7 +1834,8 @@ async def analyze_gated_population(
                 detail=f"Sample {sample_id} not found"
             )
         
-        if not sample.file_path_fcs:
+        sample_fcs_path = _sample_fcs_path(sample)
+        if not sample_fcs_path:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"No FCS file associated with sample {sample_id}"
@@ -1799,7 +1847,7 @@ async def analyze_gated_population(
         
         logger.info(f"🎯 Running gated analysis for sample: {sample_id}, gate: {request.gate_name}")
         
-        parsed_data, _channels = get_cached_fcs_data(sample.file_path_fcs)
+        parsed_data, _channels = get_cached_fcs_data(sample_fcs_path)
         
         # Validate channels exist
         available_channels = list(parsed_data.columns)
@@ -1815,8 +1863,8 @@ async def analyze_gated_population(
             )
         
         # Extract channel data
-        x_data = parsed_data[request.x_channel].values
-        y_data = parsed_data[request.y_channel].values
+        x_data = _to_float_array(parsed_data[request.x_channel].values)
+        y_data = _to_float_array(parsed_data[request.y_channel].values)
         total_events = len(x_data)
         
         # Apply gate to find selected points
@@ -1954,6 +2002,8 @@ async def analyze_gated_population(
                     
                     vssc_ch = multi_solution_info['vssc_channel']
                     bssc_ch = multi_solution_info['bssc_channel']
+                    if not isinstance(vssc_ch, str) or not isinstance(bssc_ch, str):
+                        raise HTTPException(status_code=400, detail="Missing multi-solution channels")
                     
                     logger.info(f"🔬 Gated analysis using MULTI-SOLUTION Mie: VSSC={vssc_ch}, BSSC={bssc_ch}")
                     
@@ -1966,8 +2016,8 @@ async def analyze_gated_population(
                     )
                     
                     # Get SSC values for gated events
-                    gated_vssc = np.asarray(parsed_data[vssc_ch].values[mask], dtype=np.float64)
-                    gated_bssc = np.asarray(parsed_data[bssc_ch].values[mask], dtype=np.float64)
+                    gated_vssc = _to_float_array(parsed_data[vssc_ch].values[mask])
+                    gated_bssc = _to_float_array(parsed_data[bssc_ch].values[mask])
                     
                     # Calculate sizes with disambiguation
                     sizes, num_solutions = multi_mie_calc.calculate_sizes_multi_solution(gated_bssc, gated_vssc)
@@ -2142,7 +2192,8 @@ async def get_recommended_axes(
             )
         
         # Check if FCS file exists
-        if not sample.file_path_fcs:
+        sample_fcs_path = _sample_fcs_path(sample)
+        if not sample_fcs_path:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"No FCS file associated with sample {sample_id}"
@@ -2154,7 +2205,7 @@ async def get_recommended_axes(
         
         logger.info(f"🎯 Analyzing optimal axes for sample: {sample_id}")
         
-        parsed_data, all_channels = get_cached_fcs_data(sample.file_path_fcs)
+        parsed_data, all_channels = get_cached_fcs_data(sample_fcs_path)
         
         # Initialize auto-axis selector
         selector = AutoAxisSelector()
@@ -2298,7 +2349,8 @@ async def get_size_bins(
             )
         
         # Check if FCS file exists
-        if not sample.file_path_fcs:
+        sample_fcs_path = _sample_fcs_path(sample)
+        if not sample_fcs_path:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"No FCS file associated with sample {sample_id}"
@@ -2310,7 +2362,7 @@ async def get_size_bins(
         
         logger.info(f"📏 Calculating size bins for sample: {sample_id}")
         
-        parsed_data, channels = get_cached_fcs_data(sample.file_path_fcs)
+        parsed_data, channels = get_cached_fcs_data(sample_fcs_path)
         
         # Get channel configuration
         from src.utils.channel_config import get_channel_config  # type: ignore[import-not-found]
@@ -2356,6 +2408,8 @@ async def get_size_bins(
             
             vssc_ch = multi_solution_info['vssc_channel']
             bssc_ch = multi_solution_info['bssc_channel']
+            if not isinstance(vssc_ch, str) or not isinstance(bssc_ch, str):
+                raise HTTPException(status_code=400, detail="Missing multi-solution channels")
             
             logger.info(f"🔬 Size bins using MULTI-SOLUTION Mie: VSSC={vssc_ch}, BSSC={bssc_ch}")
             
@@ -2364,8 +2418,8 @@ async def get_size_bins(
             multi_mie_calc = MultiSolutionMieCalculator(n_particle=n_particle, n_medium=n_medium, k_violet=_k)
             
             # Get SSC values for both wavelengths
-            ssc_violet = np.asarray(parsed_data[vssc_ch].values[sample_indices], dtype=np.float64)
-            ssc_blue = np.asarray(parsed_data[bssc_ch].values[sample_indices], dtype=np.float64)
+            ssc_violet = _to_float_array(parsed_data[vssc_ch].values[sample_indices])
+            ssc_blue = _to_float_array(parsed_data[bssc_ch].values[sample_indices])
             
             # Calculate sizes with disambiguation
             sizes_array, num_solutions = multi_mie_calc.calculate_sizes_multi_solution(ssc_blue, ssc_violet)
@@ -2380,7 +2434,7 @@ async def get_size_bins(
             )
             logger.info(f"🔬 Size bins using single-solution Mie: λ={wavelength_nm}nm, n_p={n_particle}, n_m={n_medium}")
             
-            sampled_fsc = parsed_data[fsc_ch].values[sample_indices]
+            sampled_fsc = _to_float_array(parsed_data[fsc_ch].values[sample_indices])
             
             # Use NORMALIZED batch conversion: FSC to size (handles scale mismatch)
             sizes_array, success_mask = mie_calc.diameters_from_scatter_normalized(
@@ -2557,7 +2611,8 @@ async def get_distribution_analysis(
                 detail=f"Sample not found: {sample_id}"
             )
         
-        if not sample.file_path_fcs:
+        sample_fcs_path = _sample_fcs_path(sample)
+        if not sample_fcs_path:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Sample has no FCS data for distribution analysis"
@@ -2565,14 +2620,14 @@ async def get_distribution_analysis(
         
         # Parse FCS file (cached)
         import os
-        if not os.path.exists(sample.file_path_fcs):
+        if not os.path.exists(sample_fcs_path):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"FCS file not found: {sample.file_path_fcs}"
+                detail=f"FCS file not found: {sample_fcs_path}"
             )
         
         from src.utils.fcs_cache import get_cached_fcs_data
-        parsed_data, _channels = get_cached_fcs_data(sample.file_path_fcs)
+        parsed_data, _channels = get_cached_fcs_data(sample_fcs_path)
         if parsed_data.empty:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -2662,8 +2717,8 @@ async def get_distribution_analysis(
                     else:
                         idx = np.arange(len(parsed_data))
                     
-                    ssc_v = np.asarray(parsed_data[vssc_ch].values[idx], dtype=np.float64)
-                    ssc_b = np.asarray(parsed_data[bssc_ch].values[idx], dtype=np.float64)
+                    ssc_v = _to_float_array(parsed_data[vssc_ch].values[idx])
+                    ssc_b = _to_float_array(parsed_data[bssc_ch].values[idx])
                     valid_mask = (ssc_v > 0) & (ssc_b > 0)
                     ssc_v = ssc_v[valid_mask]
                     ssc_b = ssc_b[valid_mask]
@@ -2705,7 +2760,7 @@ async def get_distribution_analysis(
                     detail=f"No FSC/SSC channel found for sizing. Available: {available_channels[:10]}"
                 )
             
-            fsc_values = parsed_data[selected_fsc].values
+            fsc_values = _to_float_array(parsed_data[selected_fsc].values)
             fsc_values = fsc_values[np.isfinite(fsc_values) & (fsc_values > 0)]
             
             if len(fsc_values) < 10:
@@ -2824,7 +2879,8 @@ async def detect_anomalies(
                 detail=f"Sample {sample_id} not found"
             )
         
-        if not sample.file_path_fcs:
+        sample_fcs_path = _sample_fcs_path(sample)
+        if not sample_fcs_path:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"No FCS file associated with sample {sample_id}"
@@ -2837,7 +2893,7 @@ async def detect_anomalies(
         
         logger.info(f"🔍 Running anomaly detection for sample: {sample_id}")
         
-        parsed_data, channels = get_cached_fcs_data(sample.file_path_fcs)
+        parsed_data, channels = get_cached_fcs_data(sample_fcs_path)
         channel_config = get_channel_config()
         
         fsc_ch = fsc_channel or channel_config.detect_fsc_channel(channels)
@@ -2855,8 +2911,8 @@ async def detect_anomalies(
             )
         
         # Run anomaly detection
-        fsc_values = parsed_data[fsc_ch].values
-        ssc_values = parsed_data[ssc_ch].values
+        fsc_values = _to_float_array(parsed_data[fsc_ch].values)
+        ssc_values = _to_float_array(parsed_data[ssc_ch].values)
         
         anomalous_indices = set()
         
@@ -2986,7 +3042,8 @@ async def reanalyze_sample(
             )
         
         # Check if FCS file exists
-        if not sample.file_path_fcs:
+        sample_fcs_path = _sample_fcs_path(sample)
+        if not sample_fcs_path:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"No FCS file associated with sample {sample_id}"
@@ -2998,7 +3055,7 @@ async def reanalyze_sample(
         from src.utils.fcs_cache import get_cached_fcs_data
         import numpy as np
         
-        parsed_data, channels = get_cached_fcs_data(sample.file_path_fcs)
+        parsed_data, channels = get_cached_fcs_data(sample_fcs_path)
         stats = {}  # Statistics computed inline when needed
         
         # Detect FSC and SSC channels
@@ -3161,6 +3218,8 @@ async def reanalyze_sample(
             
             vssc_ch = multi_solution_info['vssc_channel']
             bssc_ch = multi_solution_info['bssc_channel']
+            if not isinstance(vssc_ch, str) or not isinstance(bssc_ch, str):
+                raise HTTPException(status_code=400, detail="Missing multi-solution channels")
             
             logger.info(f"🔬 Re-analyze using MULTI-SOLUTION Mie: VSSC={vssc_ch}, BSSC={bssc_ch}")
             
@@ -3178,8 +3237,8 @@ async def reanalyze_sample(
             sample_indices = np.random.choice(len(parsed_data), size=sample_size, replace=False)
             
             # Get SSC values for both wavelengths
-            ssc_violet = np.asarray(parsed_data[vssc_ch].values[sample_indices], dtype=np.float64)
-            ssc_blue = np.asarray(parsed_data[bssc_ch].values[sample_indices], dtype=np.float64)
+            ssc_violet = _to_float_array(parsed_data[vssc_ch].values[sample_indices])
+            ssc_blue = _to_float_array(parsed_data[bssc_ch].values[sample_indices])
             
             # Calculate sizes with disambiguation
             sizes_array, num_solutions = multi_mie_calc.calculate_sizes_multi_solution(ssc_blue, ssc_violet)
@@ -3281,8 +3340,8 @@ async def reanalyze_sample(
                 anomalous_indices = []
                 
                 if fsc_channel and ssc_channel:
-                    fsc_data = parsed_data[fsc_channel].values
-                    ssc_data = parsed_data[ssc_channel].values
+                    fsc_data = _to_float_array(parsed_data[fsc_channel].values)
+                    ssc_data = _to_float_array(parsed_data[ssc_channel].values)
                     
                     if request.anomaly_method in ['zscore', 'both']:
                         # Z-score method
@@ -3473,9 +3532,10 @@ async def save_experimental_conditions(
             )
         
         # Create experimental conditions
+        sample_db_id = _sample_db_id(sample)
         conditions_record = await create_experimental_conditions(
             db=db,
-            sample_id=sample.id,  # type: ignore[arg-type]
+            sample_id=sample_db_id,
             operator=conditions.operator,
             temperature_celsius=conditions.temperature_celsius,
             ph=conditions.ph,
@@ -3545,7 +3605,7 @@ async def get_experimental_conditions(
             )
         
         # Get conditions
-        conditions = await get_experimental_conditions_by_sample(db, sample.id)  # type: ignore[arg-type]
+        conditions = await get_experimental_conditions_by_sample(db, _sample_db_id(sample))
         
         return {
             "sample_id": sample_id,
@@ -3587,7 +3647,7 @@ async def update_experimental_conditions(
             )
         
         # Get existing conditions
-        existing = await get_experimental_conditions_by_sample(db, sample.id)  # type: ignore[arg-type]
+        existing = await get_experimental_conditions_by_sample(db, _sample_db_id(sample))
         
         if not existing:
             raise HTTPException(
@@ -3599,7 +3659,7 @@ async def update_experimental_conditions(
         update_data = conditions.model_dump(exclude_unset=True)
         
         # Update conditions
-        updated = await update_conditions_db(db, existing.id, **update_data)  # type: ignore[arg-type]
+        updated = await update_conditions_db(db, int(cast(Any, existing.id)), **update_data)
         
         return {
             "success": True,
@@ -3642,7 +3702,8 @@ async def get_available_channels(
                 detail=f"Sample not found: {sample_id}"
             )
         
-        if not sample.file_path_fcs:
+        sample_fcs_path = _sample_fcs_path(sample)
+        if not sample_fcs_path:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"No FCS file associated with sample {sample_id}"
@@ -3652,7 +3713,7 @@ async def get_available_channels(
         from src.utils.channel_config import get_channel_config  # type: ignore[import-not-found]
         import numpy as np
         
-        parsed_data, _channels = get_cached_fcs_data(sample.file_path_fcs)
+        parsed_data, _channels = get_cached_fcs_data(sample_fcs_path)
         
         config = get_channel_config()
         
@@ -3663,10 +3724,18 @@ async def get_available_channels(
                        'is_baseline', 'file_name', 'instrument_type', 'parse_timestamp']:
                 continue
             
-            mean_val = parsed_data[col].mean()
-            max_val = parsed_data[col].max()
-            min_val = parsed_data[col].min()
-            std_val = parsed_data[col].std()
+            col_values = _to_float_array(parsed_data[col].values)
+            finite_values = col_values[np.isfinite(col_values)]
+            if len(finite_values) == 0:
+                mean_val = 0.0
+                max_val = 0.0
+                min_val = 0.0
+                std_val = 0.0
+            else:
+                mean_val = float(np.mean(finite_values))
+                max_val = float(np.max(finite_values))
+                min_val = float(np.min(finite_values))
+                std_val = float(np.std(finite_values))
             
             # Check if this is a detected FSC/SSC channel
             is_fsc = col in config.get_fsc_channel_names()
@@ -3675,10 +3744,10 @@ async def get_available_channels(
             channels_info.append({
                 "index": i + 1,
                 "name": col,
-                "mean": float(mean_val),
-                "max": float(max_val),
-                "min": float(min_val),
-                "std": float(std_val),
+                "mean": mean_val,
+                "max": max_val,
+                "min": min_val,
+                "std": std_val,
                 "cv": float(std_val / mean_val * 100) if mean_val > 0 else 0,
                 "is_configured_fsc": is_fsc,
                 "is_configured_ssc": is_ssc
@@ -3690,7 +3759,7 @@ async def get_available_channels(
         
         return {
             "sample_id": sample_id,
-            "file_name": sample.file_path_fcs.name if sample.file_path_fcs else None,
+            "file_name": Path(sample_fcs_path).name,
             "total_events": len(parsed_data),
             "channels": channels_info,
             "detected_fsc": detected_fsc,
@@ -3713,7 +3782,8 @@ async def get_available_channels(
 
 async def _build_metadata_resolution_payload(db: AsyncSession, sample: Sample) -> Dict[str, Any]:
     """Build resolved metadata payload with provenance for a sample."""
-    if not sample.file_path_fcs:
+    sample_fcs_path = _sample_fcs_path(sample)
+    if not sample_fcs_path:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"No FCS file associated with sample {sample.sample_id}"
@@ -3721,19 +3791,19 @@ async def _build_metadata_resolution_payload(db: AsyncSession, sample: Sample) -
 
     from src.parsers.fcs_parser import FCSParser
 
-    parser = FCSParser(sample.file_path_fcs)
+    parser = FCSParser(Path(sample_fcs_path))
     parser.parse()
     fcs_metadata = parser.extract_metadata()
     channel_names = fcs_metadata.get("channel_names", []) or []
 
-    sidecar_path = _find_fcs_sidecar_xml(str(sample.file_path_fcs))
+    sidecar_path = _find_fcs_sidecar_xml(sample_fcs_path)
     sidecar_data = _extract_sidecar_metadata(sidecar_path) if sidecar_path else {
         "laser_wavelength_nm": None,
         "instrument_model": None,
     }
 
-    overrides = _extract_metadata_overrides_from_notes(sample.notes)
-    dilution_factor = await _get_sample_dilution_factor(db, sample.id)
+    overrides = _extract_metadata_overrides_from_notes(_sample_notes(sample))
+    dilution_factor = await _get_sample_dilution_factor(db, _sample_db_id(sample))
 
     resolved, provenance, missing_required, completeness_score = _resolve_sample_metadata(
         fcs_metadata=fcs_metadata,
@@ -3821,25 +3891,27 @@ async def upsert_manual_metadata(
 
         # 1) Persist dilution factor through experimental conditions table.
         if payload.dilution_factor is not None:
-            existing_conditions = await get_experimental_conditions_by_sample(db, sample.id)  # type: ignore[arg-type]
+            sample_db_id = _sample_db_id(sample)
+            existing_conditions = await get_experimental_conditions_by_sample(db, sample_db_id)
             if existing_conditions:
                 await update_conditions_db(
                     db,
-                    existing_conditions.id,
+                    int(cast(Any, existing_conditions.id)),
                     dilution_factor=int(payload.dilution_factor),
-                    notes=payload.operator_notes or existing_conditions.notes,
+                    notes=payload.operator_notes or cast(Optional[str], existing_conditions.notes),
                 )
             else:
                 await create_experimental_conditions(
                     db=db,
-                    sample_id=sample.id,  # type: ignore[arg-type]
+                    sample_id=sample_db_id,
                     operator="Manual Metadata Entry",
                     dilution_factor=int(payload.dilution_factor),
                     notes=payload.operator_notes,
                 )
 
         # 2) Persist manual override JSON in sample.notes.
-        existing_overrides = _extract_metadata_overrides_from_notes(sample.notes)
+        existing_notes = _sample_notes(sample)
+        existing_overrides = _extract_metadata_overrides_from_notes(existing_notes)
         if payload.laser_wavelength_nm is not None:
             existing_overrides["laser_wavelength_nm"] = int(payload.laser_wavelength_nm)
         if payload.instrument_model:
@@ -3848,7 +3920,7 @@ async def upsert_manual_metadata(
             existing_overrides["dilution_factor"] = int(payload.dilution_factor)
 
         if existing_overrides:
-            sample.notes = _upsert_metadata_overrides_in_notes(sample.notes, existing_overrides)
+            setattr(sample, "notes", _upsert_metadata_overrides_in_notes(existing_notes, existing_overrides))
 
         await db.commit()
 
@@ -3895,7 +3967,8 @@ async def get_fcs_metadata(
                 detail=f"Sample {sample_id} not found"
             )
         
-        if not sample.file_path_fcs:
+        sample_fcs_path = _sample_fcs_path(sample)
+        if not sample_fcs_path:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"No FCS file associated with sample {sample_id}"
@@ -3903,7 +3976,7 @@ async def get_fcs_metadata(
         
         # Parse FCS file (cached) + get metadata
         from src.parsers.fcs_parser import FCSParser
-        parser = FCSParser(sample.file_path_fcs)
+        parser = FCSParser(Path(sample_fcs_path))
         parser.parse()  # metadata extraction needs parser instance
         
         # Extract metadata
@@ -3911,12 +3984,12 @@ async def get_fcs_metadata(
         
         # Add file-level info
         import os
-        file_stat = os.stat(sample.file_path_fcs)
+        file_stat = os.stat(sample_fcs_path)
         
         return {
             "sample_id": sample_id,
             "file_info": {
-                "file_name": sample.file_path_fcs.name if hasattr(sample.file_path_fcs, 'name') else str(sample.file_path_fcs).split('/')[-1],
+                "file_name": Path(sample_fcs_path).name,
                 "file_size_bytes": file_stat.st_size,
                 "file_size_mb": round(file_stat.st_size / (1024 * 1024), 2),
             },
@@ -3987,7 +4060,8 @@ async def get_fcs_values(
                 detail=f"Sample {sample_id} not found"
             )
         
-        if not sample.file_path_fcs:
+        sample_fcs_path = _sample_fcs_path(sample)
+        if not sample_fcs_path:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"No FCS file associated with sample {sample_id}"
@@ -4000,7 +4074,7 @@ async def get_fcs_values(
         from src.utils.channel_config import ChannelConfig
         import numpy as np
         
-        parsed_data, channels = get_cached_fcs_data(sample.file_path_fcs)
+        parsed_data, channels = get_cached_fcs_data(sample_fcs_path)
         
         # Detect FSC channel
         config = ChannelConfig()
@@ -4034,7 +4108,7 @@ async def get_fcs_values(
         )
         
         # Get FSC values
-        fsc_values = sampled_data[fsc_channel].values
+        fsc_values = _to_float_array(sampled_data[fsc_channel].values)
         
         if can_use_multi_solution:
             # === MULTI-SOLUTION MIE (PREFERRED) ===
@@ -4042,6 +4116,8 @@ async def get_fcs_values(
             
             vssc_ch = multi_solution_info['vssc_channel']
             bssc_ch = multi_solution_info['bssc_channel']
+            if not isinstance(vssc_ch, str) or not isinstance(bssc_ch, str):
+                raise HTTPException(status_code=400, detail="Missing multi-solution channels")
             
             logger.info(f"🔬 FCS values using MULTI-SOLUTION Mie: VSSC={vssc_ch}, BSSC={bssc_ch}")
             
@@ -4050,8 +4126,8 @@ async def get_fcs_values(
             multi_mie_calc = MultiSolutionMieCalculator(n_particle=n_particle, n_medium=n_medium, k_violet=_k)
             
             # Get SSC values for both wavelengths
-            ssc_violet = np.asarray(sampled_data[vssc_ch].values, dtype=np.float64)
-            ssc_blue = np.asarray(sampled_data[bssc_ch].values, dtype=np.float64)
+            ssc_violet = _to_float_array(sampled_data[vssc_ch].values)
+            ssc_blue = _to_float_array(sampled_data[bssc_ch].values)
             
             # Calculate sizes with disambiguation
             sizes, num_solutions = multi_mie_calc.calculate_sizes_multi_solution(ssc_blue, ssc_violet)
@@ -4163,14 +4239,15 @@ async def get_multi_solution_events(
         sample = result.scalar_one_or_none()
         if not sample:
             raise HTTPException(status_code=404, detail=f"Sample {sample_id} not found")
-        if not sample.file_path_fcs:
+        sample_fcs_path = _sample_fcs_path(sample)
+        if not sample_fcs_path:
             raise HTTPException(status_code=404, detail=f"No FCS file associated with sample {sample_id}")
 
         from src.utils.fcs_cache import get_cached_fcs_data
         from src.physics.mie_scatter import MultiSolutionMieCalculator
         from src.physics.bead_calibration import get_fcmpass_k_factor
 
-        parsed_data, channels = get_cached_fcs_data(sample.file_path_fcs)
+        parsed_data, channels = get_cached_fcs_data(sample_fcs_path)
         multi_info = detect_multi_solution_channels(channels)
         if not multi_info["can_use_multi_solution"]:
             raise HTTPException(
@@ -4180,14 +4257,16 @@ async def get_multi_solution_events(
 
         vssc_ch = multi_info["vssc_channel"]
         bssc_ch = multi_info["bssc_channel"]
+        if not isinstance(vssc_ch, str) or not isinstance(bssc_ch, str):
+            raise HTTPException(status_code=400, detail="Missing multi-solution channels")
         if vssc_ch not in parsed_data.columns or bssc_ch not in parsed_data.columns:
             raise HTTPException(status_code=400, detail="Required VSSC/BSSC channels missing from parsed data")
 
         _k = get_fcmpass_k_factor()
         calc = MultiSolutionMieCalculator(n_particle=1.37, n_medium=1.33, k_violet=_k)
 
-        ssc_violet = np.asarray(parsed_data[vssc_ch].values, dtype=np.float64)
-        ssc_blue = np.asarray(parsed_data[bssc_ch].values, dtype=np.float64)
+        ssc_violet = _to_float_array(parsed_data[vssc_ch].values)
+        ssc_blue = _to_float_array(parsed_data[bssc_ch].values)
         sizes, num_solutions = calc.calculate_sizes_multi_solution(
             ssc_blue,
             ssc_violet,
@@ -4267,14 +4346,15 @@ async def get_multi_solution_event_details(
         sample = result.scalar_one_or_none()
         if not sample:
             raise HTTPException(status_code=404, detail=f"Sample {sample_id} not found")
-        if not sample.file_path_fcs:
+        sample_fcs_path = _sample_fcs_path(sample)
+        if not sample_fcs_path:
             raise HTTPException(status_code=404, detail=f"No FCS file associated with sample {sample_id}")
 
         from src.utils.fcs_cache import get_cached_fcs_data
         from src.physics.mie_scatter import MultiSolutionMieCalculator
         from src.physics.bead_calibration import get_fcmpass_k_factor
 
-        parsed_data, channels = get_cached_fcs_data(sample.file_path_fcs)
+        parsed_data, channels = get_cached_fcs_data(sample_fcs_path)
         if event_id < 0 or event_id >= len(parsed_data):
             raise HTTPException(status_code=422, detail=f"event_id out of range: {event_id}")
 
@@ -4284,6 +4364,8 @@ async def get_multi_solution_event_details(
 
         vssc_ch = multi_info["vssc_channel"]
         bssc_ch = multi_info["bssc_channel"]
+        if not isinstance(vssc_ch, str) or not isinstance(bssc_ch, str):
+            raise HTTPException(status_code=400, detail="Missing multi-solution channels")
         ssc_violet_value = float(parsed_data.iloc[event_id][vssc_ch])
         ssc_blue_value = float(parsed_data.iloc[event_id][bssc_ch])
 
@@ -4344,8 +4426,9 @@ async def get_nta_metadata(
         
         nta_file_path = None
         
-        if sample and sample.file_path_nta:
-            nta_file_path = sample.file_path_nta
+        sample_nta_path = _sample_nta_path(sample) if sample else None
+        if sample and sample_nta_path:
+            nta_file_path = sample_nta_path
         else:
             # Fallback: search uploads directory for the NTA file
             # This handles cases where the DB insert failed during upload
@@ -4361,6 +4444,9 @@ async def get_nta_metadata(
                     detail=detail
                 )
         
+        if not nta_file_path:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No NTA file associated with sample {sample_id}")
+
         # Parse NTA file
         from src.parsers.nta_parser import NTAParser
         parser = NTAParser(nta_file_path)
@@ -4447,8 +4533,9 @@ async def get_nta_values(
         
         nta_file_path = None
         
-        if sample and sample.file_path_nta:
-            nta_file_path = sample.file_path_nta
+        sample_nta_path = _sample_nta_path(sample) if sample else None
+        if sample and sample_nta_path:
+            nta_file_path = sample_nta_path
         else:
             # Fallback: search uploads directory for the NTA file
             found_path = _find_nta_file_by_sample_id(sample_id)
@@ -4464,6 +4551,9 @@ async def get_nta_values(
         
         logger.info(f"📊 Getting NTA values for {sample_id}")
         
+        if not nta_file_path:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No NTA file associated with sample {sample_id}")
+
         # Parse NTA file
         from src.parsers.nta_parser import NTAParser
         import numpy as np
@@ -4494,8 +4584,8 @@ async def get_nta_values(
             )
         
         # Get values
-        sizes = parsed_data[size_col].values
-        concentrations = parsed_data[conc_col].values if conc_col else None
+        sizes = _to_float_array(parsed_data[size_col].values)
+        concentrations = _to_float_array(parsed_data[conc_col].values) if conc_col else None
         
         # Build per-bin data
         values_data = []
@@ -4510,7 +4600,7 @@ async def get_nta_values(
         
         # Calculate statistics
         valid_sizes = sizes[~np.isnan(sizes)]
-        if conc_col:
+        if conc_col and concentrations is not None:
             valid_conc = concentrations[~np.isnan(concentrations)]
             # Weight sizes by concentration for proper mean
             total_particles = np.sum(valid_conc)
@@ -4601,13 +4691,14 @@ async def cross_validate_fcs_nta(
         
         if not fcs_sample:
             raise HTTPException(status_code=404, detail=f"FCS sample '{fcs_sample_id}' not found")
-        if not fcs_sample.file_path_fcs:
+        fcs_file_path = _sample_fcs_path(fcs_sample)
+        if not fcs_file_path:
             raise HTTPException(status_code=404, detail=f"No FCS file for sample '{fcs_sample_id}'")
         
         from src.utils.fcs_cache import get_cached_fcs_data
         from src.utils.channel_config import ChannelConfig
         
-        fcs_data, fcs_channels = get_cached_fcs_data(fcs_sample.file_path_fcs)
+        fcs_data, fcs_channels = get_cached_fcs_data(fcs_file_path)
         
         config = ChannelConfig()
         fsc_channel = config.detect_fsc_channel(fcs_channels)
@@ -4624,16 +4715,22 @@ async def cross_validate_fcs_nta(
         np.random.seed(42)
         sample_indices = np.random.choice(len(fcs_data), size=sample_size, replace=False)
         
-        fsc_values = np.asarray(fcs_data[fsc_channel].values[sample_indices], dtype=np.float64)
+        fsc_values = _to_float_array(fcs_data[fsc_channel].values[sample_indices])
         
-        if multi_info['can_use_multi_solution'] and multi_info['vssc_channel'] in fcs_data.columns and multi_info['bssc_channel'] in fcs_data.columns:
+        if (
+            multi_info['can_use_multi_solution']
+            and isinstance(multi_info['vssc_channel'], str)
+            and isinstance(multi_info['bssc_channel'], str)
+            and multi_info['vssc_channel'] in fcs_data.columns
+            and multi_info['bssc_channel'] in fcs_data.columns
+        ):
             # Multi-solution Mie
             from src.physics.mie_scatter import MultiSolutionMieCalculator
             vssc_ch = multi_info['vssc_channel']
             bssc_ch = multi_info['bssc_channel']
             
-            ssc_violet = np.asarray(fcs_data[vssc_ch].values[sample_indices], dtype=np.float64)
-            ssc_blue = np.asarray(fcs_data[bssc_ch].values[sample_indices], dtype=np.float64)
+            ssc_violet = _to_float_array(fcs_data[vssc_ch].values[sample_indices])
+            ssc_blue = _to_float_array(fcs_data[bssc_ch].values[sample_indices])
             
             from src.physics.bead_calibration import get_fcmpass_k_factor
             _k = get_fcmpass_k_factor()
@@ -4667,8 +4764,9 @@ async def cross_validate_fcs_nta(
         nta_sample = nta_result.scalar_one_or_none()
         
         nta_file_path = None
-        if nta_sample and nta_sample.file_path_nta:
-            nta_file_path = nta_sample.file_path_nta
+        nta_sample_path = _sample_nta_path(nta_sample) if nta_sample else None
+        if nta_sample and nta_sample_path:
+            nta_file_path = nta_sample_path
         else:
             # Fallback: search uploads directory for the NTA file
             found_path = _find_nta_file_by_sample_id(nta_sample_id)
@@ -4678,6 +4776,9 @@ async def cross_validate_fcs_nta(
             else:
                 raise HTTPException(status_code=404, detail=f"NTA sample '{nta_sample_id}' not found")
         
+        if not nta_file_path:
+            raise HTTPException(status_code=404, detail=f"NTA sample '{nta_sample_id}' not found")
+
         from src.parsers.nta_parser import NTAParser
         
         nta_parser = NTAParser(nta_file_path)
@@ -4698,8 +4799,8 @@ async def cross_validate_fcs_nta(
         if not size_col:
             raise HTTPException(status_code=400, detail="No size column found in NTA data")
         
-        nta_sizes_raw = nta_data[size_col].values
-        nta_concentrations = nta_data[conc_col].values if conc_col else None
+        nta_sizes_raw = _to_float_array(nta_data[size_col].values)
+        nta_concentrations = _to_float_array(nta_data[conc_col].values) if conc_col else None
 
         # Parse NTA metadata (for dilution factor provenance).
         nta_raw_metadata = getattr(nta_parser, "raw_metadata", {}) or {}
@@ -4715,8 +4816,8 @@ async def cross_validate_fcs_nta(
         logger.info(f"✅ NTA cross-val: {len(nta_sizes)} size bins from {len(nta_data)} total rows")
 
         # ===== 2b. Concentration + dilution correction context (VAL-004) =====
-        fcs_dilution = await _get_sample_dilution_factor(db, fcs_sample.id)  # type: ignore[arg-type]
-        nta_dilution = await _get_sample_dilution_factor(db, nta_sample.id) if nta_sample else None  # type: ignore[arg-type]
+        fcs_dilution = await _get_sample_dilution_factor(db, _sample_db_id(fcs_sample))
+        nta_dilution = await _get_sample_dilution_factor(db, _sample_db_id(nta_sample)) if nta_sample else None
 
         nta_dilution_source = "experimental_conditions"
         if nta_dilution is None:
@@ -4741,7 +4842,7 @@ async def cross_validate_fcs_nta(
         # FCS measured concentration: use latest stored summary if available; else None.
         fcs_result_row = await db.execute(
             select(FCSResult)
-            .where(FCSResult.sample_id == fcs_sample.id)  # type: ignore[arg-type]
+            .where(FCSResult.sample_id == _sample_db_id(fcs_sample))
             .order_by(FCSResult.id.desc())
             .limit(1)
         )
@@ -4848,18 +4949,25 @@ async def cross_validate_fcs_nta(
             # For NTA with concentration weighting, expand to representative sample
             if nta_conc is not None and np.sum(nta_conc) > 0:
                 # Create expanded sample from concentration-weighted bins
-                nta_expanded = np.repeat(nta_sizes, (nta_conc / np.min(nta_conc[nta_conc > 0])).astype(int).clip(max=1000))
+                positive_nta_conc = nta_conc[nta_conc > 0]
+                scale = float(np.min(positive_nta_conc))
+                repeat_counts = np.clip((nta_conc / scale).astype(np.int32), 1, 1000)
+                nta_expanded = np.repeat(nta_sizes, repeat_counts)
                 if len(nta_expanded) > 50000:
                     nta_expanded = np.random.choice(nta_expanded, 50000, replace=False)
             else:
                 nta_expanded = nta_sizes
             
             ks_stat, ks_pval = scipy_stats.ks_2samp(fcs_valid[:50000], nta_expanded[:50000])
+            ks_stat_f = float(np.asarray(ks_stat).item())
+            ks_pval_f = float(np.asarray(ks_pval).item())
             
             # Mann-Whitney U test
             mw_stat, mw_pval = scipy_stats.mannwhitneyu(
                 fcs_valid[:50000], nta_expanded[:50000], alternative='two-sided'
             )
+            mw_stat_f = float(np.asarray(mw_stat).item())
+            mw_pval_f = float(np.asarray(mw_pval).item())
             
             # Overlap coefficient (Bhattacharyya)
             fcs_norm = fcs_density / (np.sum(fcs_density) + 1e-10)
@@ -4868,14 +4976,14 @@ async def cross_validate_fcs_nta(
             
             statistical_tests = {
                 "kolmogorov_smirnov": {
-                    "statistic": float(ks_stat),
-                    "p_value": float(ks_pval),
-                    "interpretation": "Distributions are similar" if ks_pval > 0.05 else "Distributions differ significantly"
+                    "statistic": ks_stat_f,
+                    "p_value": ks_pval_f,
+                    "interpretation": "Distributions are similar" if ks_pval_f > 0.05 else "Distributions differ significantly"
                 },
                 "mann_whitney_u": {
-                    "statistic": float(mw_stat),
-                    "p_value": float(mw_pval),
-                    "interpretation": "Medians are similar" if mw_pval > 0.05 else "Medians differ significantly"
+                    "statistic": mw_stat_f,
+                    "p_value": mw_pval_f,
+                    "interpretation": "Medians are similar" if mw_pval_f > 0.05 else "Medians differ significantly"
                 },
                 "bhattacharyya_coefficient": {
                     "value": bhattacharyya_coeff,

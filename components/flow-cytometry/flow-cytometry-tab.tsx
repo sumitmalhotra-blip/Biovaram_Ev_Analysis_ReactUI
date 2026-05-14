@@ -139,39 +139,21 @@ export function FlowCytometryTab() {
       {/* ══════════════════════════════════════════════════════
           MAIN INNER TABS — FCS Analysis | NanoFACS AI
           ══════════════════════════════════════════════════════ */}
-      <div style={{
-        display: "flex",
-        gap: 0,
-        borderBottom: "2px solid #e5e7eb",
-        marginBottom: 8,
-        background: "#fff",
-        borderRadius: "10px 10px 0 0",
-        overflow: "hidden",
-        boxShadow: "0 1px 3px rgba(0,0,0,0.06)"
-      }}>
+      <div className="card-3d flex overflow-hidden rounded-xl mb-2">
         <button
           onClick={() => setMainTab("fcs")}
-          style={{
-            flex: 1,
-            padding: "14px 24px",
-            border: "none",
-            borderBottom: mainTab === "fcs" ? "3px solid #2563eb" : "3px solid transparent",
-            background: mainTab === "fcs" ? "#eff6ff" : "#f9fafb",
-            cursor: "pointer",
-            fontWeight: mainTab === "fcs" ? 700 : 400,
-            color: mainTab === "fcs" ? "#2563eb" : "#6b7280",
-            fontSize: 14,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 8,
-            transition: "all 0.15s",
-          }}
+          className={[
+            "flex-1 px-6 py-3.5 border-b-2 text-sm transition-all",
+            "flex items-center justify-center gap-2",
+            mainTab === "fcs"
+              ? "border-primary bg-primary/10 text-primary font-semibold"
+              : "border-transparent bg-secondary/40 text-muted-foreground hover:bg-secondary/70"
+          ].join(" ")}
         >
           <span style={{ fontSize: 18 }}>🔬</span>
           FCS Analysis
           {hasResults && (
-            <span style={{ background: "#2563eb", color: "#fff", borderRadius: 20, padding: "1px 8px", fontSize: 11, fontWeight: 700 }}>
+            <span className="bg-primary text-primary-foreground rounded-full px-2 py-0.5 text-[11px] font-bold">
               Live
             </span>
           )}
@@ -179,26 +161,17 @@ export function FlowCytometryTab() {
 
         <button
           onClick={() => setMainTab("ai")}
-          style={{
-            flex: 1,
-            padding: "14px 24px",
-            border: "none",
-            borderBottom: mainTab === "ai" ? "3px solid #7c3aed" : "3px solid transparent",
-            background: mainTab === "ai" ? "#faf5ff" : "#f9fafb",
-            cursor: "pointer",
-            fontWeight: mainTab === "ai" ? 700 : 400,
-            color: mainTab === "ai" ? "#7c3aed" : "#6b7280",
-            fontSize: 14,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 8,
-            transition: "all 0.15s",
-          }}
+          className={[
+            "flex-1 px-6 py-3.5 border-b-2 text-sm transition-all",
+            "flex items-center justify-center gap-2",
+            mainTab === "ai"
+              ? "border-accent bg-accent/10 text-accent font-semibold"
+              : "border-transparent bg-secondary/40 text-muted-foreground hover:bg-secondary/70"
+          ].join(" ")}
         >
           <span style={{ fontSize: 18 }}>🧠</span>
           NanoFACS AI
-          <span style={{ background: "#7c3aed", color: "#fff", borderRadius: 20, padding: "1px 8px", fontSize: 11, fontWeight: 700 }}>
+          <span className="bg-accent text-accent-foreground rounded-full px-2 py-0.5 text-[11px] font-bold">
             Parquet
           </span>
         </button>

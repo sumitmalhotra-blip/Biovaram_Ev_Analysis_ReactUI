@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { useAnalysisStore } from "@/lib/store"
@@ -16,15 +16,17 @@ interface Activity {
   time: string
   icon: typeof FileUp
   sampleId?: string
+  sampleType?: "fcs" | "nta"
   sample?: Sample
 }
 
 interface RecentActivityProps {
   onViewSample?: (sampleId: string) => void
   onDeleteSample?: (sampleId: string) => void
+  onOpenSampleInTab?: (sampleId: string, type: "fcs" | "nta") => void
 }
 
-export function RecentActivity({ onViewSample, onDeleteSample }: RecentActivityProps) {
+export function RecentActivity({ onViewSample, onDeleteSample, onOpenSampleInTab }: RecentActivityProps) {
   const { apiSamples, processingJobs, fcsAnalysis, ntaAnalysis } = useAnalysisStore(useShallow((s) => ({
     apiSamples: s.apiSamples,
     processingJobs: s.processingJobs,
@@ -36,7 +38,7 @@ export function RecentActivity({ onViewSample, onDeleteSample }: RecentActivityP
     const items: Activity[] = []
 
     // Add activities from API samples
-    apiSamples.slice(0, 3).forEach((sample, index) => {
+    apiSamples.forEach((sample, index) => {
       if (sample.files?.fcs) {
         items.push({
           id: `fcs-${sample.id}`,
@@ -47,7 +49,8 @@ export function RecentActivity({ onViewSample, onDeleteSample }: RecentActivityP
             : `${(index + 1) * 5} minutes ago`,
           icon: FlaskConical,
           sampleId: sample.sample_id,
-          sample, 
+          sampleType: "fcs",
+          sample,
         })
       }
       if (sample.files?.nta) {
@@ -60,6 +63,7 @@ export function RecentActivity({ onViewSample, onDeleteSample }: RecentActivityP
             : `${(index + 1) * 5} minutes ago`,
           icon: Microscope,
           sampleId: sample.sample_id,
+          sampleType: "nta",
           sample,
         })
       }
@@ -113,7 +117,7 @@ export function RecentActivity({ onViewSample, onDeleteSample }: RecentActivityP
       ]
     }
 
-    return items.slice(0, 5)
+    return items
   }, [apiSamples, processingJobs, fcsAnalysis.results, ntaAnalysis.results])
 
   return (
@@ -127,15 +131,38 @@ export function RecentActivity({ onViewSample, onDeleteSample }: RecentActivityP
         </div>
       </CardHeader>
       <CardContent>
-        <div className="space-y-3 md:space-y-4">
+        <div className="space-y-3 md:space-y-4 max-h-96 overflow-y-auto pr-1">
           {activities.map((activity) => {
             const Icon = activity.icon
-            const hasActions = activity.sampleId && (onViewSample || onDeleteSample)
+            const hasActions = Boolean(activity.sampleId && (onViewSample || onDeleteSample))
+            const canOpenInTab = Boolean(onOpenSampleInTab && activity.sampleId && activity.sampleType)
+            const rowInteractive = hasActions || canOpenInTab
 
             return (
               <div
                 key={activity.id}
-                className="flex items-start gap-3 p-2 rounded-lg hover:bg-secondary/30 transition-colors group"
+                className={`flex items-start gap-3 p-2 rounded-lg hover:bg-secondary/30 transition-colors group ${
+                  rowInteractive ? "cursor-pointer" : ""
+                }`}
+                role={rowInteractive ? "button" : undefined}
+                tabIndex={rowInteractive ? 0 : undefined}
+                onClick={() => {
+                  if (canOpenInTab && activity.sampleId && activity.sampleType) {
+                    onOpenSampleInTab(activity.sampleId, activity.sampleType)
+                  }
+                }}
+                onKeyDown={(event) => {
+                  if (
+                    rowInteractive &&
+                    (event.key === "Enter" || event.key === " ") &&
+                    canOpenInTab &&
+                    activity.sampleId &&
+                    activity.sampleType
+                  ) {
+                    event.preventDefault()
+                    onOpenSampleInTab(activity.sampleId, activity.sampleType)
+                  }
+                }}
               >
                 <div
                   className={`p-1.5 rounded-lg shadow-sm ${
@@ -155,13 +182,16 @@ export function RecentActivity({ onViewSample, onDeleteSample }: RecentActivityP
                   <p className="text-xs text-muted-foreground">{activity.time}</p>
                 </div>
                 {hasActions && (
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-1">
                     {onViewSample && (
                       <Button
                         variant="ghost"
                         size="icon"
                         className="h-7 w-7"
-                        onClick={() => onViewSample(activity.sampleId!)}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          onViewSample(activity.sampleId!)
+                        }}
                         title="View details"
                       >
                         <Eye className="h-3.5 w-3.5" />
@@ -172,7 +202,10 @@ export function RecentActivity({ onViewSample, onDeleteSample }: RecentActivityP
                         variant="ghost"
                         size="icon"
                         className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => onDeleteSample(activity.sampleId!)}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          onDeleteSample(activity.sampleId!)
+                        }}
                         title="Delete sample"
                       >
                         <Trash2 className="h-3.5 w-3.5" />

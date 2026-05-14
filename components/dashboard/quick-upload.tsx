@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge"
 import { Upload, FileText, X, Loader2, AlertCircle } from "lucide-react"
 import { useAnalysisStore } from "@/lib/store"
 import { useApi } from "@/hooks/use-api"
+import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 
 export function QuickUpload() {
@@ -25,8 +26,9 @@ export function QuickUpload() {
   const [operator, setOperator] = useState("")
   const [notes, setNotes] = useState("")
   
-  const { apiConnected, addSample } = useAnalysisStore()
+  const { apiConnected } = useAnalysisStore()
   const { uploadFCS, uploadNTA } = useApi()
+  const { toast } = useToast()
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -80,17 +82,12 @@ export function QuickUpload() {
           notes: notes || undefined,
         })
       } else {
-        // Fallback to local sample storage for unsupported formats
-        addSample({
-          id: crypto.randomUUID(),
-          name: uploadedFile.name,
-          type: isFCS ? "fcs" : "nta",
-          uploadedAt: new Date(),
-          treatment: treatment,
-          concentration: concentration ? parseFloat(concentration) : undefined,
-          operator: operator,
-          notes: notes,
+        toast({
+          variant: "destructive",
+          title: "Unsupported file format",
+          description: "Dashboard upload supports only .fcs, .txt, or .csv files.",
         })
+        return
       }
 
       // Reset form
@@ -134,20 +131,20 @@ export function QuickUpload() {
                 : "border-border hover:border-primary/50 hover:bg-secondary/30 hover:shadow-md",
             )}
           >
-            <input
-              type="file"
-              id="file-upload"
-              className="hidden"
-              accept=".fcs,.csv,.txt,.xlsx,.parquet"
-              onChange={handleFileSelect}
-            />
+              <input
+                type="file"
+                id="file-upload"
+                className="hidden"
+                accept=".fcs,.csv,.txt"
+                onChange={handleFileSelect}
+              />
             <label htmlFor="file-upload" className="cursor-pointer">
               <div className="flex flex-col items-center gap-2">
                 <div className="p-3 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 shadow-lg">
                   <FileText className="h-6 w-6 text-primary" />
                 </div>
                 <p className="text-sm font-medium">Drop files here or click to browse</p>
-                <p className="text-xs text-muted-foreground">.fcs, .csv, .txt, .xlsx, .parquet</p>
+                <p className="text-xs text-muted-foreground">.fcs, .csv, .txt</p>
               </div>
             </label>
           </div>

@@ -101,10 +101,13 @@ export function useApi() {
       setApiConnected(true)
       setLastHealthCheck(new Date())
       return true
-    } catch {
-      // Silently handle - backend is offline
-      setApiConnected(false)
-      return false
+    } catch (error) {
+      // Only mark offline for actual network/timeout errors to avoid flapping.
+      if (isNetworkError(error) || isTimeoutError(error)) {
+        setApiConnected(false)
+        return false
+      }
+      return true
     } finally {
       setApiChecking(false)
     }
@@ -141,7 +144,7 @@ export function useApi() {
   const userId = undefined
 
   const fetchSamples = useCallback(
-    async (params?: { treatment?: string; qc_status?: string; processing_status?: string }) => {
+    async (params?: { skip?: number; limit?: number; treatment?: string; qc_status?: string; processing_status?: string }) => {
       // Don't fetch if we know the API is offline
       if (apiClient.offline) {
         return []
@@ -153,7 +156,15 @@ export function useApi() {
       try {
         // Include user_id to only fetch samples owned by the current user
         const response = await retryWithBackoff(
-          () => apiClient.listSamples({ ...params, user_id: userId }),
+          () =>
+            apiClient.listSamples({
+              skip: params?.skip ?? 0,
+              limit: params?.limit ?? 1000,
+              treatment: params?.treatment,
+              qc_status: params?.qc_status,
+              processing_status: params?.processing_status,
+              user_id: userId,
+            }),
           {
             maxAttempts: 3,
             onRetry: (error, attempt) => {

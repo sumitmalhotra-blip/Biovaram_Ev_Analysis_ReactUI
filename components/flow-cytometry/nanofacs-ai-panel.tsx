@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * NanoFACS AI Panel — Clean White Version
+ * NanoFACS AI Panel — Theme-aligned version
  * 
  * Covers Parvesh's 4 requirements:
  * 
@@ -69,6 +69,21 @@ interface AIResult {
   summary: string
   data_stats: Record<string, FileStats>
   analyzed_files: string[]
+  consistency_check?: {
+    verdict: "match" | "partial_match" | "mismatch" | "insufficient_evidence" | string
+    summary: string
+    ai_statement?: string
+    checks: Array<{
+      file: string
+      metric: string
+      code_value: number | null
+      ai_value: number | null
+      percent_delta: number | null
+      verdict: "match" | "partial_match" | "mismatch" | "insufficient_evidence" | string
+      note: string
+    }>
+    counts?: Record<string, number>
+  }
 }
 
 interface Mismatch {
@@ -368,7 +383,7 @@ export function NanoFACSAIPanel({
   if (!filesChecked) {
     return (
       <div style={s.card}>
-        <div style={{textAlign: "center", padding: "40px 20px", color: "#6b7280"}}>
+        <div style={{textAlign: "center", padding: "40px 20px", color: "var(--muted-foreground)"}}>
           <p style={{fontSize: 14}}>Loading available parquet files…</p>
           <p style={{fontSize: 12, marginTop: 8}}>This may take a few seconds.</p>
         </div>
@@ -379,12 +394,12 @@ export function NanoFACSAIPanel({
   if (!filePaths.length && allFiles.length === 0) {
     return (
       <div style={s.card}>
-        <div style={{textAlign: "center", padding: "40px 20px", color: "#6b7280"}}>
-          <p style={{fontSize: 15, fontWeight: 600, color: "#374151", marginBottom: 8}}>No parquet files available</p>
+        <div style={{textAlign: "center", padding: "40px 20px", color: "var(--muted-foreground)"}}>
+          <p style={{fontSize: 15, fontWeight: 600, color: "var(--card-foreground)", marginBottom: 8}}>No parquet files available</p>
           <p style={{fontSize: 13, marginBottom: 16}}>
             Upload an FCS file on the <strong>FCS Analysis</strong> tab — a parquet file is generated automatically and will appear here.
           </p>
-          <p style={{fontSize: 12, color: "#9ca3af"}}>
+          <p style={{fontSize: 12, color: "var(--muted-foreground)"}}>
             Or upload a <code>.fcs.parquet</code> file directly using the button below.
           </p>
           <div style={{marginTop: 16}}>
@@ -399,7 +414,7 @@ export function NanoFACSAIPanel({
                 disabled={uploading}
               />
             </label>
-            {uploadMsg && <p style={{fontSize: 12, color: "#059669", marginTop: 8}}>{uploadMsg}</p>}
+            {uploadMsg && <p style={{fontSize: 12, color: "#10b981", marginTop: 8}}>{uploadMsg}</p>}
           </div>
         </div>
       </div>
@@ -450,18 +465,18 @@ export function NanoFACSAIPanel({
                   disabled={uploading}
                 />
               </label>
-              {uploadMsg && <span style={{ fontSize: 11, color: "#059669" }}>{uploadMsg}</span>}
+              {uploadMsg && <span style={{ fontSize: 11, color: "#10b981" }}>{uploadMsg}</span>}
             </div>
             {allFiles.map((f, i) => {
               const match = f.name.match(/[A-Z0-9]+_\d+kDa_(\w+)_size/)
               const shortLabel = match ? match[1] : f.name.split("_").slice(1, 3).join("_")
               const checked = selectedPaths.has(f.path)
               return (
-                <div key={i} onClick={() => toggleFile(f.path)} style={{ ...s.pickerRow, background: checked ? "#eff6ff" : "#fff", borderColor: checked ? "#bfdbfe" : "#e5e7eb" }}>
+                <div key={i} onClick={() => toggleFile(f.path)} style={{ ...s.pickerRow, background: checked ? "rgba(59,130,246,0.18)" : "var(--card)", borderColor: checked ? "rgba(59,130,246,0.45)" : "var(--border)" }}>
                   <input type="checkbox" readOnly checked={checked} style={{ marginRight: 8, cursor: "pointer" }} />
-                  <span style={{ ...s.fractionBadge, background: checked ? "#2563eb" : "#9ca3af" }}>{shortLabel}</span>
+                  <span style={{ ...s.fractionBadge, background: checked ? "#2563eb" : "var(--muted-foreground)" }}>{shortLabel}</span>
                   <span style={s.fileName2}>{f.name.replace(".fcs.parquet", "")}</span>
-                  <span style={{ fontSize: 10, color: "#9ca3af", marginLeft: "auto", flexShrink: 0 }}>{f.folder}</span>
+                  <span style={{ fontSize: 10, color: "var(--muted-foreground)", marginLeft: "auto", flexShrink: 0 }}>{f.folder}</span>
                 </div>
               )
             })}
@@ -525,9 +540,51 @@ export function NanoFACSAIPanel({
                 <p style={s.aiBannerText}>{result.summary}</p>
               </div>
 
+              {/* ── Explicit code-vs-AI consistency check ── */}
+              {result.consistency_check && (
+                <Section
+                  title={`Code vs AI Consistency — ${result.consistency_check.verdict.replace(/_/g, " ").toUpperCase()}`}
+                  color={
+                    result.consistency_check.verdict === "match"
+                      ? "#059669"
+                      : result.consistency_check.verdict === "partial_match"
+                      ? "#d97706"
+                      : result.consistency_check.verdict === "mismatch"
+                      ? "#dc2626"
+                      : "var(--muted-foreground)"
+                  }
+                  bg={
+                    result.consistency_check.verdict === "match"
+                      ? "rgba(16,185,129,0.14)"
+                      : result.consistency_check.verdict === "partial_match"
+                      ? "rgba(245,158,11,0.14)"
+                      : result.consistency_check.verdict === "mismatch"
+                      ? "rgba(239,68,68,0.14)"
+                      : "var(--secondary)"
+                  }
+                >
+                  <div style={{ ...s.bulletRow, fontWeight: 600 }}>
+                    {result.consistency_check.summary}
+                  </div>
+                  {result.consistency_check.ai_statement && (
+                    <div style={{ ...s.bulletRow, color: "var(--muted-foreground)", fontStyle: "italic" }}>
+                      {result.consistency_check.ai_statement}
+                    </div>
+                  )}
+                  {result.consistency_check.checks?.slice(0, 12).map((check, i) => (
+                    <div key={i} style={{ ...s.bulletRow, fontSize: 12 }}>
+                      <span style={{ fontWeight: 600 }}>[{check.file.split("/").pop()}]</span>{" "}
+                      {check.metric}: AI={check.ai_value ?? "N/A"} · Code={check.code_value ?? "N/A"} ·{" "}
+                      <span style={{ fontWeight: 600 }}>{check.verdict.replace(/_/g, " ")}</span>
+                      {typeof check.percent_delta === "number" ? ` (${check.percent_delta}% delta)` : ""}
+                    </div>
+                  ))}
+                </Section>
+              )}
+
               {/* ── Data Quality Flags (AI + rule-based anomalies) ── */}
               {result.anomalies.length > 0 && (
-                <Section title={`Data Quality Flags (${result.anomalies.length})`} color="#dc2626" bg="#fef2f2">
+                <Section title={`Data Quality Flags (${result.anomalies.length})`} color="#dc2626" bg="rgba(239,68,68,0.14)">
                   {result.anomalies.map((a, i) => (
                     <div key={i} style={s.bulletRow}><span style={{color:"#dc2626"}}>⚠</span> {a}</div>
                   ))}
@@ -536,7 +593,7 @@ export function NanoFACSAIPanel({
 
               {/* ── AI Recommendations ── */}
               {result.suggestions && result.suggestions.length > 0 && (
-                <Section title="AI Recommendations" color="#7c3aed" bg="#f5f3ff">
+                <Section title="AI Recommendations" color="#a855f7" bg="rgba(168,85,247,0.14)">
                   {result.suggestions.map((rec, i) => (
                     <div key={i} style={s.bulletRow}><span style={{color:"#7c3aed"}}>→</span> {rec}</div>
                   ))}
@@ -545,7 +602,7 @@ export function NanoFACSAIPanel({
 
               {/* ── Parameters Worth Investigating ── */}
               {result.missed_parameters && result.missed_parameters.length > 0 && (
-                <Section title="Parameters Worth Investigating" color="#d97706" bg="#fffbeb">
+                <Section title="Parameters Worth Investigating" color="#f59e0b" bg="rgba(245,158,11,0.14)">
                   {result.missed_parameters.map((p, i) => (
                     <div key={i} style={s.bulletRow}><span style={{color:"#d97706"}}>•</span> {p}</div>
                   ))}
@@ -601,15 +658,15 @@ export function NanoFACSAIPanel({
 
               {/* Suggested Graphs — the most important section */}
               {result.suggested_graphs.length > 0 && (
-                <Section title="Recommended Graphs" color="#059669" bg="#f0fdf4">
+                <Section title="Recommended Graphs" color="#10b981" bg="rgba(16,185,129,0.14)">
                   {result.suggested_graphs.map((g, i) => {
                     const [name, desc] = g.split(" — ")
                     return (
                       <div key={i} style={s.graphRow}>
                         <div style={s.graphNum}>{i + 1}</div>
                         <div>
-                          <div style={{ fontWeight: 600, fontSize: 13, color: "#111" }}>{name}</div>
-                          {desc && <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>{desc}</div>}
+                          <div style={{ fontWeight: 600, fontSize: 13, color: "var(--card-foreground)" }}>{name}</div>
+                          {desc && <div style={{ fontSize: 12, color: "var(--muted-foreground)", marginTop: 2 }}>{desc}</div>}
                         </div>
                       </div>
                     )
@@ -619,7 +676,7 @@ export function NanoFACSAIPanel({
 
               {/* Cluster findings — unexpected movement */}
               {result.cluster_findings.length > 0 && (
-                <Section title="Cluster Findings" color="#2563eb" bg="#eff6ff">
+                <Section title="Cluster Findings" color="#3b82f6" bg="rgba(59,130,246,0.14)">
                   {result.cluster_findings.map((c, i) => (
                     <div key={i} style={s.bulletRow}>• {c}</div>
                   ))}
@@ -628,7 +685,7 @@ export function NanoFACSAIPanel({
 
               {/* AI Analysis Recommendations */}
               {result.suggestions && result.suggestions.length > 0 && (
-                <Section title="AI Analysis Recommendations" color="#7c3aed" bg="#f5f3ff">
+                <Section title="AI Analysis Recommendations" color="#a855f7" bg="rgba(168,85,247,0.14)">
                   {result.suggestions.map((rec, i) => (
                     <div key={i} style={s.bulletRow}><span style={{color:"#7c3aed"}}>→</span> {rec}</div>
                   ))}
@@ -654,11 +711,11 @@ export function NanoFACSAIPanel({
                   }
                 })
                 return (
-                  <Section title="Anomalies / Sample Shifts" color="#dc2626" bg="#fef2f2">
+                  <Section title="Anomalies / Sample Shifts" color="#dc2626" bg="rgba(239,68,68,0.14)">
                     {Object.entries(fileAnomalies).map(([msg, files], i) => (
                       <div key={i} style={s.bulletRow}>
                         <span style={{color:"#dc2626"}}>⚠</span>&nbsp;
-                        <span style={{color:"#6b7280",fontSize:11}}>[{files.join(", ")}]</span>&nbsp;{msg}
+                        <span style={{color:"var(--muted-foreground)",fontSize:11}}>[{files.join(", ")}]</span>&nbsp;{msg}
                       </div>
                     ))}
                     {genericAnomalies.map((a, i) => (
@@ -702,22 +759,22 @@ export function NanoFACSAIPanel({
               {/* Mismatches — the key output */}
               {(compareResult.mismatches?.length ?? 0) > 0 && (
                 <div style={{ marginBottom: 16 }}>
-                  <div style={{ fontWeight: 600, color: "#dc2626", fontSize: 13, marginBottom: 8 }}>
+                  <div style={{ fontWeight: 600, color: "#ef4444", fontSize: 13, marginBottom: 8 }}>
                     Parameter Mismatches ({compareResult.mismatches.length})
                   </div>
                   {compareResult.mismatches.map((m, i) => (
                     <div key={i} style={s.mismatchRow}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <span style={{ fontWeight: 700, fontSize: 14, color: "#111" }}>{m.parameter}</span>
+                        <span style={{ fontWeight: 700, fontSize: 14, color: "var(--card-foreground)" }}>{m.parameter}</span>
                         <span style={{
                           fontSize: 12, fontWeight: 700, padding: "2px 8px", borderRadius: 20,
-                          background: m.severity === "high" ? "#fef2f2" : "#fffbeb",
-                          color: m.severity === "high" ? "#dc2626" : "#d97706"
+                          background: m.severity === "high" ? "rgba(239,68,68,0.16)" : "rgba(245,158,11,0.16)",
+                          color: m.severity === "high" ? "#ef4444" : "#f59e0b"
                         }}>
                           {m.percent_difference}% diff · {m.severity.toUpperCase()}
                         </span>
                       </div>
-                      <p style={{ fontSize: 12, color: "#6b7280", margin: "6px 0 4px" }}>{m.message}</p>
+                      <p style={{ fontSize: 12, color: "var(--muted-foreground)", margin: "6px 0 4px" }}>{m.message}</p>
                       <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 6 }}>
                         {Object.entries(m.values).map(([file, val]) => (
                           <span key={file} style={s.valueChip}>
@@ -733,7 +790,7 @@ export function NanoFACSAIPanel({
               {/* Matching fields */}
               {(compareResult.matching_fields?.length ?? 0) > 0 && (
                 <div style={{ marginBottom: 16 }}>
-                  <div style={{ fontWeight: 600, color: "#059669", fontSize: 13, marginBottom: 8 }}>
+                  <div style={{ fontWeight: 600, color: "#10b981", fontSize: 13, marginBottom: 8 }}>
                     Matching Parameters ✓
                   </div>
                   <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 8 }}>
@@ -746,7 +803,7 @@ export function NanoFACSAIPanel({
 
               {/* Cluster comparison */}
               {(compareResult.cluster_comparison?.length ?? 0) > 0 && (
-                <Section title="Cluster Comparison" color="#2563eb" bg="#eff6ff">
+                <Section title="Cluster Comparison" color="#3b82f6" bg="rgba(59,130,246,0.14)">
                   {compareResult.cluster_comparison.map((c, i) => (
                     <div key={i} style={{ ...s.bulletRow, fontSize: 12 }}>
                       • {c.split("/").pop()}
@@ -776,7 +833,7 @@ export function NanoFACSAIPanel({
           <div style={s.chatBox}>
             {messages.length === 0 && (
               <div style={{ textAlign: "center" as const, paddingTop: 20 }}>
-                <p style={{ color: "#9ca3af", fontSize: 13, marginBottom: 12 }}>Try asking:</p>
+                <p style={{ color: "var(--muted-foreground)", fontSize: 13, marginBottom: 12 }}>Try asking:</p>
                 {[
                   "What is the median particle size?",
                   "Are there any unusual clusters?",
@@ -825,10 +882,10 @@ export function NanoFACSAIPanel({
 
 function StatBox({ label, value, unit, color }: { label: string; value: string | number; unit: string; color: string }) {
   return (
-    <div style={{ background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 8, padding: "12px 16px" }}>
-      <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 500, textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>{label}</div>
+    <div style={{ background: "var(--secondary)", border: "1px solid var(--border)", borderRadius: 8, padding: "12px 16px" }}>
+      <div style={{ fontSize: 11, color: "var(--muted-foreground)", fontWeight: 500, textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>{label}</div>
       <div style={{ fontSize: 22, fontWeight: 700, color, margin: "4px 0 2px", fontVariantNumeric: "tabular-nums" }}>{value}</div>
-      <div style={{ fontSize: 11, color: "#9ca3af" }}>{unit}</div>
+      <div style={{ fontSize: 11, color: "var(--muted-foreground)" }}>{unit}</div>
     </div>
   )
 }
@@ -839,7 +896,7 @@ function Section({ title, color, bg, children }: { title: string; color: string;
     <div style={{ background: bg, borderRadius: 8, marginBottom: 12, overflow: "hidden" }}>
       <button
         onClick={() => setOpen(!open)}
-        style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: "none", border: "none", cursor: "pointer" }}
+        style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: "transparent", border: "none", cursor: "pointer" }}
       >
         <span style={{ fontWeight: 600, color, fontSize: 13 }}>{title}</span>
         <span style={{ color, fontSize: 12 }}>{open ? "▲" : "▼"}</span>
@@ -850,64 +907,64 @@ function Section({ title, color, bg, children }: { title: string; color: string;
 }
 
 function Spinner({ text }: { text: string }) {
-  return <p style={{ color: "#6b7280", textAlign: "center" as const, padding: "24px 0", fontSize: 14 }}>⏳ {text}</p>
+  return <p style={{ color: "var(--muted-foreground)", textAlign: "center" as const, padding: "24px 0", fontSize: 14 }}>⏳ {text}</p>
 }
 
 function ErrBox({ msg }: { msg: string }) {
-  return <p style={{ color: "#dc2626", background: "#fef2f2", padding: 12, borderRadius: 8, fontSize: 13 }}>{msg}</p>
+  return <p style={{ color: "#ef4444", background: "rgba(239,68,68,0.14)", border: "1px solid rgba(239,68,68,0.3)", padding: 12, borderRadius: 8, fontSize: 13 }}>{msg}</p>
 }
 
 // ─── Styles ────────────────────────────────────────────────────────────────────
 
 const s = {
   card: {
-    background: "#ffffff",
-    border: "1px solid #e5e7eb",
+    background: "var(--card)",
+    border: "1px solid var(--border)",
     borderRadius: 12,
     padding: 24,
     marginTop: 24,
     fontFamily: "'DM Sans', system-ui, sans-serif",
-    color: "#111827",
+    color: "var(--card-foreground)",
   },
   headerRow: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 },
-  title: { fontSize: 17, fontWeight: 700, color: "#111827" },
-  subtitle: { fontSize: 12, color: "#9ca3af", marginTop: 2 },
-  pill: { background: "#f3f4f6", borderRadius: 20, padding: "3px 12px", fontSize: 12, color: "#6b7280", fontWeight: 500, whiteSpace: "nowrap" as const },
-  fileList: { background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 8, padding: "10px 14px", marginTop: 12, marginBottom: 4, display: "flex", flexDirection: "column" as const, gap: 5 },
-  fileListLabel: { fontSize: 11, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: 4 },
-  btnChange: { background: "none", border: "1px solid #d1d5db", borderRadius: 6, padding: "3px 10px", fontSize: 11, color: "#374151", cursor: "pointer", fontWeight: 500 } as React.CSSProperties,
-  pickerBox: { background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 8, padding: 12, marginBottom: 8 },
+  title: { fontSize: 17, fontWeight: 700, color: "var(--card-foreground)" },
+  subtitle: { fontSize: 12, color: "var(--muted-foreground)", marginTop: 2 },
+  pill: { background: "var(--secondary)", borderRadius: 20, padding: "3px 12px", fontSize: 12, color: "var(--muted-foreground)", fontWeight: 500, whiteSpace: "nowrap" as const },
+  fileList: { background: "var(--secondary)", border: "1px solid var(--border)", borderRadius: 8, padding: "10px 14px", marginTop: 12, marginBottom: 4, display: "flex", flexDirection: "column" as const, gap: 5 },
+  fileListLabel: { fontSize: 11, fontWeight: 600, color: "var(--muted-foreground)", textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: 4 },
+  btnChange: { background: "var(--card)", border: "1px solid var(--border)", borderRadius: 6, padding: "3px 10px", fontSize: 11, color: "var(--card-foreground)", cursor: "pointer", fontWeight: 500 } as React.CSSProperties,
+  pickerBox: { background: "var(--secondary)", border: "1px solid var(--border)", borderRadius: 8, padding: 12, marginBottom: 8 },
   pickerRow: { display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 6, border: "1px solid", marginBottom: 6, cursor: "pointer" },
-  btnTiny: { background: "#f3f4f6", border: "1px solid #e5e7eb", borderRadius: 4, padding: "2px 8px", fontSize: 11, color: "#374151", cursor: "pointer" } as React.CSSProperties,
-  btnUpload: { background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 4, padding: "2px 8px", fontSize: 11, color: "#15803d", cursor: "pointer", fontWeight: 600 } as React.CSSProperties,
+  btnTiny: { background: "var(--card)", border: "1px solid var(--border)", borderRadius: 4, padding: "2px 8px", fontSize: 11, color: "var(--card-foreground)", cursor: "pointer" } as React.CSSProperties,
+  btnUpload: { background: "rgba(16,185,129,0.15)", border: "1px solid rgba(16,185,129,0.45)", borderRadius: 4, padding: "2px 8px", fontSize: 11, color: "#10b981", cursor: "pointer", fontWeight: 600 } as React.CSSProperties,
   fileChip: { display: "flex", alignItems: "center", gap: 8 },
-  fractionBadge: { background: "#2563eb", color: "#fff", borderRadius: 4, padding: "1px 7px", fontSize: 11, fontWeight: 700, flexShrink: 0, whiteSpace: "nowrap" as const },
-  fileName2: { fontSize: 11, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const },
-  tabRow: { display: "flex", gap: 0, borderBottom: "1px solid #e5e7eb", marginBottom: 20, marginTop: 16 },
-  tabOn: { padding: "8px 18px", border: "none", borderBottom: "2px solid #2563eb", background: "none", cursor: "pointer", fontWeight: 600, color: "#2563eb", fontSize: 13 } as React.CSSProperties,
-  tabOff: { padding: "8px 18px", border: "none", borderBottom: "2px solid transparent", background: "none", cursor: "pointer", fontWeight: 400, color: "#6b7280", fontSize: 13 } as React.CSSProperties,
+  fractionBadge: { background: "#2563eb", color: "white", borderRadius: 4, padding: "1px 7px", fontSize: 11, fontWeight: 700, flexShrink: 0, whiteSpace: "nowrap" as const },
+  fileName2: { fontSize: 11, color: "var(--muted-foreground)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const },
+  tabRow: { display: "flex", gap: 0, borderBottom: "1px solid var(--border)", marginBottom: 20, marginTop: 16 },
+  tabOn: { padding: "8px 18px", border: "none", borderBottom: "2px solid #3b82f6", background: "transparent", cursor: "pointer", fontWeight: 600, color: "#60a5fa", fontSize: 13 } as React.CSSProperties,
+  tabOff: { padding: "8px 18px", border: "none", borderBottom: "2px solid transparent", background: "transparent", cursor: "pointer", fontWeight: 400, color: "var(--muted-foreground)", fontSize: 13 } as React.CSSProperties,
   emptyState: { textAlign: "center" as const, padding: "24px 0" },
-  hint: { color: "#6b7280", fontSize: 13, marginBottom: 10 },
-  apiNote: { background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 6, padding: "8px 12px", fontSize: 11, color: "#6b7280", marginBottom: 16, textAlign: "left" as const, lineHeight: 1.8 },
-  btnBlue: { background: "#2563eb", color: "#fff", border: "none", borderRadius: 8, padding: "10px 22px", fontSize: 13, fontWeight: 600, cursor: "pointer" } as React.CSSProperties,
-  btnGray: { background: "#f3f4f6", color: "#374151", border: "none", borderRadius: 8, padding: "8px 18px", fontSize: 13, fontWeight: 500, cursor: "pointer", marginTop: 8 } as React.CSSProperties,
-  fileCard: { border: "1px solid #e5e7eb", borderRadius: 8, padding: 16, marginBottom: 16 },
-  fileName: { fontSize: 11, color: "#6b7280", marginBottom: 12, fontWeight: 500, wordBreak: "break-all" as const },
+  hint: { color: "var(--muted-foreground)", fontSize: 13, marginBottom: 10 },
+  apiNote: { background: "var(--secondary)", border: "1px solid var(--border)", borderRadius: 6, padding: "8px 12px", fontSize: 11, color: "var(--muted-foreground)", marginBottom: 16, textAlign: "left" as const, lineHeight: 1.8 },
+  btnBlue: { background: "var(--primary)", color: "var(--primary-foreground)", border: "none", borderRadius: 8, padding: "10px 22px", fontSize: 13, fontWeight: 600, cursor: "pointer" } as React.CSSProperties,
+  btnGray: { background: "var(--secondary)", color: "var(--card-foreground)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 18px", fontSize: 13, fontWeight: 500, cursor: "pointer", marginTop: 8 } as React.CSSProperties,
+  fileCard: { border: "1px solid var(--border)", borderRadius: 8, padding: 16, marginBottom: 16, background: "var(--card)" },
+  fileName: { fontSize: 11, color: "var(--muted-foreground)", marginBottom: 12, fontWeight: 500, wordBreak: "break-all" as const },
   statGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10 },
-  summaryBox: { background: "#f9fafb", borderRadius: 8, padding: 14, fontSize: 13, color: "#374151", fontStyle: "italic" as const, marginBottom: 16, lineHeight: 1.6 },
-  aiBanner: { background: "linear-gradient(135deg, #eff6ff 0%, #f5f3ff 100%)", border: "1px solid #c7d2fe", borderRadius: 10, padding: "14px 18px", marginBottom: 16 },
-  aiBannerLabel: { fontSize: 11, fontWeight: 700, color: "#4f46e5", textTransform: "uppercase" as const, letterSpacing: "0.08em", marginBottom: 6 },
-  aiBannerText: { fontSize: 13, color: "#1e1b4b", lineHeight: 1.65, margin: 0 },
-  sectionLabel: { fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase" as const, letterSpacing: "0.06em", margin: "18px 0 10px" },
+  summaryBox: { background: "var(--secondary)", border: "1px solid var(--border)", borderRadius: 8, padding: 14, fontSize: 13, color: "var(--card-foreground)", fontStyle: "italic" as const, marginBottom: 16, lineHeight: 1.6 },
+  aiBanner: { background: "linear-gradient(135deg, rgba(59,130,246,0.18) 0%, rgba(168,85,247,0.18) 100%)", border: "1px solid rgba(99,102,241,0.35)", borderRadius: 10, padding: "14px 18px", marginBottom: 16 },
+  aiBannerLabel: { fontSize: 11, fontWeight: 700, color: "#a5b4fc", textTransform: "uppercase" as const, letterSpacing: "0.08em", marginBottom: 6 },
+  aiBannerText: { fontSize: 13, color: "var(--card-foreground)", lineHeight: 1.65, margin: 0 },
+  sectionLabel: { fontSize: 11, fontWeight: 700, color: "var(--muted-foreground)", textTransform: "uppercase" as const, letterSpacing: "0.06em", margin: "18px 0 10px" },
   graphRow: { display: "flex", gap: 10, marginBottom: 10, alignItems: "flex-start" },
-  graphNum: { background: "#059669", color: "#fff", borderRadius: "50%", width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 },
-  bulletRow: { fontSize: 13, color: "#374151", marginBottom: 6, lineHeight: 1.5 },
-  mismatchRow: { background: "#fff", border: "1px solid #fecaca", borderRadius: 8, padding: 12, marginBottom: 10 },
-  valueChip: { background: "#f3f4f6", borderRadius: 4, padding: "2px 8px", fontSize: 11, color: "#374151" },
-  matchChip: { background: "#dcfce7", color: "#15803d", borderRadius: 20, padding: "3px 12px", fontSize: 12 },
-  chatBox: { minHeight: 160, maxHeight: 300, overflowY: "auto" as const, border: "1px solid #e5e7eb", borderRadius: 8, padding: 12, marginBottom: 8 },
-  suggestion: { color: "#2563eb", fontSize: 13, cursor: "pointer", marginBottom: 8 },
-  bubbleUser: { background: "#2563eb", color: "#fff", padding: "8px 14px", borderRadius: "12px 12px 0 12px", fontSize: 13, maxWidth: "80%", lineHeight: 1.5 },
-  bubbleAI: { background: "#f3f4f6", color: "#111", padding: "8px 14px", borderRadius: "12px 12px 12px 0", fontSize: 13, maxWidth: "80%", lineHeight: 1.5 },
-  input: { flex: 1, padding: "10px 14px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 13, outline: "none", color: "#111", background: "#fff" } as React.CSSProperties,
+  graphNum: { background: "#10b981", color: "white", borderRadius: "50%", width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 },
+  bulletRow: { fontSize: 13, color: "var(--card-foreground)", marginBottom: 6, lineHeight: 1.5 },
+  mismatchRow: { background: "var(--secondary)", border: "1px solid rgba(239,68,68,0.35)", borderRadius: 8, padding: 12, marginBottom: 10 },
+  valueChip: { background: "var(--card)", border: "1px solid var(--border)", borderRadius: 4, padding: "2px 8px", fontSize: 11, color: "var(--card-foreground)" },
+  matchChip: { background: "rgba(16,185,129,0.16)", color: "#10b981", border: "1px solid rgba(16,185,129,0.35)", borderRadius: 20, padding: "3px 12px", fontSize: 12 },
+  chatBox: { minHeight: 160, maxHeight: 300, overflowY: "auto" as const, border: "1px solid var(--border)", borderRadius: 8, padding: 12, marginBottom: 8, background: "var(--secondary)" },
+  suggestion: { color: "#60a5fa", fontSize: 13, cursor: "pointer", marginBottom: 8 },
+  bubbleUser: { background: "#2563eb", color: "white", padding: "8px 14px", borderRadius: "12px 12px 0 12px", fontSize: 13, maxWidth: "80%", lineHeight: 1.5 },
+  bubbleAI: { background: "var(--card)", color: "var(--card-foreground)", border: "1px solid var(--border)", padding: "8px 14px", borderRadius: "12px 12px 12px 0", fontSize: 13, maxWidth: "80%", lineHeight: 1.5 },
+  input: { flex: 1, padding: "10px 14px", border: "1px solid var(--border)", borderRadius: 8, fontSize: 13, outline: "none", color: "var(--card-foreground)", background: "var(--card)" } as React.CSSProperties,
 }

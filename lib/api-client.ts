@@ -1228,7 +1228,10 @@ class ApiClient {
       });
 
       if (!apiProbe.ok) {
-        throw new Error(`API probe failed with status ${apiProbe.status}`);
+        // Backend responded but the probe failed (auth/permission/route issues).
+        // Treat as reachable to avoid flapping the offline indicator.
+        this.isOffline = false;
+        return { status: "degraded" };
       }
 
       // Health endpoint remains optional/diagnostic, but API route probe is authoritative.
