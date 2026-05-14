@@ -25,9 +25,6 @@ extraResources:
 #   ransomware detectors due to its packing pattern.
 win:
   signAndEditExecutable: true
-  # Must match the code-signing certificate subject for SmartScreen reputation.
-  publisherName:
-    - BioVaram CRM IT
   verifyUpdateCodeSignature: true
   legalTrademarks: BioVaram EV Analysis Platform
   target:
