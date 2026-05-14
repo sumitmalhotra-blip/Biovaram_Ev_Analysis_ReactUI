@@ -155,9 +155,10 @@ if ($release.draft) {
     }
 }
 
-$uploadBase = ((@($release.upload_url)[0]).Split('{')[0]).Trim()
-if (-not $uploadBase) {
-    throw "Could not resolve upload URL from release object."
+$uploadUrl = if ($release.upload_url -is [string]) { $release.upload_url } else { [string]($release.upload_url) }
+$uploadBase = ($uploadUrl.Split('{')[0]).Trim()
+if (-not $uploadBase -or -not $uploadBase.StartsWith("https://")) {
+    throw "Could not resolve upload URL from release object. Got: '$uploadBase'"
 }
 
 $assets = @($release.assets)
