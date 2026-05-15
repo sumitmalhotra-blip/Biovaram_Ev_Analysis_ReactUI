@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <radialGradient id="ntaBg" cx="45%" cy="40%" r="65%">
+      <stop offset="0%" stop-color="#3b1f6e"/>
+      <stop offset="100%" stop-color="#160d2d"/>
+    </radialGradient>
+    <radialGradient id="ntaGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#a855f7" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#a855f7" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="p1" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#f0abfc"/>
+      <stop offset="60%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#7c3aed" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="p2" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#e9d5ff"/>
+      <stop offset="55%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#7c3aed" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="p3" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#e9d5ff"/>
+      <stop offset="50%" stop-color="#9333ea"/>
+      <stop offset="100%" stop-color="#6d28d9" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="laser" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#c084fc" stop-opacity="0"/>
+      <stop offset="40%" stop-color="#c084fc" stop-opacity="0.6"/>
+      <stop offset="60%" stop-color="#c084fc" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#c084fc" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="200" height="200" fill="url(#ntaBg)"/>
+
+  <!-- Ambient field glow -->
+  <ellipse cx="95" cy="82" rx="75" ry="55" fill="url(#ntaGlow)"/>
+
+  <!-- Laser beam diagonal -->
+  <rect x="-10" y="57" width="220" height="5" rx="2.5"
+        transform="rotate(-14 100 60)" fill="url(#laser)" opacity="0.5"/>
+  <rect x="-10" y="59" width="220" height="1.5" rx="0.75"
+        transform="rotate(-14 100 61)" fill="#d8b4fe" opacity="0.35"/>
+
+  <!-- Particle tracks (Brownian motion) -->
+  <polyline points="28,90 37,84 46,78 54,73" stroke="#c084fc" stroke-width="1.1"
+            stroke-opacity="0.45" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="86,44 93,47 101,51" stroke="#c084fc" stroke-width="0.9"
+            stroke-opacity="0.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="130,97 137,91 144,86" stroke="#c084fc" stroke-width="0.85"
+            stroke-opacity="0.35" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="60,118 67,114 74,111" stroke="#c084fc" stroke-width="0.8"
+            stroke-opacity="0.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Large particle -->
+  <circle cx="54" cy="73" r="15" fill="url(#p1)" fill-opacity="0.55"/>
+  <circle cx="54" cy="73" r="9"  fill="#9333ea" fill-opacity="0.75"/>
+  <circle cx="54" cy="73" r="5"  fill="#c084fc"/>
+  <circle cx="54" cy="73" r="2"  fill="white" fill-opacity="0.85"/>
+
+  <!-- Medium particle 1 -->
+  <circle cx="101" cy="51" r="10" fill="url(#p2)" fill-opacity="0.5"/>
+  <circle cx="101" cy="51" r="6"  fill="#9333ea" fill-opacity="0.7"/>
+  <circle cx="101" cy="51" r="2.8" fill="#d8b4fe"/>
+
+  <!-- Medium particle 2 -->
+  <circle cx="144" cy="86" r="8.5" fill="url(#p3)" fill-opacity="0.45"/>
+  <circle cx="144" cy="86" r="5"   fill="#9333ea" fill-opacity="0.65"/>
+  <circle cx="144" cy="86" r="2.2" fill="#d8b4fe"/>
+
+  <!-- Small particles -->
+  <circle cx="74"  cy="111" r="5.5" fill="#7c3aed" fill-opacity="0.5"/>
+  <circle cx="74"  cy="111" r="2.8" fill="#c084fc" fill-opacity="0.85"/>
+  <circle cx="157" cy="57"  r="4.5" fill="#7c3aed" fill-opacity="0.45"/>
+  <circle cx="157" cy="57"  r="2"   fill="#c084fc" fill-opacity="0.8"/>
+
+  <!-- Tiny particles -->
+  <circle cx="36"  cy="122" r="2.5" fill="#9333ea" fill-opacity="0.4"/>
+  <circle cx="122" cy="103" r="3"   fill="#9333ea" fill-opacity="0.4"/>
+  <circle cx="170" cy="78"  r="1.8" fill="#9333ea" fill-opacity="0.35"/>
+  <circle cx="28"  cy="57"  r="1.5" fill="#9333ea" fill-opacity="0.3"/>
+  <circle cx="175" cy="45"  r="1.2" fill="#9333ea" fill-opacity="0.28"/>
+
+  <!-- Divider -->
+  <line x1="18" y1="138" x2="182" y2="138" stroke="#a855f7"
+        stroke-width="0.6" stroke-opacity="0.3" stroke-dasharray="3,5"/>
+
+  <!-- Size distribution axes -->
+  <line x1="18" y1="168" x2="182" y2="168" stroke="#a855f7" stroke-width="1.1" stroke-opacity="0.55"/>
+  <line x1="18" y1="140" x2="18"  y2="168" stroke="#a855f7" stroke-width="1.1" stroke-opacity="0.55"/>
+
+  <!-- Size distribution curve (EV-like, peak ~100nm, right tail) -->
+  <path d="M18 168 C25 168 32 167 40 163
+           C50 158 54 149 63 142
+           C68 137 73 133 80 132
+           C86 131 91 133 97 130
+           C103 127 106 121 112 124
+           C118 127 122 135 131 141
+           C140 147 150 156 162 162
+           C170 165 176 167 182 168"
+        stroke="#c084fc" stroke-width="2.5" fill="none" stroke-opacity="1"
+        stroke-linejoin="round" stroke-linecap="round"/>
+
+  <!-- Fill under curve -->
+  <path d="M18 168 C25 168 32 167 40 163
+           C50 158 54 149 63 142
+           C68 137 73 133 80 132
+           C86 131 91 133 97 130
+           C103 127 106 121 112 124
+           C118 127 122 135 131 141
+           C140 147 150 156 162 162
+           C170 165 176 167 182 168 Z"
+        fill="#a855f7" fill-opacity="0.18"/>
+
+  <!-- Axis ticks -->
+  <line x1="15" y1="155" x2="18" y2="155" stroke="#a855f7" stroke-width="0.8" stroke-opacity="0.45"/>
+  <line x1="15" y1="143" x2="18" y2="143" stroke="#a855f7" stroke-width="0.8" stroke-opacity="0.45"/>
+  <line x1="63"  y1="168" x2="63"  y2="171" stroke="#a855f7" stroke-width="0.8" stroke-opacity="0.45"/>
+  <line x1="112" y1="168" x2="112" y2="171" stroke="#a855f7" stroke-width="0.8" stroke-opacity="0.45"/>
+  <line x1="162" y1="168" x2="162" y2="171" stroke="#a855f7" stroke-width="0.8" stroke-opacity="0.45"/>
+
+  <!-- Peak highlight dot on curve -->
+  <circle cx="112" cy="124" r="2.5" fill="#c084fc"/>
+  <circle cx="112" cy="124" r="1"   fill="white" fill-opacity="0.9"/>
+</svg>
