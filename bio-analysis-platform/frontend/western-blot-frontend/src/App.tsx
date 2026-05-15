@@ -2,6 +2,8 @@ import { HashRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import TEMPage from "./pages/TEMPage";
 import WesternPage from "./pages/WesternPage";
+import NTAPage from "./pages/NTAPage";
+import NANOFACSPage from "./pages/NANOFACSPage";
 import { isTabEnabled } from "./lib/module-config";
 import UpdateBanner from "./components/UpdateBanner";
 import logo from "./assets/crmitlogo.png";
@@ -9,48 +11,104 @@ import temLogo from "./assets/Tem-logo-final.png";
 import wblogo from "./assets/WB_Icon.png";
 import temBg from "./assets/tem-background.png";
 import wbBg from "./assets/wb-background.png";
+import ntaIcon from "./assets/nta-icon.svg";
+import nanofacsIcon from "./assets/nanofacs-icon.svg";
 import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
 import { FaSun, FaMoon } from "react-icons/fa";
 
-function HomePage() {
-  const navigate = useNavigate();
-  const { theme, toggleTheme } = useTheme();
-  const [time, setTime] = useState("--:--");
-  const [date, setDate] = useState("---");
-  const [greeting, setGreeting] = useState("Good evening");
-  const [launching, setLaunching] = useState("");
-  const [activeSide, setActiveSide] = useState<"tem" | "western" | "">("");
+interface ModuleDef {
+  id: string;
+  label: string;
+  sub: string;
+  desc: string;
+  route: string;
+  color: string;       // R,G,B values e.g. "18,196,176"
+  image: string | null;
+  imageAlt: string;
+  bgImage: string | null;
+  iconText: string;
+  download?: string; // Optional field to indicate if a download is needed
+}
+
+const ALL_MODULES: ModuleDef[] = [
+  {
+    id: "tem",
+    label: "TEM Analyser",
+    sub: "EV · Viability",
+    desc: "Open the TEM workspace for particle review, image analysis, and viability flow.",
+    route: "/tem",
+    color: "18,196,176",
+    image: temLogo,
+    imageAlt: "TEM Icon",
+    bgImage: temBg,
+    iconText: "TEM",
+    download: "true"
+  },
+  {
+    id: "westernblot",
+    label: "WB Analyser",
+    sub: "Bands · Density",
+    desc: "Open the Western Blot workspace for band detection, intensity, and result review.",
+    route: "/western",
+    color: "47,99,240",
+    image: wblogo,
+    imageAlt: "WB Icon",
+    bgImage: wbBg,
+    iconText: "WB",
+    download: "true"
+  },
+  {
+    id: "nta",
+    label: "NTA Analyser",
+    sub: "Size · Concentration",
+    desc: "Open the NTA workspace for nanoparticle tracking, size distribution, and concentration analysis.",
+    route: "/nta",
+    color: "168,85,247",
+    image: ntaIcon,
+    imageAlt: "NTA Icon",
+    bgImage: null,
+    iconText: "NTA",
+    download: "false"
+  },
+  {
+    id: "nanofacs",
+    label: "NanoFACS Analyser",
+    sub: "Flow · Cytometry",
+    desc: "Open the NanoFACS workspace for flow cytometry, particle gating, and multi-parameter analysis.",
+    route: "/nanofacs",
+    color: "249,115,22",
+    image: nanofacsIcon,
+    imageAlt: "NanoFACS Icon",
+    bgImage: null,
+    iconText: "nFACS",
+    download: "false"
+  },
+];
+
+  function HomePage() {
+    const navigate = useNavigate();
+    const { theme, toggleTheme } = useTheme();
+    const [greeting, setGreeting] = useState("Good evening");
+    const [launching, setLaunching] = useState("");
+    const [activeSide, setActiveSide] = useState<string>("");
+
+    const activeModules = ALL_MODULES.filter(
+  (m) => m.download === "true"
+);
+    const gridCols = activeModules.length >= 3 ? 2 : Math.max(1, activeModules.length);
+    const hasMultiRow = activeModules.length > 2;
+    const imgSize   = hasMultiRow ? 80  : 170;
+  const titleSize = hasMultiRow ? 18  : 34;
+  const cardPad   = hasMultiRow ? "14px 18px" : "32px 20px";
+  const cardGap   = hasMultiRow ? "8px"  : "14px";
+  const gridGap   = hasMultiRow ? "12px" : "28px";
+  const greetingMb = hasMultiRow ? "14px" : "54px";
 
   useEffect(() => {
     const updateClock = () => {
       const now = new Date();
-
-      const h = String(now.getHours()).padStart(2, "0");
-      const m = String(now.getMinutes()).padStart(2, "0");
-      setTime(`${h}:${m}`);
-
-      const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-      const months = [
-        "Jan",
-        "Feb",
-        "Mar",
-        "Apr",
-        "May",
-        "Jun",
-        "Jul",
-        "Aug",
-        "Sep",
-        "Oct",
-        "Nov",
-        "Dec",
-      ];
-
-      setDate(`${days[now.getDay()]} · ${months[now.getMonth()]} ${now.getDate()}`);
-
       const hr = now.getHours();
-      setGreeting(
-        hr < 12 ? "Good morning" : hr < 17 ? "Good afternoon" : "Good evening"
-      );
+      setGreeting(hr < 12 ? "Good morning" : hr < 17 ? "Good afternoon" : "Good evening");
     };
 
     updateClock();
@@ -58,19 +116,15 @@ function HomePage() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleLaunch = (tool: string) => {
-    setLaunching(tool);
-    setTimeout(() => {
-      navigate(tool === "tem" ? "/tem" : "/western");
-    }, 350);
+  const handleLaunch = (mod: ModuleDef) => {
+    setLaunching(mod.id);
+    setTimeout(() => navigate(mod.route), 350);
   };
 
   return (
     <div style={styles.page}>
       <style>{`
-        * {
-          box-sizing: border-box;
-        }
+        * { box-sizing: border-box; }
 
         body {
           margin: 0;
@@ -90,78 +144,83 @@ function HomePage() {
         .split-bg {
           position: absolute;
           inset: 0;
-          display: flex;
+          display: grid;
           z-index: 0;
         }
 
-        .split-half {
-          width: 50%;
-          height: 100%;
+        .split-quad {
           position: relative;
           overflow: hidden;
-          transition: all 0.35s ease;
+          transition: opacity 0.35s ease;
         }
 
-        .split-half::before {
+        .split-quad::before {
           content: "";
           position: absolute;
           inset: 0;
           background-position: center;
           background-repeat: no-repeat;
           background-size: cover;
-          opacity: var(--bg-img-opacity, 0.14);
+          opacity: 0.14;
           transform: scale(1.04);
           transition: all 0.35s ease;
         }
 
-        .split-half::after {
+        .split-quad::after {
           content: "";
           position: absolute;
           inset: 0;
+          opacity: 0.35;
           transition: all 0.35s ease;
         }
 
-        .split-half.tem::before {
-          background-image:
-            linear-gradient(to right, var(--overlay-from), var(--overlay-to)),
-            url("${temBg}");
-        }
-
-        .split-half.wb::before {
-          background-image:
-            linear-gradient(to left, var(--overlay-from), var(--overlay-to)),
-            url("${wbBg}");
-        }
-
-        .split-half.tem::after {
-          background:
-            radial-gradient(circle at 40% 50%, rgba(18,196,176,0.22), transparent 48%);
-          opacity: 0.35;
-        }
-
-        .split-half.wb::after {
-          background:
-            radial-gradient(circle at 60% 50%, rgba(47,99,240,0.22), transparent 48%);
-          opacity: 0.35;
-        }
-
-        .split-half.active::before {
-          opacity: 0.32;
+        .split-quad.active::before {
+          opacity: 0.30;
           transform: scale(1.08);
           filter: brightness(1.15);
         }
 
-        .split-half.active::after {
-          opacity: 1;
-        }
+        .split-quad.active::after { opacity: 1; }
 
-        .split-half.dim::before {
-          opacity: 0.06;
+        .split-quad.dim::before {
+          opacity: 0.04;
           filter: brightness(0.7);
         }
 
-        .split-half.dim::after {
-          opacity: 0.14;
+        .split-quad.dim::after { opacity: 0.10; }
+
+        .split-quad[data-mod="tem"]::before {
+          background-image:
+            linear-gradient(to bottom right, var(--overlay-from), var(--overlay-to)),
+            url("${temBg}");
+        }
+        .split-quad[data-mod="tem"]::after {
+          background: radial-gradient(circle at 40% 50%, rgba(18,196,176,0.22), transparent 55%);
+        }
+
+        .split-quad[data-mod="westernblot"]::before {
+          background-image:
+            linear-gradient(to bottom left, var(--overlay-from), var(--overlay-to)),
+            url("${wbBg}");
+        }
+        .split-quad[data-mod="westernblot"]::after {
+          background: radial-gradient(circle at 60% 50%, rgba(47,99,240,0.22), transparent 55%);
+        }
+
+        .split-quad[data-mod="nta"]::before {
+          background-image: linear-gradient(135deg, rgba(168,85,247,0.18), transparent 70%);
+          opacity: 0.8;
+        }
+        .split-quad[data-mod="nta"]::after {
+          background: radial-gradient(circle at 40% 60%, rgba(168,85,247,0.22), transparent 55%);
+        }
+
+        .split-quad[data-mod="nanofacs"]::before {
+          background-image: linear-gradient(135deg, rgba(249,115,22,0.18), transparent 70%);
+          opacity: 0.8;
+        }
+        .split-quad[data-mod="nanofacs"]::after {
+          background: radial-gradient(circle at 60% 60%, rgba(249,115,22,0.22), transparent 55%);
         }
 
         .center-divider {
@@ -171,12 +230,7 @@ function HomePage() {
           left: 50%;
           width: 1px;
           transform: translateX(-50%);
-          background: linear-gradient(
-            to bottom,
-            transparent,
-            var(--divider-color),
-            transparent
-          );
+          background: linear-gradient(to bottom, transparent, var(--divider-color), transparent);
           z-index: 1;
         }
 
@@ -191,10 +245,7 @@ function HomePage() {
           z-index: 20;
         }
 
-        .logo-wrap {
-          display: flex;
-          align-items: center;
-        }
+        .logo-wrap { display: flex; align-items: center; }
 
         .logo {
           height: 64px;
@@ -203,9 +254,7 @@ function HomePage() {
           display: block;
         }
 
-        .clock {
-          text-align: right;
-        }
+        .clock { text-align: right; }
 
         .clock-time {
           font-size: 14px;
@@ -229,24 +278,24 @@ function HomePage() {
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          padding: 25px 20px 40px;
+          padding: ${hasMultiRow ? "0px 20px 25px" : "25px 20px 40px"};
         }
 
         .greeting-label {
           font-family: monospace;
-          font-size: 11px;
+          font-size: ${hasMultiRow ? "10px" : "11px"};
           letter-spacing: 0.22em;
           color: var(--greeting-label-color);
           text-transform: uppercase;
-          margin-bottom: 10px;
+          margin-bottom: ${hasMultiRow ? "6px" : "10px"};
         }
 
         .greeting-title {
-          font-size: 28px;
+          font-size: ${hasMultiRow ? "22px" : "28px"};
           font-weight: 300;
           color: var(--greeting-title-color);
           letter-spacing: -0.02em;
-          margin-bottom: 54px;
+          margin-bottom: ${greetingMb};
           text-align: center;
         }
 
@@ -255,19 +304,20 @@ function HomePage() {
           color: var(--greeting-strong-color);
         }
 
-        .split-row {
-          width: min(1100px, 100%);
+        .modules-grid {
+          width: min(1200px, calc(100% - 40px));
           display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 32px;
+          gap: ${gridGap};
           align-items: stretch;
+          justify-content: center;
         }
 
         .panel-btn {
           position: relative;
-          min-height: 360px;
+          width: 100%;
+          min-height: 0;
           border: 1px solid var(--panel-border);
-          border-radius: 32px;
+          border-radius: ${hasMultiRow ? "24px" : "32px"};
           background: var(--panel-bg, transparent);
           backdrop-filter: blur(16px);
           box-shadow: var(--panel-card-shadow, none);
@@ -275,32 +325,26 @@ function HomePage() {
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          gap: 14px;
+          gap: ${cardGap};
           cursor: pointer;
           transition: transform 0.28s ease, box-shadow 0.28s ease, border-color 0.28s ease;
           overflow: hidden;
-          padding: 32px 20px;
+          padding: ${cardPad};
         }
 
         .panel-btn:hover {
           transform: translateY(-6px);
+          border-color: var(--mod-border-color, rgba(255,255,255,0.2));
+          box-shadow: var(--mod-shadow, 0 20px 60px rgba(0,0,0,0.2));
         }
 
-        .panel-btn.tem-panel:hover,
-        .panel-btn.tem-panel.active {
-          border-color: rgba(18,196,176,0.35);
-          box-shadow: 0 20px 60px rgba(18,196,176,0.22);
-        }
-
-        .panel-btn.wb-panel:hover,
-        .panel-btn.wb-panel.active {
-          border-color: rgba(47,99,240,0.35);
-          box-shadow: 0 20px 60px rgba(47,99,240,0.22);
+        .panel-btn.active {
+          border-color: var(--mod-border-color, rgba(255,255,255,0.2));
+          box-shadow: var(--mod-shadow, 0 20px 60px rgba(0,0,0,0.2));
         }
 
         .panel-glow {
           position: absolute;
-          inset: auto;
           width: 220px;
           height: 220px;
           border-radius: 50%;
@@ -308,14 +352,6 @@ function HomePage() {
           opacity: 0.18;
           z-index: 0;
           transition: opacity 0.28s ease, transform 0.28s ease;
-        }
-
-        .tem-panel .panel-glow {
-          background: rgba(18,196,176,0.75);
-        }
-
-        .wb-panel .panel-glow {
-          background: rgba(47,99,240,0.75);
         }
 
         .panel-btn:hover .panel-glow,
@@ -327,11 +363,12 @@ function HomePage() {
         .tool-card-image-wrap {
           position: relative;
           z-index: 1;
-          width: 170px;
-          height: 170px;
-          border-radius: 30px;
+          width: ${imgSize}px;
+          height: ${imgSize}px;
+          border-radius: ${hasMultiRow ? "18px" : "28px"};
           overflow: hidden;
-          box-shadow: 0 18px 50px rgba(0,0,0,0.28);
+          box-shadow: 0 ${hasMultiRow ? 10 : 18}px ${hasMultiRow ? 30 : 50}px rgba(0,0,0,0.28);
+          flex-shrink: 0;
         }
 
         .tool-card-image {
@@ -341,19 +378,31 @@ function HomePage() {
           display: block;
         }
 
+        .module-icon-fallback {
+          width: 100%;
+          height: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: ${hasMultiRow ? 22 : 36}px;
+          font-weight: 800;
+          letter-spacing: -0.03em;
+          color: #fff;
+        }
+
         .panel-title {
           position: relative;
           z-index: 1;
-          font-size: 34px;
+          font-size: ${titleSize}px;
           font-weight: 700;
           color: var(--panel-title-color);
-          margin-top: 8px;
+          margin-top: ${hasMultiRow ? "2px" : "6px"};
         }
 
         .panel-sub {
           position: relative;
           z-index: 1;
-          font-size: 14px;
+          font-size: ${hasMultiRow ? "11px" : "13px"};
           color: var(--panel-sub-color);
           letter-spacing: 0.04em;
         }
@@ -361,201 +410,145 @@ function HomePage() {
         .panel-desc {
           position: relative;
           z-index: 1;
-          max-width: 320px;
+          max-width: ${hasMultiRow ? "260px" : "300px"};
           text-align: center;
-          font-size: 13px;
-          line-height: 1.6;
+          font-size: ${hasMultiRow ? "11px" : "13px"};
+          line-height: 1.5;
           color: var(--panel-desc-color);
+          display: -webkit-box;
+          -webkit-line-clamp: ${hasMultiRow ? 2 : 10};
+          -webkit-box-orient: vertical;
+          overflow: hidden;
         }
 
-        .dock {
-          margin-top: 36px;
-          background: var(--dock-bg);
-          border: 1px solid var(--dock-border);
-          backdrop-filter: blur(16px);
-          border-radius: 16px;
-          padding: 10px 22px;
-          display: flex;
-          align-items: center;
-          gap: 0;
-          flex-wrap: wrap;
-          justify-content: center;
-          z-index: 2;
-        }
-
-        .dock-item {
-          display: flex;
-          align-items: center;
-          gap: 6px;
+        .version-corner {
+          margin-top: ${hasMultiRow ? "10px" : "28px"};
           font-family: monospace;
           font-size: 10px;
-          color: var(--dock-text);
-          padding: 0 16px;
-        }
-
-        .dock-sep {
-          width: 1px;
-          height: 16px;
-          background: var(--dock-sep);
-        }
-
-        .dock-dot {
-          width: 6px;
-          height: 6px;
-          border-radius: 50%;
-        }
-
-        .dock-dot.g {
-          background: #22c55e;
-        }
-
-        .dock-dot.b {
-          background: #3b82f6;
+          color: var(--clock-date-color);
+          opacity: 0.6;
         }
 
         @media (max-width: 900px) {
-          .split-row {
-            grid-template-columns: 1fr;
-            gap: 20px;
+          .modules-grid {
+            grid-template-columns: 1fr 1fr !important;
+            gap: 12px;
           }
-
-          .panel-btn {
-            min-height: 300px;
-          }
-
           .split-bg {
-            flex-direction: column;
-          }
-
-          .split-half {
-            width: 100%;
-            height: 50%;
-          }
-
-          .center-divider {
-            display: none;
+            grid-template-columns: 1fr 1fr !important;
+            grid-template-rows: ${hasMultiRow ? "1fr 1fr" : "1fr"} !important;
           }
         }
 
-        @media (max-width: 768px) {
-          .top-bar {
-            top: 16px;
-            left: 16px;
-            right: 16px;
+        @media (max-width: 600px) {
+          .modules-grid { grid-template-columns: 1fr !important; }
+          .split-bg {
+            grid-template-columns: 1fr !important;
+            grid-template-rows: unset !important;
           }
-
-          .logo {
-            height: 44px;
-          }
-
-          .clock-time {
-            font-size: 12px;
-          }
-
-          .clock-date {
-            font-size: 9px;
-          }
-
-          .greeting-title {
-            font-size: 22px;
-            margin-bottom: 32px;
-          }
-
-          .tool-card-image-wrap {
-            width: 140px;
-            height: 140px;
-          }
-
-          .panel-title {
-            font-size: 28px;
-          }
+          .center-divider { display: none; }
+          .tool-card-image-wrap { width: 100px !important; height: 100px !important; }
+          .panel-title { font-size: 20px !important; }
+          .top-bar { top: 16px; left: 16px; right: 16px; }
+          .logo { height: 44px; }
+          .greeting-title { font-size: 20px; margin-bottom: 12px; }
         }
       `}</style>
 
       <div className="home-bg">
-        <div className="split-bg">
-          <div
-            className={`split-half tem ${
-              activeSide === "tem" ? "active" : activeSide === "western" ? "dim" : ""
-            }`}
-          />
-          <div
-            className={`split-half wb ${
-              activeSide === "western" ? "active" : activeSide === "tem" ? "dim" : ""
-            }`}
-          />
+        <div
+          className="split-bg"
+          style={{
+            gridTemplateColumns: `repeat(${gridCols}, 1fr)`,
+            gridTemplateRows: hasMultiRow ? "1fr 1fr" : "1fr",
+          }}
+        >
+          {activeModules.map((mod) => (
+            <div
+              key={mod.id}
+              data-mod={mod.id}
+              className={`split-quad ${
+                activeSide === mod.id ? "active" : activeSide ? "dim" : ""
+              }`}
+            />
+          ))}
         </div>
 
         <div className="center-divider" />
 
         <div className="top-bar">
-  <div className="logo-wrap">
-    <img src={logo} alt="CRMIT Logo" className="logo" />
-  </div>
-
-  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-    <button className="theme-toggle-btn" onClick={toggleTheme} title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}>
-      {theme === "dark" ? <FaSun /> : <FaMoon />}
-    </button>
-  </div>
-</div>
-        
-        
+          <div className="logo-wrap">
+            <img src={logo} alt="CRMIT Logo" className="logo" />
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <button
+              className="theme-toggle-btn"
+              onClick={toggleTheme}
+              title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              {theme === "dark" ? <FaSun /> : <FaMoon />}
+            </button>
+          </div>
+        </div>
 
         <div className="content-shell">
           <div className="greeting-label">{greeting}</div>
           <div className="greeting-title">
             Welcome to <strong>EVAR</strong>
           </div>
-          
 
-          <div className="split-row">
-
-            {/* ── CHANGE 2: TEM button gated by module profile ── */}
-            {isTabEnabled("tem") && (
+          <div
+            className="modules-grid"
+            style={{ gridTemplateColumns: `repeat(${gridCols}, 1fr)` }}
+          >
+            {activeModules.map((mod) => (
               <button
-                className={`panel-btn tem-panel ${launching === "tem" ? "active" : ""}`}
+                key={mod.id}
+                className={`panel-btn ${launching === mod.id ? "active" : ""}`}
                 type="button"
-                onMouseEnter={() => setActiveSide("tem")}
+                onMouseEnter={() => setActiveSide(mod.id)}
                 onMouseLeave={() => setActiveSide("")}
-                onClick={() => handleLaunch("tem")}
+                onClick={() => handleLaunch(mod)}
+                style={
+                  {
+                    "--mod-border-color": `rgba(${mod.color},0.35)`,
+                    "--mod-shadow": `0 20px 60px rgba(${mod.color},0.22)`,
+                  } as React.CSSProperties
+                }
               >
-                <div className="panel-glow" />
+                <div
+                  className="panel-glow"
+                  style={{ background: `rgba(${mod.color},0.75)` }}
+                />
                 <div className="tool-card-image-wrap">
-                  <img src={temLogo} alt="TEM Icon" className="tool-card-image" />
+                  {mod.image ? (
+                    <img
+                      src={mod.image}
+                      alt={mod.imageAlt}
+                      className="tool-card-image"
+                    />
+                  ) : (
+                    <div
+                      className="module-icon-fallback"
+                      style={{
+                        background: `linear-gradient(135deg, rgba(${mod.color},0.9) 0%, rgba(${mod.color},0.5) 100%)`,
+                      }}
+                    >
+                      {mod.iconText}
+                    </div>
+                  )}
                 </div>
-                <div className="panel-title">TEM Analyser</div>
-                <div className="panel-sub">EV · Viability</div>
-                <div className="panel-desc">
-                  Open the TEM workspace for particle review, image analysis, and viability flow.
-                </div>
+                <div className="panel-title">{mod.label}</div>
+                <div className="panel-sub">{mod.sub}</div>
+                <div className="panel-desc">{mod.desc}</div>
               </button>
-            )}
-
-            {/* ── CHANGE 3: WB button gated by module profile ── */}
-            {isTabEnabled("westernblot") && (
-              <button
-                className={`panel-btn wb-panel ${launching === "western" ? "active" : ""}`}
-                type="button"
-                onMouseEnter={() => setActiveSide("western")}
-                onMouseLeave={() => setActiveSide("")}
-                onClick={() => handleLaunch("western")}
-              >
-                <div className="panel-glow" />
-                <div className="tool-card-image-wrap">
-                  <img src={wblogo} alt="WB Icon" className="tool-card-image" />
-                </div>
-                <div className="panel-title">WB Analyser</div>
-                <div className="panel-sub">Bands · Density</div>
-                <div className="panel-desc">
-                  Open the Western Blot workspace for band detection, intensity, and result review.
-                </div>
-              </button>
-            )}
-
+            ))}
           </div>
+
           <div className="version-corner">
-            {window.electronBridge?.appVersion ? `v${window.electronBridge.appVersion}` : 'v1.0'}
+            {window.electronBridge?.appVersion
+              ? `v${window.electronBridge.appVersion}`
+              : "v1.0"}
           </div>
         </div>
       </div>
@@ -582,6 +575,12 @@ export default function App() {
           )}
           {isTabEnabled("westernblot") && (
             <Route path="/western" element={<WesternPage />} />
+          )}
+          {isTabEnabled("nta") && (
+            <Route path="/nta" element={<NTAPage />} />
+          )}
+          {isTabEnabled("nanofacs") && (
+            <Route path="/nanofacs" element={<NANOFACSPage />} />
           )}
         </Routes>
       </HashRouter>
