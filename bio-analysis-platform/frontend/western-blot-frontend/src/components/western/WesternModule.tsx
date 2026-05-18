@@ -21,6 +21,13 @@ type AnalyzeResponse = {
   image_width?: number;
   image_height?: number;
   error?: string;
+  ai_used?: boolean;
+  ai_quality?: string;
+  ai_summary?: string;
+  ai_lane_quality?: {lane: number; status: string; pass_fail: string; concentration: string; contamination: string; recommendation: string; note: string}[];
+  ai_similar_lanes?: {lanes: number[]; similarity: string; note: string}[];
+  ai_contamination?: boolean;
+  suggested_bands?: {lane: number; approx_y: number; estimated_kda?: number; reason: string}[];
 };
 
 type DetectRulerBandsResponse = {
@@ -112,6 +119,12 @@ function WesternModule() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string>("");
   const [annotatedImageUrl, setAnnotatedImageUrl] = useState<string>("");
+  const [aiSummary, setAiSummary] = useState<string>("");
+  const [aiQuality, setAiQuality] = useState<string>("");
+  const [aiLaneQuality, setAiLaneQuality] = useState<{lane: number; status: string; note: string}[]>([]);
+  const [aiUsed, setAiUsed] = useState<boolean>(false);
+  const [aiSimilarLanes, setAiSimilarLanes] = useState<{lanes: number[]; similarity: string; note: string}[]>([]);
+  const [aiContamination, setAiContamination] = useState<boolean>(false);
   const [plotUrl, setPlotUrl] = useState<string>("");
   const [bands, setBands] = useState<Band[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -529,6 +542,16 @@ function WesternModule() {
       if (result.annotated_image)
         setAnnotatedImageUrl(`${STATIC_BASE}${result.annotated_image}`);
       if (result.plot_url) setPlotUrl(`${STATIC_BASE}${result.plot_url}`);
+      setAiUsed(result.ai_used || false);
+      setAiSummary(result.ai_summary || "");
+      setAiQuality(result.ai_quality || "");
+      setAiLaneQuality(result.ai_lane_quality || []);
+      setAiSimilarLanes(result.ai_similar_lanes || []);
+      setAiContamination(result.ai_contamination || false);
+      setAiSimilarLanes(result.ai_similar_lanes || []);
+      setAiContamination(result.ai_contamination || false);
+      setAiSimilarLanes(result.ai_similar_lanes || []);
+      setAiContamination(result.ai_contamination || false);
 
     } catch (err: any) {
       console.error("analyze error:", err);
@@ -700,6 +723,50 @@ function WesternModule() {
             onManualBandAdd={handleManualBandAdd}
           />
 
+          {analyze && aiUsed && (
+            <div className="nova-panel">
+              <div className="nova-header">
+                <span className="nova-badge">🤖 Nova AI Analysis</span>
+                <span className={`nova-quality nova-quality--${aiQuality}`}>
+                  {aiQuality === "good" ? "✅ Good" : aiQuality === "fair" ? "⚠️ Fair" : aiQuality === "poor" ? "❌ Poor" : ""}
+                </span>
+              </div>
+              {aiSummary && <p className="nova-summary">{aiSummary}</p>}
+              {aiContamination && <div className="nova-contamination">⚠️ Contamination Detected</div>}
+              {aiLaneQuality.length > 0 && (
+                <div className="nova-lane-table">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Lane</th><th>Status</th><th>QC</th><th>Concentration</th><th>Contamination</th><th>Recommendation</th>
+                  </tr>
+                    </thead>
+                    <tbody>
+                      {aiLaneQuality.map((lq) => (
+                        <tr key={lq.lane}>
+                          <td>Lane {lq.lane + 1}</td>
+                          <td><span className={`nova-lane-tag nova-lane--${lq.status}`}>{lq.status}</span></td>
+                          <td><span className={`nova-pf nova-pf--${lq.pass_fail}`}>{lq.pass_fail === "pass" ? "✅ Pass" : "❌ Fail"}</span></td>
+                          <td><span className={`nova-conc nova-conc--${lq.concentration}`}>{lq.concentration}</span></td>
+                          <td>{lq.contamination === "none" ? "—" : <span className="nova-contam-warn">⚠️ {lq.contamination}</span>}</td>
+                          <td className="nova-rec">{lq.recommendation}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {aiSimilarLanes && aiSimilarLanes.length > 0 && (
+                <div className="nova-similar">
+                  {aiSimilarLanes.map((s, i) => (
+                    <span key={i} className="nova-similar-tag" title={s.note}>
+                      Lanes {s.lanes.map((l: number) => l+1).join(" & ")} ({s.similarity})
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           {analyze && bands.length > 0 && (
             <div className="action-row">
               <button
